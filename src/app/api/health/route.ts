@@ -44,10 +44,24 @@ function temEspacoNasPontas(valor: string): boolean {
 export async function GET() {
   // Lido no momento da requisição, não na carga do módulo: é a diferença entre
   // ver a configuração real e ver o que existia durante o build.
-  const presentes = CONFIGURAVEIS.filter((chave) => {
+  const presentes: string[] = [];
+  const vazias: string[] = [];
+  const ausentes: string[] = [];
+
+  for (const chave of CONFIGURAVEIS) {
     const valor = process.env[chave];
-    return typeof valor === "string" && valor.trim() !== "";
-  });
+
+    if (typeof valor !== "string") {
+      ausentes.push(chave);
+      // "Não existe" e "existe em branco" pedem ações opostas: cadastrar a
+      // variável, ou corrigir o valor de uma que já está cadastrada. Colapsar
+      // os dois num só "ausente" manda o operador procurar no lugar errado.
+    } else if (valor.trim() === "") {
+      vazias.push(chave);
+    } else {
+      presentes.push(chave);
+    }
+  }
 
   const malformadas = presentes.filter((chave) => temEspacoNasPontas(process.env[chave] as string));
 
@@ -64,7 +78,10 @@ export async function GET() {
       branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
       implantacao: process.env.VERCEL_URL ?? null,
       variaveisPresentes: presentes,
-      variaveisAusentes: CONFIGURAVEIS.filter((c) => !presentes.includes(c)),
+      // Cadastrada na plataforma, porém sem conteúdo — costuma ser valor que
+      // não colou no campo certo.
+      variaveisVazias: vazias,
+      variaveisAusentes: ausentes,
       // Vazio é o esperado. Nome listado aqui = valor com espaço ou quebra de
       // linha nas pontas, que a aplicação apara na leitura mas convém corrigir
       // na origem.
