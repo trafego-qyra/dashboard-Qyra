@@ -209,8 +209,16 @@ export async function GET(request: Request) {
         versaoApi: versao,
         conta: mascarar(conta),
         contaTinhaPrefixo: contaBruta.startsWith("act_"),
-        tokenComEspacoNasPontas: token !== token.trim(),
-        tamanhoDoToken: token.length,
+        // Formato do token, sem revelá-lo: é o que distingue "credencial
+        // errada" de "credencial certa com lixo colado junto".
+        token: {
+          tamanho: token.length,
+          comecaCom: token.slice(0, 6),
+          terminaCom: token.slice(-6),
+          temEspacoEmQualquerLugar: /\s/.test(token),
+          temCaractereNaoAscii: /[^\x20-\x7E]/.test(token),
+          caracteresInesperados: [...new Set(token.replace(/[A-Za-z0-9]/g, ""))].join(" "),
+        },
         credenciais: getCredentials(),
       },
       etapas,

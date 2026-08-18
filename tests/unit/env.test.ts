@@ -87,3 +87,36 @@ describe("getCredentials", () => {
     expect(getCredentials().googleAds).toBe(false);
   });
 });
+
+describe("prefixo do nome colado junto do valor", () => {
+  it("remove NOME= arrastado do painel para o campo de valor", async () => {
+    // Erro real de operação: copiar "META_ACCESS_TOKEN=EAAG..." inteiro para o
+    // campo de valor. A Graph API responde "Cannot parse access token", que não
+    // sugere nada sobre a causa.
+    vi.stubEnv("META_ACCESS_TOKEN", "META_ACCESS_TOKEN=EAAGtoken123");
+
+    const { getEnv } = await carregarEnv();
+    expect(getEnv().META_ACCESS_TOKEN).toBe("EAAGtoken123");
+  });
+
+  it("remove também quando o nome vem em outra linha", async () => {
+    vi.stubEnv("META_ACCESS_TOKEN", "META_ACCESS_TOKEN\n EAAGtoken123");
+
+    const { getEnv } = await carregarEnv();
+    expect(getEnv().META_ACCESS_TOKEN).toBe("EAAGtoken123");
+  });
+
+  it("não mexe em valor legítimo que contém sinal de igual", async () => {
+    vi.stubEnv("GOOGLE_REFRESH_TOKEN", "1//0gABC=def=ghi");
+
+    const { getEnv } = await carregarEnv();
+    expect(getEnv().GOOGLE_REFRESH_TOKEN).toBe("1//0gABC=def=ghi");
+  });
+
+  it("não confunde token que já começa com maiúsculas", async () => {
+    vi.stubEnv("META_ACCESS_TOKEN", "EAAGZZZtoken123");
+
+    const { getEnv } = await carregarEnv();
+    expect(getEnv().META_ACCESS_TOKEN).toBe("EAAGZZZtoken123");
+  });
+});

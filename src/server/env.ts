@@ -25,19 +25,36 @@ import { z } from "zod";
  * existe no projeto mas está em branco — sem isso o app quebraria no boot em
  * vez de cair no modo de demonstração.
  */
-const optionalString = z.preprocess((value) => {
+/**
+ * Remove um prefixo `NOME_DA_VARIAVEL=` colado por engano junto do valor.
+ *
+ * Copiar do painel ou de documentação frequentemente arrasta o nome junto, e o
+ * sintoma que isso produz na origem — `Cannot parse access token` — não tem
+ * nenhuma relação aparente com a causa. Nenhuma credencial legítima começa com
+ * um identificador em maiúsculas seguido de `=`, então a remoção é segura.
+ */
+function removerPrefixoDeNome(valor: string): string {
+  return (
+    valor
+      // "META_ACCESS_TOKEN=EAAG..." — copiado de um arquivo .env
+      .replace(/^[A-Z][A-Z0-9_]{2,}[ \t]*=[ \t]*/, "")
+      // "META_ACCESS_TOKEN\nEAAG..." — copiado de um bloco com nome e valor em
+      // linhas separadas. Nenhuma credencial usada aqui é multilinha, então uma
+      // primeira linha que só contém um identificador em maiúsculas é ruído.
+      .replace(/^[A-Z][A-Z0-9_]{2,}[ \t]*\r?\n\s*/, "")
+  );
+}
+
+function normalizar(value: unknown): unknown {
   if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  return trimmed === "" ? undefined : trimmed;
-}, z.string().min(1).optional());
+  const limpo = removerPrefixoDeNome(value.trim()).trim();
+  return limpo === "" ? undefined : limpo;
+}
+
+const optionalString = z.preprocess(normalizar, z.string().min(1).optional());
 
 /** Mesma normalização para os valores que têm padrão. */
-const trimmedString = (fallback: string) =>
-  z.preprocess((value) => {
-    if (typeof value !== "string") return value;
-    const trimmed = value.trim();
-    return trimmed === "" ? undefined : trimmed;
-  }, z.string().default(fallback));
+const trimmedString = (fallback: string) => z.preprocess(normalizar, z.string().default(fallback));
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
