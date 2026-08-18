@@ -14,14 +14,30 @@ import { z } from "zod";
  */
 
 /**
- * Trata string vazia como ausente. A Vercel injeta `""` quando a variável
+ * Normaliza uma credencial vinda do ambiente.
+ *
+ * **Apara o valor.** Colar um segredo no painel da Vercel carrega quebra de
+ * linha ou espaço com muita facilidade, e o caractere invisível viaja até a
+ * query string da requisição: a Graph API responde
+ * `code 190 — Cannot parse access token`, que parece token inválido e não é.
+ *
+ * **Trata string vazia como ausente.** A Vercel injeta `""` quando a variável
  * existe no projeto mas está em branco — sem isso o app quebraria no boot em
  * vez de cair no modo de demonstração.
  */
-const optionalString = z.preprocess(
-  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-  z.string().min(1).optional(),
-);
+const optionalString = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}, z.string().min(1).optional());
+
+/** Mesma normalização para os valores que têm padrão. */
+const trimmedString = (fallback: string) =>
+  z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+  }, z.string().default(fallback));
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -32,7 +48,7 @@ const schema = z.object({
   // ---- Meta (Ads + Instagram/Facebook orgânico) ----
   META_ACCESS_TOKEN: optionalString,
   META_AD_ACCOUNT_ID: optionalString,
-  META_API_VERSION: z.string().default("v21.0"),
+  META_API_VERSION: trimmedString("v21.0"),
   META_IG_USER_ID: optionalString,
   META_PAGE_ID: optionalString,
 
@@ -44,7 +60,7 @@ const schema = z.object({
   GOOGLE_ADS_DEVELOPER_TOKEN: optionalString,
   GOOGLE_ADS_CUSTOMER_ID: optionalString,
   GOOGLE_ADS_LOGIN_CUSTOMER_ID: optionalString,
-  GOOGLE_ADS_API_VERSION: z.string().default("v18"),
+  GOOGLE_ADS_API_VERSION: trimmedString("v18"),
 
   GA4_PROPERTY_ID: optionalString,
 

@@ -29,6 +29,18 @@ const CONFIGURAVEIS = [
   "QYRA_FORCE_MOCK",
 ] as const;
 
+/**
+ * Sinaliza valor com caractere invisível nas pontas.
+ *
+ * Colar segredo em painel web carrega quebra de linha com facilidade, e o
+ * sintoma que isso produz na origem — `Cannot parse access token` — parece
+ * credencial inválida. Reportar aqui transforma meia hora de caça em um olhar.
+ * Só o diagnóstico sai; o valor, nunca.
+ */
+function temEspacoNasPontas(valor: string): boolean {
+  return valor !== valor.trim();
+}
+
 export async function GET() {
   // Lido no momento da requisição, não na carga do módulo: é a diferença entre
   // ver a configuração real e ver o que existia durante o build.
@@ -36,6 +48,8 @@ export async function GET() {
     const valor = process.env[chave];
     return typeof valor === "string" && valor.trim() !== "";
   });
+
+  const malformadas = presentes.filter((chave) => temEspacoNasPontas(process.env[chave] as string));
 
   return NextResponse.json({
     status: "ok",
@@ -46,6 +60,10 @@ export async function GET() {
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
       variaveisPresentes: presentes,
       variaveisAusentes: CONFIGURAVEIS.filter((c) => !presentes.includes(c)),
+      // Vazio é o esperado. Nome listado aqui = valor com espaço ou quebra de
+      // linha nas pontas, que a aplicação apara na leitura mas convém corrigir
+      // na origem.
+      variaveisComEspacoNasPontas: malformadas,
     },
   });
 }
