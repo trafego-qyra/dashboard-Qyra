@@ -27,10 +27,23 @@ test("troca de período atualiza os dados pela URL", async ({ page }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "Alterar período" }).click();
-  await page.getByRole("option", { name: "Últimos 7 dias" }).click();
+
+  // Os presets são botões com `aria-pressed`, não uma listbox: o popover do
+  // Radix não é um listbox de verdade, e anunciá-lo como tal engana o leitor
+  // de tela.
+  const preset = page.getByRole("button", { name: "Últimos 7 dias" });
+  await expect(preset).toHaveAttribute("aria-pressed", "false");
+  await preset.click();
 
   await expect(page).toHaveURL(/preset=7d/);
   await expect(page.getByRole("button", { name: "Alterar período" })).toBeVisible();
+
+  // E o estado selecionado precisa refletir a escolha ao reabrir.
+  await page.getByRole("button", { name: "Alterar período" }).click();
+  await expect(page.getByRole("button", { name: "Últimos 7 dias" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 });
 
 test("tabela ordena por coluna", async ({ page }) => {
