@@ -58,6 +58,11 @@ export async function GET() {
     diagnostico: {
       ambiente: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? null,
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+      // Qual implantação respondeu. Sem isso é fácil conferir a configuração em
+      // uma implantação e testar outra — produção e preview convivem, e a
+      // variável de ambiente fica presa à implantação em que foi criada.
+      branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+      implantacao: process.env.VERCEL_URL ?? null,
       variaveisPresentes: presentes,
       variaveisAusentes: CONFIGURAVEIS.filter((c) => !presentes.includes(c)),
       // Vazio é o esperado. Nome listado aqui = valor com espaço ou quebra de
