@@ -3,7 +3,7 @@ import "server-only";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
-import { credentials, env, forceMock } from "@/server/env";
+import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
 import { httpJson } from "@/server/lib/http";
 
@@ -37,6 +37,7 @@ function num(value: string | number | undefined): number {
 }
 
 async function runQuery(query: string): Promise<GoogleAdsRow[]> {
+  const env = getEnv();
   const token = await getGoogleAccessToken();
   const customerId = (env.GOOGLE_ADS_CUSTOMER_ID as string).replace(/-/g, "");
 
@@ -58,7 +59,9 @@ async function runQuery(query: string): Promise<GoogleAdsRow[]> {
 }
 
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {
-  if (forceMock || !credentials.googleAds) {
+  const forceMock = isForceMock();
+
+  if (forceMock || !getCredentials().googleAds) {
     const report = mockGoogleAds(range, new Date().toISOString());
     report.notices = [
       forceMock

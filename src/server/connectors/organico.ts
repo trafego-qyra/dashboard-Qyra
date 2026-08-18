@@ -3,7 +3,7 @@ import "server-only";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockOrganico } from "@/mocks/reports";
-import { credentials, env, forceMock } from "@/server/env";
+import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson } from "@/server/lib/http";
 
 /**
@@ -66,6 +66,7 @@ async function fetchAccountInsights(
   metrics: string[],
   chunk: DateRange,
 ): Promise<InsightsResponse> {
+  const env = getEnv();
   const url = new URL(`https://graph.facebook.com/${env.META_API_VERSION}/${accountId}/insights`);
   url.searchParams.set("access_token", env.META_ACCESS_TOKEN as string);
   url.searchParams.set("metric", metrics.join(","));
@@ -76,7 +77,10 @@ async function fetchAccountInsights(
 }
 
 export async function fetchOrganicoReport(range: DateRange): Promise<ChannelReport> {
-  if (forceMock || !credentials.metaOrganic) {
+  const env = getEnv();
+  const forceMock = isForceMock();
+
+  if (forceMock || !getCredentials().metaOrganic) {
     const report = mockOrganico(range, new Date().toISOString());
     report.notices = [
       forceMock

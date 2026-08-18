@@ -3,7 +3,7 @@ import "server-only";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGa4 } from "@/mocks/reports";
-import { credentials, env, forceMock } from "@/server/env";
+import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
 import { httpJson } from "@/server/lib/http";
 
@@ -25,6 +25,7 @@ function num(value: string | undefined): number {
 }
 
 async function runReport(body: unknown): Promise<RunReportResponse> {
+  const env = getEnv();
   const token = await getGoogleAccessToken();
   return httpJson<RunReportResponse>(
     `https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`,
@@ -42,7 +43,9 @@ function toIso(compact: string): string {
 }
 
 export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
-  if (forceMock || !credentials.ga4) {
+  const forceMock = isForceMock();
+
+  if (forceMock || !getCredentials().ga4) {
     const report = mockGa4(range, new Date().toISOString());
     report.notices = [
       forceMock

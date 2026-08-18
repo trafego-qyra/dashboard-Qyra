@@ -1,6 +1,6 @@
 import "server-only";
 
-import { env } from "@/server/env";
+import { getEnv } from "@/server/env";
 
 /**
  * Rate limit por janela fixa, em memória.
@@ -27,8 +27,8 @@ export interface RateLimitResult {
 
 export function rateLimit(
   identifier: string,
-  limit = env.RATE_LIMIT_MAX,
-  windowMs = env.RATE_LIMIT_WINDOW_MS,
+  limit = getEnv().RATE_LIMIT_MAX,
+  windowMs = getEnv().RATE_LIMIT_WINDOW_MS,
 ): RateLimitResult {
   const now = Date.now();
   const bucket = buckets.get(identifier);

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { env } from "@/server/env";
+import { getEnv } from "@/server/env";
 import { httpJson } from "./http";
 
 /**
@@ -18,6 +18,7 @@ interface TokenResponse {
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
 export async function getGoogleAccessToken(): Promise<string> {
+  const env = getEnv();
   const now = Date.now();
   // 60s de folga para não usar um token que expira no meio da chamada.
   if (cachedToken && cachedToken.expiresAt - 60_000 > now) return cachedToken.value;

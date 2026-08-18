@@ -1,6 +1,6 @@
 import "server-only";
 
-import { env } from "@/server/env";
+import { getEnv } from "@/server/env";
 
 /**
  * Cache TTL em memória, por instância.
@@ -23,7 +23,7 @@ const MAX_ENTRIES = 200;
 export async function cached<T>(
   key: string,
   loader: () => Promise<T>,
-  ttlSeconds = env.REPORT_CACHE_TTL,
+  ttlSeconds = getEnv().REPORT_CACHE_TTL,
 ): Promise<T> {
   if (ttlSeconds <= 0) return loader();
 

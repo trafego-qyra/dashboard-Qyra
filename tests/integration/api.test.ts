@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET as healthGet } from "@/app/api/health/route";
 import { GET as overviewGet } from "@/app/api/v1/overview/route";
@@ -15,12 +15,31 @@ function request(url: string, ip = "203.0.113.1") {
 }
 
 describe("GET /api/health", () => {
-  it("reporta prontidão sem expor segredo", async () => {
+  it("reporta prontidão como booleano por integração", async () => {
     const body = await (await healthGet()).json();
 
     expect(body.status).toBe("ok");
     expect(Object.values(body.integrations).every((v) => typeof v === "boolean")).toBe(true);
-    expect(JSON.stringify(body)).not.toMatch(/token|secret|refresh/i);
+  });
+
+  it("nunca devolve o valor de uma credencial", async () => {
+    // O diagnóstico lista *nomes* de variável (públicos, estão no .env.example).
+    // O que não pode sair daqui, em hipótese alguma, é o valor.
+    const segredo = "EAAG-valor-secreto-de-teste-123456";
+    vi.stubEnv("META_ACCESS_TOKEN", segredo);
+    vi.stubEnv("META_AD_ACCOUNT_ID", "act_999");
+
+    try {
+      const texto = await (await healthGet()).text();
+
+      expect(texto).not.toContain(segredo);
+      expect(texto).not.toContain("act_999");
+      // Mas confirma que ele *viu* a configuração — senão o teste passaria à toa.
+      expect(texto).toContain("META_ACCESS_TOKEN");
+      expect(JSON.parse(texto).integrations.metaAds).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

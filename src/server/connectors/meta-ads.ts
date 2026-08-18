@@ -3,7 +3,7 @@ import "server-only";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockMetaAds } from "@/mocks/reports";
-import { credentials, env, forceMock } from "@/server/env";
+import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson } from "@/server/lib/http";
 
 /**
@@ -48,6 +48,7 @@ async function fetchInsights(
   range: DateRange,
   params: Record<string, string>,
 ): Promise<MetaInsightsRow[]> {
+  const env = getEnv();
   const accountId = env.META_AD_ACCOUNT_ID as string;
   const account = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
 
@@ -71,7 +72,9 @@ async function fetchInsights(
 }
 
 export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelReport> {
-  if (forceMock || !credentials.metaAds) {
+  const forceMock = isForceMock();
+
+  if (forceMock || !getCredentials().metaAds) {
     const report = mockMetaAds(range, new Date().toISOString());
     report.notices = [
       forceMock

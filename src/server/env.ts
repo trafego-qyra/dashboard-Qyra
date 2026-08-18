@@ -6,6 +6,11 @@ import { z } from "zod";
  * Configuração do lado servidor. Este módulo é `server-only`: importá-lo de um
  * componente cliente quebra o build de propósito — é a fronteira que impede
  * segredo de vazar para o bundle.
+ *
+ * **O ambiente é lido sob demanda, nunca no carregamento do módulo.** Módulo de
+ * servidor é avaliado também durante o build, e variável marcada como sensível
+ * na Vercel não existe nesse momento. Congelar o resultado ali faz a aplicação
+ * subir achando que não há credencial — mesmo com tudo configurado.
  */
 
 /**
@@ -51,36 +56,55 @@ const schema = z.object({
   REPORT_CACHE_TTL: z.coerce.number().int().nonnegative().default(300),
 });
 
-const parsed = schema.safeParse(process.env);
+export type Env = z.infer<typeof schema>;
 
-if (!parsed.success) {
-  // Configuração malformada é erro de operação, não de runtime: falha cedo.
-  throw new Error(
-    `Variáveis de ambiente inválidas:\n${parsed.error.issues
-      .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-      .join("\n")}`,
-  );
+/**
+ * Lê e valida o ambiente **no momento da chamada**.
+ *
+ * Sem memoização: `process.env` é um objeto em memória, a validação custa
+ * microssegundos, e guardar o resultado é exatamente o erro que este módulo
+ * existe para não cometer.
+ */
+export function getEnv(): Env {
+  const parsed = schema.safeParse(process.env);
+
+  if (!parsed.success) {
+    // Configuração malformada é erro de operação, não de runtime: falha cedo.
+    throw new Error(
+      `Variáveis de ambiente inválidas:\n${parsed.error.issues
+        .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
+        .join("\n")}`,
+    );
+  }
+
+  return parsed.data;
 }
 
-export const env = parsed.data;
+export function isForceMock(): boolean {
+  return getEnv().QYRA_FORCE_MOCK === "true";
+}
 
-export const forceMock = env.QYRA_FORCE_MOCK === "true";
+export interface Credentials {
+  metaAds: boolean;
+  metaOrganic: boolean;
+  google: boolean;
+  googleAds: boolean;
+  ga4: boolean;
+}
 
-export const credentials = {
-  metaAds: Boolean(env.META_ACCESS_TOKEN && env.META_AD_ACCOUNT_ID),
-  metaOrganic: Boolean(env.META_ACCESS_TOKEN && (env.META_IG_USER_ID || env.META_PAGE_ID)),
-  google: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
-  googleAds: Boolean(
-    env.GOOGLE_CLIENT_ID &&
-      env.GOOGLE_CLIENT_SECRET &&
-      env.GOOGLE_REFRESH_TOKEN &&
-      env.GOOGLE_ADS_DEVELOPER_TOKEN &&
-      env.GOOGLE_ADS_CUSTOMER_ID,
-  ),
-  ga4: Boolean(
-    env.GOOGLE_CLIENT_ID &&
-      env.GOOGLE_CLIENT_SECRET &&
-      env.GOOGLE_REFRESH_TOKEN &&
-      env.GA4_PROPERTY_ID,
-  ),
-} as const;
+/** Quais integrações têm credencial completa **agora**. */
+export function getCredentials(): Credentials {
+  const env = getEnv();
+
+  const google = Boolean(
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN,
+  );
+
+  return {
+    metaAds: Boolean(env.META_ACCESS_TOKEN && env.META_AD_ACCOUNT_ID),
+    metaOrganic: Boolean(env.META_ACCESS_TOKEN && (env.META_IG_USER_ID || env.META_PAGE_ID)),
+    google,
+    googleAds: Boolean(google && env.GOOGLE_ADS_DEVELOPER_TOKEN && env.GOOGLE_ADS_CUSTOMER_ID),
+    ga4: Boolean(google && env.GA4_PROPERTY_ID),
+  };
+}
