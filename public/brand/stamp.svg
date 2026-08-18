@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="2" opacity="0.5">
+    <path d="M12 60a34 34 0 1 1 68 0 34 34 0 0 1-68 0Z"/>
+    <path d="M58 78 84 96"/>
+    <path d="M104 26 132 60 160 26"/>
+    <path d="M132 60v34"/>
+    <path d="M180 94V26h26a20 20 0 0 1 0 40h-26"/>
+    <path d="M206 66l22 28"/>
+    <path d="M250 94l28-68 28 68"/>
+    <path d="M262 72h32"/>
+  </g>
+</svg>

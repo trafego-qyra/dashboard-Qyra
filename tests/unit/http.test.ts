@@ -1,0 +1,103 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { httpJson, redactSecrets } from "@/server/lib/http";
+
+/**
+ * Política de retry compartilhada pelos conectores. Errar aqui significa ou
+ * martelar a API de origem (e tomar bloqueio) ou desistir de uma falha que
+ * teria passado na segunda tentativa.
+ */
+
+afterEach(() => vi.unstubAllGlobals());
+
+function respond(status: number, body: unknown = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    statusText: String(status),
+    headers: { "content-type": "application/json" },
+  });
+}
+
+describe("httpJson", () => {
+  it("devolve o corpo já desserializado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond(200, { ok: true })),
+    );
+    await expect(httpJson<{ ok: boolean }>("https://api.test/x")).resolves.toEqual({ ok: true });
+  });
+
+  it("repete em 429 e entrega o resultado da tentativa seguinte", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(respond(429))
+      .mockResolvedValueOnce(respond(200, { ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(httpJson("https://api.test/x", { retries: 1 })).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("não repete em erro do cliente — 400 não melhora tentando de novo", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respond(400));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(httpJson("https://api.test/x", { retries: 2 })).rejects.toThrow(/400/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("desiste depois de esgotar as tentativas", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respond(503));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(httpJson("https://api.test/x", { retries: 1 })).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("não vaza o corpo inteiro da resposta na mensagem de erro", async () => {
+    const segredo = "token=super-secreto".repeat(200);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(segredo, { status: 500 })),
+    );
+
+    await expect(httpJson("https://api.test/x", { retries: 0 })).rejects.toThrow(/500/);
+  });
+
+  it("propaga o erro de rede depois das tentativas", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(httpJson("https://api.test/x", { retries: 1 })).rejects.toThrow("ECONNRESET");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("redactSecrets", () => {
+  it("remove o access_token que a Graph API ecoa na mensagem de erro", () => {
+    const bruto =
+      "Unsupported request: /act_123/insights?access_token=EAAGabc123def456ghi789jkl&fields=spend";
+    const limpo = redactSecrets(bruto);
+
+    expect(limpo).not.toContain("EAAGabc123def456ghi789jkl");
+    expect(limpo).toContain("access_token=[oculto]");
+    // O resto da mensagem sobrevive — é ele que diz o que deu errado.
+    expect(limpo).toContain("Unsupported request");
+    expect(limpo).toContain("fields=spend");
+  });
+
+  it("remove token solto, sem parâmetro em volta", () => {
+    const limpo = redactSecrets("token EAAGabcdefghijklmnopqrstuvwxyz0123 expirou");
+    expect(limpo).toBe("token [token-oculto] expirou");
+  });
+
+  it("remove segredo do Google também", () => {
+    const limpo = redactSecrets("client_secret=GOCSPX-abc123&refresh_token=1//0gXYZ");
+    expect(limpo).not.toContain("GOCSPX-abc123");
+    expect(limpo).not.toContain("1//0gXYZ");
+  });
+
+  it("não estraga texto sem segredo", () => {
+    expect(redactSecrets("(#100) Parâmetro inválido")).toBe("(#100) Parâmetro inválido");
+  });
+});

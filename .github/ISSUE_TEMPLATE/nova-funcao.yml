@@ -1,0 +1,32 @@
+name: Nova função
+description: Algo que o produto ainda não faz
+title: "[Nova função] "
+labels: ["nova função"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema que resolve
+      description: Quem sente a falta, e em que momento.
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Como deve funcionar
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: fora
+    attributes:
+      label: Fora de escopo
+      description: O que esta Issue deliberadamente não cobre.

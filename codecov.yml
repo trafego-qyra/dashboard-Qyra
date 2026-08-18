@@ -1,0 +1,25 @@
+coverage:
+  precision: 1
+  round: down
+  range: "70...95"
+  status:
+    project:
+      default:
+        target: 70%
+        # Variação pequena não deve reprovar PR por ruído de arredondamento.
+        threshold: 1%
+    patch:
+      default:
+        # Código novo precisa vir testado — é o portão que segura a dívida.
+        target: 80%
+        threshold: 0%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "src/mocks/**"
+  - "tests/**"
+  - "**/*.d.ts"

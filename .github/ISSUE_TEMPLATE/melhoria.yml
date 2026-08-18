@@ -1,0 +1,39 @@
+name: Melhoria
+description: Algo que já funciona pode ficar melhor
+title: "[Melhoria] "
+labels: ["melhoria"]
+body:
+  - type: textarea
+    id: situacao
+    attributes:
+      label: Situação atual
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+    validations:
+      required: true
+  - type: textarea
+    id: ganho
+    attributes:
+      label: Ganho esperado
+      description: Performance, legibilidade, acessibilidade, custo de manutenção.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Meta Ads
+        - Google Ads
+        - Google Analytics
+        - Orgânico
+        - Visão geral
+        - Design system / UI
+        - Esteira de qualidade
+        - Infraestrutura / deploy
+    validations:
+      required: true
