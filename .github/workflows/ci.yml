@@ -94,10 +94,14 @@ jobs:
         run: npm run check:perf
 
   seguranca:
-    name: Auditoria de dependências
+    name: Auditoria de dependências e segredos
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Histórico completo: a varredura de segredo olha todos os commits,
+          # não só o topo.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -113,7 +117,14 @@ jobs:
       - name: Relatório completo de vulnerabilidades
         continue-on-error: true
         run: npm audit --audit-level=high
-      - name: Segredo no diff
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Varre o histórico inteiro em vez de um intervalo de commits. A ação
+      # oficial calcula `<primeiro-commit>^..<topo>`, e isso quebra quando o
+      # commit inicial não tem pai — foi o caso ao criar este repositório. O
+      # histórico completo responde a mesma pergunta e não depende da topologia.
+      - name: Segredo no histórico (gitleaks)
+        run: |
+          set -euo pipefail
+          VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks git . --redact --no-banner --exit-code 1
