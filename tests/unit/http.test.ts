@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { httpJson } from "@/server/lib/http";
+import { httpJson, redactSecrets } from "@/server/lib/http";
 
 /**
  * Política de retry compartilhada pelos conectores. Errar aqui significa ou
@@ -70,5 +70,34 @@ describe("httpJson", () => {
 
     await expect(httpJson("https://api.test/x", { retries: 1 })).rejects.toThrow("ECONNRESET");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("redactSecrets", () => {
+  it("remove o access_token que a Graph API ecoa na mensagem de erro", () => {
+    const bruto =
+      "Unsupported request: /act_123/insights?access_token=EAAGabc123def456ghi789jkl&fields=spend";
+    const limpo = redactSecrets(bruto);
+
+    expect(limpo).not.toContain("EAAGabc123def456ghi789jkl");
+    expect(limpo).toContain("access_token=[oculto]");
+    // O resto da mensagem sobrevive — é ele que diz o que deu errado.
+    expect(limpo).toContain("Unsupported request");
+    expect(limpo).toContain("fields=spend");
+  });
+
+  it("remove token solto, sem parâmetro em volta", () => {
+    const limpo = redactSecrets("token EAAGabcdefghijklmnopqrstuvwxyz0123 expirou");
+    expect(limpo).toBe("token [token-oculto] expirou");
+  });
+
+  it("remove segredo do Google também", () => {
+    const limpo = redactSecrets("client_secret=GOCSPX-abc123&refresh_token=1//0gXYZ");
+    expect(limpo).not.toContain("GOCSPX-abc123");
+    expect(limpo).not.toContain("1//0gXYZ");
+  });
+
+  it("não estraga texto sem segredo", () => {
+    expect(redactSecrets("(#100) Parâmetro inválido")).toBe("(#100) Parâmetro inválido");
   });
 });

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { parseRange } from "@/lib/date-range";
 import { CHANNEL_IDS, type ChannelId } from "@/lib/types";
 import { apiError, guard } from "@/server/lib/api";
+import { HttpError, redactSecrets } from "@/server/lib/http";
 import { getChannelReport } from "@/server/reports";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +32,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ chan
     const report = await getChannelReport(channel as ChannelId, range);
     return NextResponse.json(report, { headers });
   } catch (error) {
-    // A mensagem da API externa pode conter identificadores de conta: não vaza.
     console.error(`[api] falha ao carregar ${channel}`, error);
+
+    // Quando a plataforma de origem respondeu com erro, a mensagem dela é o
+    // diagnóstico — sem ela o operador fica adivinhando por que o canal não
+    // carrega. `redactSecrets` remove o token, que a Graph API ecoa de volta
+    // dentro da própria mensagem de erro.
+    if (error instanceof HttpError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "upstream_error",
+            message: "A plataforma de origem recusou a consulta.",
+            upstream: {
+              status: error.status,
+              detail: redactSecrets(error.body ?? error.message).slice(0, 400),
+            },
+          },
+        },
+        { status: 502, headers },
+      );
+    }
+
     return apiError(
       "connector_failed",
-      "Não foi possível carregar os dados do canal.",
+      error instanceof Error ? redactSecrets(error.message).slice(0, 200) : "Falha desconhecida.",
       502,
       headers,
     );

@@ -64,7 +64,9 @@ async function fetchInsights(
   // A paginação da Graph API devolve a URL completa do próximo bloco.
   while (next && rows.length < 5_000) {
     const page: MetaInsightsResponse = await httpJson<MetaInsightsResponse>(next);
-    rows.push(...page.data);
+    // A Graph API sempre devolve `data` em sucesso, mas uma resposta
+    // inesperada não pode virar TypeError no meio do relatório.
+    rows.push(...(page.data ?? []));
     next = page.paging?.next;
   }
 

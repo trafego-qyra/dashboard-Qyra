@@ -14,7 +14,7 @@ export interface HttpOptions extends Omit<RequestInit, "signal"> {
   retries?: number;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     message: string,
     public readonly status: number,
@@ -23,6 +23,19 @@ class HttpError extends Error {
     super(message);
     this.name = "HttpError";
   }
+}
+
+/**
+ * Remove qualquer coisa parecida com credencial de um texto.
+ *
+ * A mensagem de erro das plataformas costuma ecoar a requisição inteira,
+ * inclusive o `access_token` da query string. Sem isso, expor o erro para
+ * diagnóstico vazaria o segredo.
+ */
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/(access_token|client_secret|refresh_token|developer-token)=[^&"\s]+/gi, "$1=[oculto]")
+    .replace(/\b(EAA[A-Za-z0-9]{20,})\b/g, "[token-oculto]");
 }
 
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
