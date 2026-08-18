@@ -9,10 +9,15 @@ O repositório está conectado à Vercel. O fluxo é o padrão do Git:
 | PR aberto ou atualizado | **Deploy de preview**, com URL própria no PR |
 | Merge na `main` | **Deploy de produção** |
 
-Região configurada: **`gru1`** (São Paulo) — as funções ficam perto de quem usa,
-e a latência das APIs do Meta e do Google é a mesma de qualquer região.
-Rotas de API têm 30s de limite e 1 GB (`vercel.json`), suficiente para uma
-consulta que agrega quatro plataformas em paralelo.
+**Região:** configure em Settings → Functions → Function Region. `gru1`
+(São Paulo) é a escolha natural — as funções ficam perto de quem usa, e a
+latência das APIs do Meta e do Google é a mesma de qualquer região. Fica no
+painel, e não no `vercel.json`, porque a fixação por arquivo é rejeitada em
+planos que não permitem escolher região e derruba o deploy inteiro.
+
+**Tempo limite das rotas de API:** 30s, declarado na própria rota
+(`export const maxDuration = 30`). É o modo idiomático do Next: fica junto do
+código e não depende de um glob no `vercel.json` casar com a saída do build.
 
 ## Variáveis de ambiente
 

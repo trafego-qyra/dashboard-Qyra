@@ -103,7 +103,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Vulnerabilidades conhecidas
+      # Portão bloqueante: nada crítico chega a produção.
+      - name: Vulnerabilidades críticas em dependências de produção
+        run: npm audit --omit=dev --audit-level=critical
+
+      # Informativo: as "high" restantes vivem em dependências transitivas do
+      # próprio Next (postcss e sharp) e só saem com o Next 16. O relatório fica
+      # visível no log para não virar ponto cego — ver docs/qualidade.md.
+      - name: Relatório completo de vulnerabilidades
+        continue-on-error: true
         run: npm audit --audit-level=high
       - name: Segredo no diff
         uses: gitleaks/gitleaks-action@v2

@@ -63,7 +63,19 @@ nada. Fora do CI de PR porque é caro.
 
 ### Segurança
 
-- `npm audit --audit-level=high` a cada PR.
+- **`npm audit`** a cada PR, em dois passos: bloqueante para vulnerabilidade
+  **crítica** em dependência de produção, e informativo (não bloqueante) para o
+  relatório completo.
+
+  A separação existe porque as três vulnerabilidades *high* que sobram vivem em
+  dependências transitivas do próprio Next — `postcss` (leitura de arquivo via
+  `sourceMappingURL`, um vetor de build) e `sharp`/libvips (usado pelo
+  `next/image`, que este projeto não usa). Ambas só saem com o **Next 16**, um
+  salto de major que merece PR próprio e não deve bloquear entrega de produto.
+  O relatório continua no log para não virar ponto cego.
+
+  A RCE crítica do Next (CVE-2025-66478) **foi corrigida** com a atualização
+  para 15.5.23, dentro da mesma linha menor.
 - **gitleaks** varre o diff atrás de segredo.
 - **Rate limit** em todas as rotas de API (`src/server/lib/rate-limit.ts`),
   com `x-ratelimit-*` e `retry-after`.

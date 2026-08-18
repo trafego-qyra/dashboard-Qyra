@@ -7,6 +7,8 @@ import { getChannelReport } from "@/server/reports";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Agregar quatro plataformas em paralelo pode passar dos 15s padrão da Vercel.
+export const maxDuration = 30;
 
 /** GET /api/v1/reports/:channel?preset=28d | ?from=&to= */
 export async function GET(request: Request, { params }: { params: Promise<{ channel: string }> }) {
