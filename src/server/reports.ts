@@ -39,18 +39,25 @@ function total(series: SeriesPoint[], key: string): number {
 }
 
 /**
- * Preenche `previousValue` dos KPIs a partir de um segundo relatório.
- * Só preenche o que consegue derivar da série — KPI sem métrica correspondente
- * fica sem comparação, em vez de comparar contra número inventado.
+ * Preenche `previousValue` dos KPIs a partir do relatório da janela anterior.
+ *
+ * Usa o KPI homônimo do relatório anterior, **nunca a soma da série**. A versão
+ * anterior somava os valores diários da métrica, o que só faz sentido para
+ * grandezas aditivas: somar sete CTRs diários dá sete vezes um CTR, e a
+ * comparação exibia quedas de 95% que nunca aconteceram. O conector já calcula
+ * cada KPI corretamente para o seu período — inclusive razões e médias — então
+ * é dele que o valor anterior tem de vir.
  */
 function attachComparison(report: ChannelReport, previous: ChannelReport): Kpi[] {
+  const anteriores = new Map(previous.kpis.map((kpi) => [kpi.key, kpi.value]));
+
   return report.kpis.map((kpi) => {
     if (kpi.previousValue !== undefined) return kpi;
 
-    const hasMetric = previous.series.some((p) => kpi.key in p);
-    if (!hasMetric) return kpi;
-
-    return { ...kpi, previousValue: total(previous.series, kpi.key) };
+    const anterior = anteriores.get(kpi.key);
+    // KPI sem correspondente fica sem comparação, em vez de comparar contra
+    // número inventado.
+    return anterior === undefined ? kpi : { ...kpi, previousValue: anterior };
   });
 }
 

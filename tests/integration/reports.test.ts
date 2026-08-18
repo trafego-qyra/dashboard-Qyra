@@ -93,3 +93,50 @@ describe("getOverviewReport", () => {
     }
   });
 });
+
+describe("comparação de médias e razões", () => {
+  /**
+   * Regressão: `previousValue` era a **soma** dos valores diários da métrica.
+   * Para investimento e cliques isso está certo; para CTR, CPL e duração média
+   * é absurdo — somar 28 durações diárias dá 28 vezes uma duração, e a tela
+   * exibia variações de centenas por cento que nunca aconteceram.
+   *
+   * A duração média do GA4 é o caso que exercita o agregador de verdade: é o
+   * único KPI das fixtures sem `previousValue` próprio, então quem preenche a
+   * comparação é o código sob teste.
+   */
+  it("compara duração média contra a média anterior, não contra a soma", async () => {
+    const report = await getChannelReport("ga4", RANGE);
+    const anterior = await getChannelReport("ga4", previousRange(RANGE), { compare: false });
+
+    const duracao = report.kpis.find((k) => k.key === "avgDuration");
+    const duracaoAnterior = anterior.kpis.find((k) => k.key === "avgDuration");
+
+    expect(duracao?.previousValue).toBeCloseTo(duracaoAnterior?.value ?? -1, 6);
+  });
+
+  it("mantém a duração anterior na mesma ordem de grandeza da atual", async () => {
+    const report = await getChannelReport("ga4", RANGE);
+    const duracao = report.kpis.find((k) => k.key === "avgDuration");
+
+    expect(duracao).toBeDefined();
+    if (!duracao?.previousValue) throw new Error("KPI sem comparação preenchida");
+
+    // A soma de 28 dias colocaria o valor anterior uma ordem de grandeza acima.
+    expect(duracao.previousValue).toBeGreaterThan(duracao.value / 3);
+    expect(duracao.previousValue).toBeLessThan(duracao.value * 3);
+  });
+
+  it("nenhum percentual anterior escapa da faixa [0, 1]", async () => {
+    for (const canal of CHANNELS.map((c) => c.id)) {
+      const report = await getChannelReport(canal, RANGE);
+
+      for (const kpi of report.kpis) {
+        if (kpi.previousValue === undefined || kpi.format !== "percent") continue;
+        // Percentual anterior fora da faixa só acontece por soma indevida.
+        expect(kpi.previousValue).toBeGreaterThanOrEqual(0);
+        expect(kpi.previousValue).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});

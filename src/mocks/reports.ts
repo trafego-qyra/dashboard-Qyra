@@ -123,6 +123,29 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
           };
         }),
       },
+      {
+        title: "Origem das conversões",
+        description:
+          "Toda ação registrada no período, e quais delas o painel conta como lead. A Meta credita uma conversão a qualquer anúncio que a pessoa clicou nos últimos 7 dias ou viu no último dia — inclusive campanhas de topo de funil.",
+        columns: [
+          { key: "acao", label: "Ação", align: "left" },
+          { key: "identificador", label: "Identificador na Meta", align: "left" },
+          { key: "quantidade", label: "Quantidade", format: "integer", align: "right" },
+          { key: "contaComoLead", label: "Conta como lead", align: "right" },
+        ],
+        rows: [
+          ["Lead pelo pixel do site", "offsite_conversion.fb_pixel_lead", 0.72, "sim"],
+          ["Visualização da página de destino", "landing_page_view", 12.4, "não"],
+          ["Clique no link", "link_click", 26.8, "não"],
+          ["Engajamento com a publicação", "post_engagement", 41.2, "não"],
+          ["Lead por formulário instantâneo", "onsite_conversion.lead_grouped", 0.28, "sim"],
+        ].map(([acao, identificador, fator, contaComoLead]) => ({
+          acao: acao as string,
+          identificador: identificador as string,
+          quantidade: Math.round(leads * (fator as number)),
+          contaComoLead: contaComoLead as string,
+        })),
+      },
     ],
     notices: [],
   };
