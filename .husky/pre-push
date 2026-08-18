@@ -1,0 +1,2 @@
+# Suíte unitária + integração antes de subir. O e2e roda no CI, onde há build.
+npm run test

@@ -1,0 +1,5 @@
+# Portão local: nada entra no commit sem passar por lint, tipos e contrato de
+# arquitetura. Testes ficam para o pre-push — pre-commit precisa ser rápido.
+npm run lint
+npm run typecheck
+npm run check:arch

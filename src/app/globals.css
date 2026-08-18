@@ -1,0 +1,322 @@
+@import "tailwindcss";
+
+/* =========================================================================
+   QYRA — Design System
+   Fonte da verdade: QYRA_UniversoVisual (Estudo de marca, jul/2026)
+   Cores extraídas do "Mapa cromático" (pág. 15) por amostragem do PDF.
+
+   Dark Purple   #2F2535  — a cor da marca, sempre presente
+   Sage Green    #789180  — sabedoria/tranquilidade, contrasta com o dark
+   Lilac         #9D5CC1  — energia e modernidade (derivada do dark purple)
+   Silver Purple #D7D2E1  — cinza levemente arroxeado, para respiros
+   ========================================================================= */
+
+@theme {
+  /* ---- Rampas de marca (steps 100 = claro → 900 = escuro) ------------- */
+  --color-plum-50: #f7f5f9;
+  --color-plum-100: #ebe7f0;
+  --color-plum-200: #d7d2e1; /* Silver Purple (marca) */
+  --color-plum-300: #ada7b6;
+  --color-plum-400: #837c8b;
+  --color-plum-500: #595060;
+  --color-plum-600: #453c4d;
+  --color-plum-700: #3a2f42;
+  --color-plum-800: #2f2535; /* Dark Purple (marca) */
+  --color-plum-900: #221a28;
+  --color-plum-950: #17111b;
+
+  --color-lilac-50: #f6effb;
+  --color-lilac-100: #ecdff6;
+  --color-lilac-200: #e0cbee;
+  --color-lilac-300: #c9a3de;
+  --color-lilac-400: #b27fd0;
+  --color-lilac-500: #9d5cc1; /* Lilac (marca) */
+  --color-lilac-600: #8248a8;
+  --color-lilac-700: #66417b;
+  --color-lilac-800: #4b3358;
+  --color-lilac-900: #362540;
+
+  --color-sage-50: #f0f4f1;
+  --color-sage-100: #dde6e0;
+  --color-sage-200: #bccdc2;
+  --color-sage-300: #9ab3a2;
+  --color-sage-400: #789180; /* Sage Green (marca) */
+  --color-sage-500: #66766d;
+  --color-sage-600: #545b5b;
+  --color-sage-700: #414048;
+
+  /* ---- Papéis semânticos (resolvidos por tema em :root/[data-theme]) --- */
+  --color-canvas: var(--qy-canvas);
+  --color-surface: var(--qy-surface);
+  --color-surface-raised: var(--qy-surface-raised);
+  --color-surface-sunken: var(--qy-surface-sunken);
+  --color-ink: var(--qy-ink);
+  --color-ink-secondary: var(--qy-ink-secondary);
+  --color-ink-muted: var(--qy-ink-muted);
+  --color-line: var(--qy-line);
+  --color-line-strong: var(--qy-line-strong);
+  --color-brand: var(--qy-brand);
+  --color-brand-ink: var(--qy-brand-ink);
+  --color-accent: var(--qy-accent);
+  --color-accent-soft: var(--qy-accent-soft);
+  --color-accent-ink: var(--qy-accent-ink);
+  --color-positive: var(--qy-positive);
+  --color-negative: var(--qy-negative);
+  --color-warning: var(--qy-warning);
+
+  /* ---- Série categórica de gráficos ----------------------------------
+     Ordem fixa, nunca ciclada. Validada com scripts/validate_palette.js
+     (skill dataviz) nos DOIS modos, superfícies #ffffff e #2f2535:
+       lightness band PASS · chroma floor PASS · CVD ΔE 9.3 PASS
+       normal-vision ΔE 19.9 PASS · contraste ≥3:1 PASS
+     Formas com pares não-adjacentes (dispersão, bolha) usam só os 3
+     primeiros slots — acima disso o gate all-pairs reprova. */
+  --color-series-1: #9d5cc1; /* lilás — marca */
+  --color-series-2: #4e9e76; /* verde — derivado do sage, com croma suficiente */
+  --color-series-3: #c96a24; /* âmbar */
+  --color-series-4: #4a79d1; /* azul */
+  --color-series-5: #ce5c86; /* rosa */
+
+  /* ---- Tipografia -----------------------------------------------------
+     Gilroy é a família do brandbook e Larken Italic a fonte de contraste
+     (pág. 24-25). Nenhuma das duas é redistribuível; os arquivos entram em
+     public/fonts (ver docs/design-system.md) e caem para Poppins/Fraunces. */
+  --font-sans:
+    var(--font-gilroy), var(--font-poppins), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-display: var(--font-larken), var(--font-fraunces), Georgia, "Times New Roman", serif;
+
+  /* ---- Motion ---------------------------------------------------------
+     Duração curta para feedback, média para entrada de conteúdo.
+     Easing padrão: saída suave (decelerate) — nada de linear. */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
+
+  --radius-card: 20px;
+  --radius-slab: 28px;
+}
+
+/* Variante dark por atributo (next-themes), somada ao prefers-color-scheme */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---- Tema claro (padrão) ------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --qy-canvas: #f7f5f9;
+  --qy-surface: #ffffff;
+  --qy-surface-raised: #ffffff;
+  --qy-surface-sunken: #f2eff6;
+  --qy-ink: #2f2535;
+  --qy-ink-secondary: #595060;
+  --qy-ink-muted: #837c8b;
+  --qy-line: #e7e3ee;
+  --qy-line-strong: #d7d2e1;
+  --qy-brand: #2f2535;
+  --qy-brand-ink: #ffffff;
+  --qy-accent: #8248a8;
+  --qy-accent-soft: #f2e9f9;
+  --qy-accent-ink: #ffffff;
+  --qy-positive: #2f8f5b;
+  --qy-negative: #c4453f;
+  --qy-warning: #b06d12;
+  /* superfície usada pelos gráficos — o validador foi rodado contra ela */
+  --qy-chart-surface: #ffffff;
+  --qy-grid: #ece8f2;
+  --qy-axis: #d7d2e1;
+}
+
+/* ---- Tema escuro -------------------------------------------------------
+   Passos próprios, escolhidos e validados contra a superfície #2f2535.
+   Não é inversão automática do tema claro. */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --qy-canvas: #221a28;
+    --qy-surface: #2f2535;
+    --qy-surface-raised: #3a2f42;
+    --qy-surface-sunken: #17111b;
+    --qy-ink: #f7f5f9;
+    --qy-ink-secondary: #d7d2e1;
+    --qy-ink-muted: #ada7b6;
+    --qy-line: #43384c;
+    --qy-line-strong: #595060;
+    --qy-brand: #d7d2e1;
+    --qy-brand-ink: #2f2535;
+    --qy-accent: #b27fd0;
+    --qy-accent-soft: #3d2f4a;
+    --qy-accent-ink: #221a28;
+    --qy-positive: #4bb37c;
+    --qy-negative: #e07470;
+    --qy-warning: #d9a441;
+    --qy-chart-surface: #2f2535;
+    --qy-grid: #3d3247;
+    --qy-axis: #4d4159;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --qy-canvas: #221a28;
+  --qy-surface: #2f2535;
+  --qy-surface-raised: #3a2f42;
+  --qy-surface-sunken: #17111b;
+  --qy-ink: #f7f5f9;
+  --qy-ink-secondary: #d7d2e1;
+  --qy-ink-muted: #ada7b6;
+  --qy-line: #43384c;
+  --qy-line-strong: #595060;
+  --qy-brand: #d7d2e1;
+  --qy-brand-ink: #2f2535;
+  --qy-accent: #b27fd0;
+  --qy-accent-soft: #3d2f4a;
+  --qy-accent-ink: #221a28;
+  --qy-positive: #4bb37c;
+  --qy-negative: #e07470;
+  --qy-warning: #d9a441;
+  --qy-chart-surface: #2f2535;
+  --qy-grid: #3d3247;
+  --qy-axis: #4d4159;
+}
+
+/* ---- Base --------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--qy-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--qy-canvas);
+    color: var(--qy-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Colunas numéricas alinham; números soltos usam figuras proporcionais. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--qy-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background-color: var(--qy-accent);
+    color: var(--qy-accent-ink);
+  }
+}
+
+/* ---- Grafismos da marca -------------------------------------------------
+   "Light Color Block" (pág. 26): luzes de roxo em fundos sólidos, para
+   trazer modernidade e leveza. Usado só em superfícies de marca. */
+@utility qy-light-block {
+  background-image:
+    radial-gradient(
+      60% 80% at 8% 0%,
+      color-mix(in oklab, var(--color-lilac-500) 45%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 70% at 100% 100%,
+      color-mix(in oklab, var(--color-lilac-400) 30%, transparent),
+      transparent 65%
+    );
+}
+
+/* Textura "Logo Stamp" (pág. 26): contorno do logo como carimbo de fundo. */
+@utility qy-stamp {
+  background-image: url("/brand/stamp.svg");
+  background-repeat: no-repeat;
+  background-position: right -40px bottom -30px;
+  background-size: 320px auto;
+}
+
+/* ---- Motion -------------------------------------------------------------
+   Entradas suaves e consistentes. Tudo respeita prefers-reduced-motion. */
+@layer utilities {
+  @keyframes qy-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes qy-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes qy-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .qy-rise {
+    animation: qy-rise var(--duration-base) var(--ease-out-soft) both;
+  }
+  .qy-fade {
+    animation: qy-fade var(--duration-base) var(--ease-out-soft) both;
+  }
+  /* escalonamento de entrada para grids de cards */
+  .qy-stagger > * {
+    animation: qy-rise var(--duration-base) var(--ease-out-soft) both;
+  }
+  .qy-stagger > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .qy-stagger > *:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  .qy-stagger > *:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  .qy-stagger > *:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  .qy-stagger > *:nth-child(5) {
+    animation-delay: 160ms;
+  }
+  .qy-stagger > *:nth-child(6) {
+    animation-delay: 200ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* biome-ignore-start lint/complexity/noImportantStyles: precisa vencer
+     qualquer animação declarada em componente — é o override global de
+     acessibilidade, não um atalho de especificidade. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* biome-ignore-end lint/complexity/noImportantStyles: fim do override. */
+}
+
+/* Recharts: remove o outline do wrapper e deixa o tooltip acompanhar o tema */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}

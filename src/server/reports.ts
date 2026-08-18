@@ -1,0 +1,258 @@
+import "server-only";
+
+import { CHANNELS, getChannel } from "@/lib/channels";
+import { previousRange } from "@/lib/date-range";
+import type {
+  ChannelId,
+  ChannelReport,
+  DateRange,
+  Kpi,
+  OverviewReport,
+  SeriesPoint,
+} from "@/lib/types";
+import { cached } from "@/server/lib/cache";
+import { fetchGa4Report } from "./connectors/ga4";
+import { fetchGoogleAdsReport } from "./connectors/google-ads";
+import { fetchMetaAdsReport } from "./connectors/meta-ads";
+import { fetchOrganicoReport } from "./connectors/organico";
+
+/**
+ * Ponto único de acesso a dados de canal. As telas chamam daqui — nunca um
+ * conector direto — para que cache, comparação de período e degradação de
+ * erro sejam idênticos em toda a aplicação.
+ */
+
+const FETCHERS: Record<ChannelId, (range: DateRange) => Promise<ChannelReport>> = {
+  "meta-ads": fetchMetaAdsReport,
+  "google-ads": fetchGoogleAdsReport,
+  ga4: fetchGa4Report,
+  organico: fetchOrganicoReport,
+};
+
+function cacheKey(channel: ChannelId, range: DateRange): string {
+  return `${channel}:${range.from}:${range.to}`;
+}
+
+/** Total de uma métrica na série — base da comparação com o período anterior. */
+function total(series: SeriesPoint[], key: string): number {
+  return series.reduce((acc, point) => acc + (Number(point[key]) || 0), 0);
+}
+
+/**
+ * Preenche `previousValue` dos KPIs a partir de um segundo relatório.
+ * Só preenche o que consegue derivar da série — KPI sem métrica correspondente
+ * fica sem comparação, em vez de comparar contra número inventado.
+ */
+function attachComparison(report: ChannelReport, previous: ChannelReport): Kpi[] {
+  return report.kpis.map((kpi) => {
+    if (kpi.previousValue !== undefined) return kpi;
+
+    const hasMetric = previous.series.some((p) => kpi.key in p);
+    if (!hasMetric) return kpi;
+
+    return { ...kpi, previousValue: total(previous.series, kpi.key) };
+  });
+}
+
+export async function getChannelReport(
+  channel: ChannelId,
+  range: DateRange,
+  options: { compare?: boolean } = {},
+): Promise<ChannelReport> {
+  const { compare = true } = options;
+
+  const report = await cached(cacheKey(channel, range), () => FETCHERS[channel](range));
+  if (!compare) return report;
+
+  try {
+    const prevRange = previousRange(range);
+    const previous = await cached(cacheKey(channel, prevRange), () => FETCHERS[channel](prevRange));
+    return { ...report, kpis: attachComparison(report, previous) };
+  } catch {
+    // Comparação é um enfeite útil, não requisito: sem ela a tela ainda serve.
+    return report;
+  }
+}
+
+export interface ChannelResult {
+  channel: ChannelId;
+  report: ChannelReport | null;
+  error: string | null;
+}
+
+/** Busca todos os canais em paralelo; a falha de um não derruba os outros. */
+export async function getAllReports(range: DateRange): Promise<ChannelResult[]> {
+  return Promise.all(
+    CHANNELS.map(async ({ id }): Promise<ChannelResult> => {
+      try {
+        return { channel: id, report: await getChannelReport(id, range), error: null };
+      } catch (error) {
+        return {
+          channel: id,
+          report: null,
+          error: error instanceof Error ? error.message : "Falha desconhecida",
+        };
+      }
+    }),
+  );
+}
+
+/** Soma a primeira métrica existente entre as candidatas. */
+function pickTotal(report: ChannelReport, keys: string[]): number {
+  for (const key of keys) {
+    if (report.series.some((p) => key in p)) return total(report.series, key);
+  }
+  return 0;
+}
+
+/** Totais consolidados de um intervalo — base tanto do período atual quanto do anterior. */
+async function collectTotals(range: DateRange) {
+  const results = await getAllReports(range);
+
+  const byChannel = results
+    .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
+    .map((r) => ({
+      channel: r.channel,
+      label: getChannel(r.channel).label,
+      slot: getChannel(r.channel).slot,
+      investment: pickTotal(r.report, ["spend", "cost"]),
+      conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
+      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+    }));
+
+  const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
+
+  return {
+    results,
+    byChannel,
+    investment: byChannel.reduce((a, c) => a + c.investment, 0),
+    paidConversions: byChannel
+      .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
+      .reduce((a, c) => a + c.conversions, 0),
+    sessions: ga4 ? pickTotal(ga4, ["sessions"]) : 0,
+    siteConversions: ga4 ? pickTotal(ga4, ["conversions"]) : 0,
+  };
+}
+
+export async function getOverviewReport(range: DateRange): Promise<OverviewReport> {
+  const results = await getAllReports(range);
+  const notices: string[] = [];
+
+  for (const result of results) {
+    if (result.error) notices.push(`${getChannel(result.channel).label}: ${result.error}`);
+    else if (result.report) notices.push(...result.report.notices);
+  }
+
+  const byChannel = results
+    .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
+    .map((r) => ({
+      channel: r.channel,
+      label: getChannel(r.channel).label,
+      slot: getChannel(r.channel).slot,
+      investment: pickTotal(r.report, ["spend", "cost"]),
+      conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
+      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+    }));
+
+  const investment = byChannel.reduce((a, c) => a + c.investment, 0);
+  const paidConversions = byChannel
+    .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
+    .reduce((a, c) => a + c.conversions, 0);
+
+  const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
+  const sessions = ga4 ? pickTotal(ga4, ["sessions"]) : 0;
+  const siteConversions = ga4 ? pickTotal(ga4, ["conversions"]) : 0;
+
+  // Comparação com a janela anterior. Se falhar, a tela segue sem o delta —
+  // "vs. período anterior" é contexto, não o dado principal.
+  let previous: Awaited<ReturnType<typeof collectTotals>> | null = null;
+  try {
+    previous = await collectTotals(previousRange(range));
+  } catch {
+    previous = null;
+  }
+
+  const prevCpa =
+    previous && previous.paidConversions > 0
+      ? previous.investment / previous.paidConversions
+      : undefined;
+  const prevSiteRate =
+    previous && previous.sessions > 0 ? previous.siteConversions / previous.sessions : undefined;
+
+  // Série consolidada: investimento pago somado + sessões do site, por dia.
+  const dateIndex = new Map<string, SeriesPoint>();
+  for (const result of results) {
+    if (!result.report) continue;
+    for (const point of result.report.series) {
+      const existing = dateIndex.get(point.date) ?? {
+        date: point.date,
+        investment: 0,
+        sessions: 0,
+        conversions: 0,
+      };
+      existing.investment =
+        Number(existing.investment) + (Number(point.spend) || Number(point.cost) || 0);
+      existing.sessions = Number(existing.sessions) + (Number(point.sessions) || 0);
+      existing.conversions =
+        Number(existing.conversions) +
+        (Number(point.leads) || 0) +
+        (Number(point.conversions) || 0);
+      dateIndex.set(point.date, existing);
+    }
+  }
+
+  const series = [...dateIndex.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const anyLive = results.some((r) => r.report?.source === "live");
+
+  return {
+    range,
+    source: anyLive ? "live" : "mock",
+    fetchedAt: new Date().toISOString(),
+    kpis: [
+      {
+        key: "investment",
+        label: "Investimento total",
+        value: investment,
+        previousValue: previous?.investment,
+        format: "currency",
+      },
+      {
+        key: "conversions",
+        label: "Conversões pagas",
+        value: paidConversions,
+        previousValue: previous?.paidConversions,
+        format: "integer",
+      },
+      {
+        key: "cpa",
+        label: "Custo por conversão",
+        value: paidConversions === 0 ? 0 : investment / paidConversions,
+        previousValue: prevCpa,
+        format: "currency",
+        lowerIsBetter: true,
+        hint: "Investimento em mídia dividido pelas conversões de Meta Ads e Google Ads.",
+      },
+      {
+        key: "sessions",
+        label: "Sessões no site",
+        value: sessions,
+        previousValue: previous?.sessions,
+        format: "integer",
+      },
+      {
+        key: "siteConversionRate",
+        label: "Conversão do site",
+        value: sessions === 0 ? 0 : siteConversions / sessions,
+        previousValue: prevSiteRate,
+        format: "percent",
+      },
+    ],
+    series,
+    seriesDefs: [
+      { key: "investment", label: "Investimento", format: "currency", slot: 1 },
+      { key: "conversions", label: "Conversões", format: "integer", slot: 2 },
+    ],
+    byChannel,
+    notices: [...new Set(notices)],
+  };
+}

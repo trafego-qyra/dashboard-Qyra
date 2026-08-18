@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Um PR atualizado cancela a execução anterior: não faz sentido gastar runner
+# validando um commit que já foi substituído.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A CI nunca fala com API de terceiro: valida a aplicação, não a
+  # disponibilidade do Meta ou do Google.
+  QYRA_FORCE_MOCK: "true"
+
+jobs:
+  qualidade:
+    name: Tipos, lint, arquitetura e código morto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos
+        run: npm run typecheck
+      - name: Lint e formatação (Biome)
+        run: npm run lint
+      - name: Contrato de arquitetura
+        run: npm run check:arch
+      - name: Código morto (Knip)
+        run: npm run check:deadcode
+
+  testes:
+    name: Unitário e integração
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Suíte com cobertura
+        run: npm run test:coverage
+      - name: Enviar cobertura ao Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Instalar navegador
+        run: npx playwright install --with-deps chromium
+      - name: Build de produção
+        run: npm run build
+      - name: E2E
+        run: npm run test:e2e
+      - name: Guardar relatório em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  performance:
+    name: Orçamento de performance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Lighthouse CI
+        run: npm run check:perf
+
+  seguranca:
+    name: Auditoria de dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vulnerabilidades conhecidas
+        run: npm audit --audit-level=high
+      - name: Segredo no diff
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,52 @@
+name: Correção
+description: Algo que já existe está com comportamento errado
+title: "[Correção] "
+labels: ["correção"]
+body:
+  - type: textarea
+    id: comportamento
+    attributes:
+      label: O que está acontecendo
+      description: O comportamento observado, com o número ou tela concreta.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que deveria acontecer
+    validations:
+      required: true
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Abrir /meta-ads?preset=7d
+        2. Ordenar por CPL
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Meta Ads
+        - Google Ads
+        - Google Analytics
+        - Orgânico
+        - Visão geral
+        - Design system / UI
+        - Infraestrutura / deploy
+    validations:
+      required: true
+  - type: dropdown
+    id: impacto
+    attributes:
+      label: Impacto
+      options:
+        - Número errado no relatório do cliente
+        - Tela quebrada ou inacessível
+        - Incômodo visual
+    validations:
+      required: true
