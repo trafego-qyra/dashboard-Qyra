@@ -27,22 +27,28 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
     const spend = dailyValue("meta:spend", date, 640);
     const impressions = dailyValue("meta:impr", date, 78_000);
     const clicks = dailyValue("meta:clicks", date, 1_240);
+    const linkClicks = dailyValue("meta:linkclicks", date, 520);
     const leads = dailyValue("meta:leads", date, 34);
     return {
       date,
       spend: Math.round(spend * 100) / 100,
       impressions: Math.round(impressions),
       clicks: Math.round(clicks),
+      linkClicks: Math.round(linkClicks),
       leads: Math.round(leads),
       ctr: safeDiv(clicks, impressions),
+      cpm: safeDiv(spend, impressions) * 1000,
       cpl: safeDiv(spend, Math.max(1, Math.round(leads))),
     };
   });
 
   const spend = sum(series, "spend");
   const clicks = sum(series, "clicks");
+  const linkClicks = sum(series, "linkClicks");
   const impressions = sum(series, "impressions");
   const leads = sum(series, "leads");
+  // Frequência ~2,4: alcance é uma fração das impressões, não a soma dos dias.
+  const reach = Math.round(impressions / 2.4);
 
   return {
     channel: "meta-ads",
@@ -57,6 +63,54 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
         value: spend,
         previousValue: spend * 0.91,
         format: "currency",
+      },
+      {
+        key: "impressions",
+        label: "Impressões",
+        value: impressions,
+        previousValue: impressions * 0.88,
+        format: "integer",
+      },
+      {
+        key: "reach",
+        label: "Alcance",
+        value: reach,
+        previousValue: reach * 0.9,
+        format: "integer",
+        hint: "Pessoas distintas que viram os anúncios.",
+      },
+      {
+        key: "cpm",
+        label: "CPM",
+        value: safeDiv(spend, impressions) * 1000,
+        previousValue: safeDiv(spend * 0.91, impressions * 0.88) * 1000,
+        format: "currency",
+        lowerIsBetter: true,
+        hint: "Custo por mil impressões, calculado sobre o total do período.",
+      },
+      {
+        key: "ctr",
+        label: "CTR",
+        value: safeDiv(clicks, impressions),
+        previousValue: safeDiv(clicks, impressions) * 0.96,
+        format: "percent",
+      },
+      {
+        key: "frequency",
+        label: "Frequência",
+        value: safeDiv(impressions, reach),
+        previousValue: safeDiv(impressions, reach) * 0.94,
+        format: "decimal",
+        lowerIsBetter: true,
+        hint: "Quantas vezes, em média, cada pessoa alcançada viu um anúncio.",
+      },
+      {
+        key: "linkClicks",
+        label: "Cliques no link",
+        value: linkClicks,
+        previousValue: linkClicks * 0.93,
+        format: "integer",
+        hint: "Só cliques que levaram ao destino.",
       },
       {
         key: "leads",
@@ -74,25 +128,13 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
         lowerIsBetter: true,
         hint: "Investimento dividido pelos leads do período.",
       },
-      {
-        key: "ctr",
-        label: "CTR",
-        value: safeDiv(clicks, impressions),
-        previousValue: safeDiv(clicks, impressions) * 0.96,
-        format: "percent",
-      },
-      {
-        key: "clicks",
-        label: "Cliques",
-        value: clicks,
-        previousValue: clicks * 0.93,
-        format: "integer",
-      },
     ],
     series,
     seriesDefs: [
       { key: "spend", label: "Investimento", format: "currency", slot: 1 },
       { key: "leads", label: "Leads", format: "integer", slot: 2 },
+      { key: "impressions", label: "Impressões", format: "integer", slot: 3 },
+      { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
     tables: [
       {
@@ -101,9 +143,12 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
         columns: [
           { key: "name", label: "Campanha", align: "left" },
           { key: "spend", label: "Investimento", format: "currency", align: "right" },
+          { key: "impressions", label: "Impressões", format: "integer", align: "right" },
+          { key: "cpm", label: "CPM", format: "currency", align: "right" },
+          { key: "ctr", label: "CTR", format: "percent", align: "right" },
+          { key: "linkClicks", label: "Cliques no link", format: "integer", align: "right" },
           { key: "leads", label: "Leads", format: "integer", align: "right" },
           { key: "cpl", label: "CPL", format: "currency", align: "right" },
-          { key: "ctr", label: "CTR", format: "percent", align: "right" },
         ],
         rows: [
           "Conversão | Emagrecimento | Broad",
@@ -112,39 +157,48 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
           "Conversão | Check-up | Interesses saúde",
           "Reconhecimento | Marca | Vídeo 15s",
         ].map((name, i) => {
-          const s = spend * [0.34, 0.26, 0.17, 0.14, 0.09][i];
+          const fatia = [0.34, 0.26, 0.17, 0.14, 0.09][i];
+          const s = spend * fatia;
+          // A fatia de impressões difere da de investimento de propósito: com a
+          // mesma fatia nos dois, o CPM sai idêntico em toda campanha e a
+          // coluna parece quebrada.
+          const impr = Math.round(impressions * [0.29, 0.24, 0.22, 0.13, 0.12][i]);
           const l = Math.round(leads * [0.38, 0.29, 0.12, 0.16, 0.05][i]);
           return {
             name,
             spend: Math.round(s * 100) / 100,
+            impressions: impr,
+            cpm: Math.round(safeDiv(s, impr) * 1000 * 100) / 100,
+            ctr: 0.009 + noise(`meta-ctr-campanha-${i}-${name.length}`) * 0.026,
+            linkClicks: Math.round(linkClicks * fatia),
             leads: l,
             cpl: Math.round(safeDiv(s, l) * 100) / 100,
-            ctr: 0.009 + noise(`meta-ctr-campanha-${i}-${name.length}`) * 0.026,
           };
         }),
       },
       {
-        title: "Origem das conversões",
+        title: "Retenção de vídeo",
         description:
-          "Toda ação registrada no período, e quais delas o painel conta como lead. A Meta credita uma conversão a qualquer anúncio que a pessoa clicou nos últimos 7 dias ou viu no último dia — inclusive campanhas de topo de funil.",
+          "Quantas pessoas seguiram assistindo até cada marca. A porcentagem é sobre quem começou a assistir, que é a base usada pela própria Meta.",
         columns: [
-          { key: "acao", label: "Ação", align: "left" },
-          { key: "identificador", label: "Identificador na Meta", align: "left" },
-          { key: "quantidade", label: "Quantidade", format: "integer", align: "right" },
-          { key: "contaComoLead", label: "Conta como lead", align: "right" },
+          { key: "etapa", label: "Etapa", align: "left" },
+          { key: "pessoas", label: "Pessoas", format: "integer", align: "right" },
+          { key: "retencao", label: "% de quem começou", format: "percent", align: "right" },
         ],
-        rows: [
-          ["Lead pelo pixel do site", "offsite_conversion.fb_pixel_lead", 0.72, "sim"],
-          ["Visualização da página de destino", "landing_page_view", 12.4, "não"],
-          ["Clique no link", "link_click", 26.8, "não"],
-          ["Engajamento com a publicação", "post_engagement", 41.2, "não"],
-          ["Lead por formulário instantâneo", "onsite_conversion.lead_grouped", 0.28, "sim"],
-        ].map(([acao, identificador, fator, contaComoLead]) => ({
-          acao: acao as string,
-          identificador: identificador as string,
-          quantidade: Math.round(leads * (fator as number)),
-          contaComoLead: contaComoLead as string,
-        })),
+        rows: (() => {
+          const reproducoes = Math.round(impressions * 0.31);
+          return [
+            ["Começou a assistir", 1],
+            ["Assistiu 25%", 0.47],
+            ["Assistiu 50%", 0.28],
+            ["Assistiu 75%", 0.19],
+            ["Assistiu até o fim", 0.13],
+          ].map(([etapa, fator]) => ({
+            etapa: etapa as string,
+            pessoas: Math.round(reproducoes * (fator as number)),
+            retencao: fator as number,
+          }));
+        })(),
       },
     ],
     notices: [],

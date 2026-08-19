@@ -11,13 +11,26 @@ import { httpJson, metaAuthHeaders } from "@/server/lib/http";
  * Docs: https://developers.facebook.com/docs/marketing-api/insights
  */
 
+/** `{action_type, value}` — o formato que a Insights usa para toda métrica de ação. */
+type AcoesDaMeta = Array<{ action_type: string; value: string }>;
+
 interface MetaInsightsRow {
   date_start: string;
   spend?: string;
   impressions?: string;
+  /** Pessoas distintas alcançadas. Não é aditivo entre dias. */
+  reach?: string;
   clicks?: string;
+  /** Cliques no link do anúncio, sem contar clique em curtida, comentário etc. */
+  inline_link_clicks?: string;
   ctr?: string;
-  actions?: Array<{ action_type: string; value: string }>;
+  actions?: AcoesDaMeta;
+  /** Reproduções de vídeo — a base de retenção que a própria Meta usa. */
+  video_play_actions?: AcoesDaMeta;
+  video_p25_watched_actions?: AcoesDaMeta;
+  video_p50_watched_actions?: AcoesDaMeta;
+  video_p75_watched_actions?: AcoesDaMeta;
+  video_p100_watched_actions?: AcoesDaMeta;
   campaign_name?: string;
 }
 
@@ -36,39 +49,6 @@ const DETAILED_LEAD_ACTIONS = new Set([
   "offsite_conversion.fb_pixel_lead",
   "onsite_conversion.lead_grouped",
 ]);
-
-/** Todos os tipos que representam lead, para rotular a tabela de origem. */
-const LEAD_ACTIONS = new Set(["lead", ...DETAILED_LEAD_ACTIONS]);
-
-/**
- * Nome legível dos tipos de ação mais comuns.
- *
- * A Meta devolve identificadores técnicos (`offsite_conversion.fb_pixel_lead`)
- * que não dizem nada a quem opera a conta. Traduzir aqui é o que permite
- * responder à pergunta que sempre aparece: "de onde saiu esse lead, se não
- * tenho campanha de lead rodando?".
- */
-const ROTULO_DA_ACAO: Record<string, string> = {
-  lead: "Lead (genérico)",
-  "offsite_conversion.fb_pixel_lead": "Lead pelo pixel do site",
-  "onsite_conversion.lead_grouped": "Lead por formulário instantâneo",
-  "onsite_conversion.messaging_conversation_started_7d": "Conversa iniciada",
-  complete_registration: "Cadastro concluído",
-  "offsite_conversion.fb_pixel_complete_registration": "Cadastro pelo pixel",
-  contact: "Contato",
-  "offsite_conversion.fb_pixel_custom": "Conversão personalizada",
-  purchase: "Compra",
-  "offsite_conversion.fb_pixel_purchase": "Compra pelo pixel",
-  landing_page_view: "Visualização da página de destino",
-  link_click: "Clique no link",
-  post_engagement: "Engajamento com a publicação",
-  page_engagement: "Engajamento com a página",
-  video_view: "Visualização de vídeo",
-};
-
-function rotularAcao(tipo: string): string {
-  return ROTULO_DA_ACAO[tipo] ?? tipo;
-}
 
 /**
  * Conta os leads de uma linha de insights.
@@ -128,6 +108,31 @@ async function fetchInsights(
   return rows;
 }
 
+/**
+ * `cpm` e `frequency` não são pedidos: a Meta os devolve por linha, e somar
+ * média de dia com média de dia dá número errado. Ambos são recalculados dos
+ * totais — CPM sobre impressões, frequência sobre alcance.
+ */
+const CAMPOS_DE_METRICA = [
+  "spend",
+  "impressions",
+  "reach",
+  "clicks",
+  "inline_link_clicks",
+  "ctr",
+  "actions",
+  "video_play_actions",
+  "video_p25_watched_actions",
+  "video_p50_watched_actions",
+  "video_p75_watched_actions",
+  "video_p100_watched_actions",
+].join(",");
+
+/** Soma uma métrica de ação da Meta, que sempre vem como lista de pares. */
+function somarAcoes(acoes: AcoesDaMeta | undefined): number {
+  return (acoes ?? []).reduce((total, item) => total + num(item.value), 0);
+}
+
 export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -143,12 +148,12 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
 
   const [daily, byCampaign] = await Promise.all([
     fetchInsights(range, {
-      fields: "spend,impressions,clicks,ctr,actions",
+      fields: CAMPOS_DE_METRICA,
       time_increment: "1",
       level: "account",
     }),
     fetchInsights(range, {
-      fields: "campaign_name,spend,impressions,clicks,ctr,actions",
+      fields: `campaign_name,${CAMPOS_DE_METRICA}`,
       level: "campaign",
     }),
   ]);
@@ -160,14 +165,17 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     const spend = num(row?.spend);
     const impressions = num(row?.impressions);
     const clicks = num(row?.clicks);
+    const linkClicks = num(row?.inline_link_clicks);
     const leads = row ? countLeads(row) : 0;
     return {
       date,
       spend,
       impressions,
       clicks,
+      linkClicks,
       leads,
       ctr: impressions === 0 ? 0 : clicks / impressions,
+      cpm: impressions === 0 ? 0 : (spend / impressions) * 1000,
       cpl: leads === 0 ? 0 : spend / leads,
     };
   });
@@ -177,40 +185,25 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       spend: acc.spend + Number(p.spend),
       impressions: acc.impressions + Number(p.impressions),
       clicks: acc.clicks + Number(p.clicks),
+      linkClicks: acc.linkClicks + Number(p.linkClicks),
       leads: acc.leads + Number(p.leads),
     }),
-    { spend: 0, impressions: 0, clicks: 0, leads: 0 },
+    { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, leads: 0 },
   );
 
-  // De onde vêm as conversões: a Meta credita uma conversão a qualquer anúncio
-  // que a pessoa clicou (7 dias) ou viu (1 dia) antes de converter — inclusive
-  // campanha de topo de funil, cujo objetivo não é lead. Sem esta tabela, o
-  // número de leads aparece sem explicação para quem opera a conta.
-  const porTipoDeAcao = new Map<string, number>();
-  for (const row of daily) {
-    for (const acao of row.actions ?? []) {
-      const valor = Number(acao.value || 0);
-      if (!Number.isFinite(valor) || valor === 0) continue;
-      porTipoDeAcao.set(acao.action_type, (porTipoDeAcao.get(acao.action_type) ?? 0) + valor);
-    }
-  }
+  // Alcance conta pessoas distintas: somar os dias contaria de novo quem voltou.
+  // O valor do período só existe numa consulta sem `time_increment`, que é a de
+  // campanha — e mesmo ela só é somável porque uma pessoa alcançada por duas
+  // campanhas é rara o bastante para o número seguir útil. O rótulo avisa.
+  const alcance = byCampaign.reduce((total, row) => total + num(row.reach), 0);
 
-  // Quando a Meta devolve o tipo agregado, os detalhados já estão dentro dele —
-  // a tabela precisa dizer isso, senão os números não fecham com o KPI.
-  const temAgregado = porTipoDeAcao.has("lead");
-
-  const origemDasAcoes = [...porTipoDeAcao.entries()]
-    .map(([tipo, quantidade]) => ({
-      acao: rotularAcao(tipo),
-      identificador: tipo,
-      quantidade,
-      contaComoLead: !LEAD_ACTIONS.has(tipo)
-        ? "não"
-        : temAgregado && tipo !== "lead"
-          ? "já incluído em Lead"
-          : "sim",
-    }))
-    .sort((a, b) => b.quantidade - a.quantidade);
+  const video = {
+    reproducoes: byCampaign.reduce((t, r) => t + somarAcoes(r.video_play_actions), 0),
+    p25: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p25_watched_actions), 0),
+    p50: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p50_watched_actions), 0),
+    p75: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p75_watched_actions), 0),
+    p100: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p100_watched_actions), 0),
+  };
 
   return {
     channel: "meta-ads",
@@ -220,12 +213,49 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     fetchedAt: new Date().toISOString(),
     kpis: [
       { key: "spend", label: "Investimento", value: totals.spend, format: "currency" },
+      { key: "impressions", label: "Impressões", value: totals.impressions, format: "integer" },
+      {
+        key: "reach",
+        label: "Alcance",
+        value: alcance,
+        format: "integer",
+        hint: "Pessoas distintas que viram os anúncios. Somado entre campanhas, então quem foi alcançado por mais de uma campanha aparece mais de uma vez.",
+      },
+      {
+        key: "cpm",
+        label: "CPM",
+        value: totals.impressions === 0 ? 0 : (totals.spend / totals.impressions) * 1000,
+        format: "currency",
+        lowerIsBetter: true,
+        hint: "Custo por mil impressões, calculado sobre o total do período — não é a média das médias diárias.",
+      },
+      {
+        key: "ctr",
+        label: "CTR",
+        value: totals.impressions === 0 ? 0 : totals.clicks / totals.impressions,
+        format: "percent",
+      },
+      {
+        key: "frequency",
+        label: "Frequência",
+        value: alcance === 0 ? 0 : totals.impressions / alcance,
+        format: "decimal",
+        lowerIsBetter: true,
+        hint: "Quantas vezes, em média, cada pessoa alcançada viu um anúncio.",
+      },
+      {
+        key: "linkClicks",
+        label: "Cliques no link",
+        value: totals.linkClicks,
+        format: "integer",
+        hint: "Só cliques que levaram ao destino. O total de cliques inclui curtida, comentário e expansão de imagem.",
+      },
       {
         key: "leads",
         label: "Leads",
         value: totals.leads,
         format: "integer",
-        hint: "Conversões que a Meta atribuiu aos anúncios do período. A atribuição padrão é de 7 dias por clique e 1 dia por visualização, então campanhas de topo e meio de funil também recebem crédito. A tabela \u0022Origem das conversões\u0022 mostra a composição.",
+        hint: "Conversões que a Meta atribuiu aos anúncios do período. A atribuição padrão é de 7 dias por clique e 1 dia por visualização, então campanhas de topo e meio de funil também recebem crédito.",
       },
       {
         key: "cpl",
@@ -234,18 +264,13 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
         format: "currency",
         lowerIsBetter: true,
       },
-      {
-        key: "ctr",
-        label: "CTR",
-        value: totals.impressions === 0 ? 0 : totals.clicks / totals.impressions,
-        format: "percent",
-      },
-      { key: "clicks", label: "Cliques", value: totals.clicks, format: "integer" },
     ],
     series,
     seriesDefs: [
       { key: "spend", label: "Investimento", format: "currency", slot: 1 },
       { key: "leads", label: "Leads", format: "integer", slot: 2 },
+      { key: "impressions", label: "Impressões", format: "integer", slot: 3 },
+      { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
     tables: [
       {
@@ -254,9 +279,12 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
         columns: [
           { key: "name", label: "Campanha", align: "left" },
           { key: "spend", label: "Investimento", format: "currency", align: "right" },
+          { key: "impressions", label: "Impressões", format: "integer", align: "right" },
+          { key: "cpm", label: "CPM", format: "currency", align: "right" },
+          { key: "ctr", label: "CTR", format: "percent", align: "right" },
+          { key: "linkClicks", label: "Cliques no link", format: "integer", align: "right" },
           { key: "leads", label: "Leads", format: "integer", align: "right" },
           { key: "cpl", label: "CPL", format: "currency", align: "right" },
-          { key: "ctr", label: "CTR", format: "percent", align: "right" },
         ],
         rows: byCampaign
           .map((row) => {
@@ -267,26 +295,65 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
             return {
               name: row.campaign_name ?? "—",
               spend,
+              impressions,
+              cpm: impressions === 0 ? 0 : (spend / impressions) * 1000,
+              ctr: impressions === 0 ? 0 : clicks / impressions,
+              linkClicks: num(row.inline_link_clicks),
               leads,
               cpl: leads === 0 ? 0 : spend / leads,
-              ctr: impressions === 0 ? 0 : clicks / impressions,
             };
           })
-          .sort((a, b) => b.spend - a.spend)
-          .slice(0, 25),
+          .sort((a, b) => b.spend - a.spend),
       },
-      {
-        title: "Origem das conversões",
-        description:
-          "Toda ação registrada no período, e quais delas o painel conta como lead. A Meta credita uma conversão a qualquer anúncio que a pessoa clicou nos últimos 7 dias ou viu no último dia — inclusive campanhas de topo de funil.",
-        columns: [
-          { key: "acao", label: "Ação", align: "left" },
-          { key: "identificador", label: "Identificador na Meta", align: "left" },
-          { key: "quantidade", label: "Quantidade", format: "integer", align: "right" },
-          { key: "contaComoLead", label: "Conta como lead", align: "right" },
-        ],
-        rows: origemDasAcoes,
-      },
+      // Só entra quando existe vídeo na conta: uma tabela de zeros ocupa espaço
+      // e sugere que a campanha performou mal, quando ela nem é de vídeo.
+      ...(video.reproducoes > 0
+        ? [
+            {
+              title: "Retenção de vídeo",
+              description:
+                "Quantas pessoas seguiram assistindo até cada marca. A porcentagem é sobre quem começou a assistir, que é a base usada pela própria Meta.",
+              columns: [
+                { key: "etapa", label: "Etapa", align: "left" as const },
+                {
+                  key: "pessoas",
+                  label: "Pessoas",
+                  format: "integer" as const,
+                  align: "right" as const,
+                },
+                {
+                  key: "retencao",
+                  label: "% de quem começou",
+                  format: "percent" as const,
+                  align: "right" as const,
+                },
+              ],
+              rows: [
+                { etapa: "Começou a assistir", pessoas: video.reproducoes, retencao: 1 },
+                {
+                  etapa: "Assistiu 25%",
+                  pessoas: video.p25,
+                  retencao: video.p25 / video.reproducoes,
+                },
+                {
+                  etapa: "Assistiu 50%",
+                  pessoas: video.p50,
+                  retencao: video.p50 / video.reproducoes,
+                },
+                {
+                  etapa: "Assistiu 75%",
+                  pessoas: video.p75,
+                  retencao: video.p75 / video.reproducoes,
+                },
+                {
+                  etapa: "Assistiu até o fim",
+                  pessoas: video.p100,
+                  retencao: video.p100 / video.reproducoes,
+                },
+              ],
+            },
+          ]
+        : []),
     ],
     notices: [],
   };
