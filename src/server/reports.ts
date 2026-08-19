@@ -1,3 +1,4 @@
+import { avisoCliente, avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { CHANNELS, getChannel } from "@/lib/channels";
@@ -7,6 +8,7 @@ import type {
   ChannelReport,
   DateRange,
   Kpi,
+  Notice,
   OverviewReport,
   SeriesPoint,
 } from "@/lib/types";
@@ -153,12 +155,21 @@ async function collectTotals(range: DateRange) {
   };
 }
 
+/** Dedup por texto: `Set` de objeto não deduplica nada, cada aviso é uma referência nova. */
+function deduplicar(notices: Notice[]): Notice[] {
+  const vistos = new Set<string>();
+  return notices.filter((n) => !vistos.has(n.text) && vistos.add(n.text));
+}
+
 export async function getOverviewReport(range: DateRange): Promise<OverviewReport> {
   const results = await getAllReports(range);
-  const notices: string[] = [];
+  const notices: Notice[] = [];
 
   for (const result of results) {
-    if (result.error) notices.push(`${getChannel(result.channel).label}: ${result.error}`);
+    // Mensagem de erro do canal é operação: o cliente vê o canal ausente do
+    // consolidado, não o texto que a API devolveu.
+    if (result.error)
+      notices.push(avisoOperacao(`${getChannel(result.channel).label}: ${result.error}`));
     else if (result.report) notices.push(...result.report.notices);
   }
 
@@ -192,7 +203,9 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   for (const canal of byChannel) {
     if (canal.source !== "snapshot") continue;
     notices.push(
-      `${canal.label}: exibido em período próprio e fora do consolidado, porque os dados vêm de um export de intervalo fixo.`,
+      avisoCliente(
+        `${canal.label}: exibido em período próprio e fora do consolidado, porque os dados vêm de um export de intervalo fixo.`,
+      ),
     );
   }
 
@@ -309,6 +322,6 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
     ],
     byChannel,
     failedChannels,
-    notices: [...new Set(notices)],
+    notices: deduplicar(notices),
   };
 }

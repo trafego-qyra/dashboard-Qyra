@@ -5,6 +5,7 @@ import { CreativeGrid } from "@/components/report/creative-grid";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { StatTile } from "@/components/ui/stat-tile";
+import { avisosVisiveis } from "@/lib/avisos";
 import type { ChannelReport } from "@/lib/types";
 
 /**
@@ -36,7 +37,10 @@ export function ChannelView({
         actions={actions}
       />
 
-      <Notices notices={report.notices} />
+      {/* Filtra aqui, e não só dentro de `Notices`: o que chega ao componente
+          cliente é serializado no HTML, então o encanamento apareceria no
+          código-fonte da página mesmo sem ser renderizado. */}
+      <Notices notices={avisosVisiveis(report.notices)} />
 
       <section
         aria-label="Indicadores"

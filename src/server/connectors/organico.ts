@@ -1,7 +1,8 @@
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
+import type { ChannelReport, DateRange, Notice, SeriesPoint } from "@/lib/types";
 import { mockOrganico } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson } from "@/server/lib/http";
@@ -83,15 +84,17 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
   if (forceMock || !getCredentials().metaOrganic) {
     const report = mockOrganico(range, new Date().toISOString());
     report.notices = [
-      forceMock
-        ? "Modo mock forçado por QYRA_FORCE_MOCK."
-        : "Sem credencial de Instagram/Facebook — exibindo dados de demonstração.",
+      avisoOperacao(
+        forceMock
+          ? "Modo mock forçado por QYRA_FORCE_MOCK."
+          : "Sem credencial de Instagram/Facebook — exibindo dados de demonstração.",
+      ),
     ];
     return report;
   }
 
   const accountId = env.META_IG_USER_ID as string;
-  const notices: string[] = [];
+  const notices: Notice[] = [];
 
   const chunks = chunkRange(range);
   const responses = await Promise.all(
@@ -130,7 +133,9 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
   } catch {
     // Insights de mídia dependem de permissão extra; a série de conta continua válida.
     notices.push(
-      "Não foi possível carregar as publicações — verifique a permissão instagram_manage_insights.",
+      avisoOperacao(
+        "Não foi possível carregar as publicações — verifique a permissão instagram_manage_insights.",
+      ),
     );
   }
 

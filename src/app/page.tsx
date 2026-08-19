@@ -1,5 +1,4 @@
 import Link from "next/link";
-
 import { ChannelBars, TrendSmallMultiples } from "@/components/charts/lazy";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import { Notices } from "@/components/layout/notices";
@@ -9,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatTile } from "@/components/ui/stat-tile";
+import { avisosVisiveis } from "@/lib/avisos";
 import { CHANNELS } from "@/lib/channels";
 import { parseRange } from "@/lib/date-range";
 import { getOverviewReport } from "@/server/reports";
@@ -35,7 +35,10 @@ export default async function OverviewPage({
         actions={<DateRangePicker range={range} preset={preset} />}
       />
 
-      <Notices notices={report.notices} />
+      {/* Filtra aqui, e não só dentro de `Notices`: o que chega ao componente
+          cliente é serializado no HTML, então o encanamento apareceria no
+          código-fonte da página mesmo sem ser renderizado. */}
+      <Notices notices={avisosVisiveis(report.notices)} />
 
       <section
         aria-label="Indicadores"
