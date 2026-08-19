@@ -122,11 +122,9 @@ export interface CreativeCard {
  * detalhe de erro da API. Isso nunca vai para a tela do cliente. Continua no
  * payload, porque é o que `/api/health` e `/api/diagnostico/*` leem.
  */
-export type NoticeAudience = "cliente" | "operacao";
-
 export interface Notice {
   text: string;
-  audience: NoticeAudience;
+  audience: "cliente" | "operacao";
 }
 
 export interface ChannelReport {
