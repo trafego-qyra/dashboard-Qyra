@@ -88,9 +88,13 @@ export interface OverviewReport {
     channel: ChannelId;
     label: string;
     slot: 1 | 2 | 3 | 4 | 5;
+    /** De onde veio este canal. Misturar `live` com `mock` num total é mentira. */
+    source: DataSource;
     investment: number;
     conversions: number;
     sessions: number;
   }>;
+  /** Canais que não responderam. Total parcial precisa ser declarado como tal. */
+  failedChannels: ChannelId[];
   notices: string[];
 }

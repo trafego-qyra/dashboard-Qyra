@@ -122,6 +122,7 @@ async function collectTotals(range: DateRange) {
       channel: r.channel,
       label: getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
+      source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
       sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
@@ -156,6 +157,7 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       channel: r.channel,
       label: getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
+      source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
       sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
@@ -186,10 +188,17 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   const prevSiteRate =
     previous && previous.sessions > 0 ? previous.siteConversions / previous.sessions : undefined;
 
-  // Série consolidada: investimento pago somado + sessões do site, por dia.
+  // Série consolidada. As conversões vêm **apenas dos canais pagos**, o mesmo
+  // recorte do KPI "Conversões pagas". Somar as conversões do GA4 aqui contaria
+  // em dobro: uma submissão de formulário aparece no GA4 e também é atribuída
+  // pela plataforma que trouxe a visita — o gráfico ficaria acima do indicador
+  // logo ao lado, e quem confere os dois encontraria contradição.
   const dateIndex = new Map<string, SeriesPoint>();
   for (const result of results) {
     if (!result.report) continue;
+
+    const ehPago = result.channel === "meta-ads" || result.channel === "google-ads";
+
     for (const point of result.report.series) {
       const existing = dateIndex.get(point.date) ?? {
         date: point.date,
@@ -200,20 +209,28 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       existing.investment =
         Number(existing.investment) + (Number(point.spend) || Number(point.cost) || 0);
       existing.sessions = Number(existing.sessions) + (Number(point.sessions) || 0);
-      existing.conversions =
-        Number(existing.conversions) +
-        (Number(point.leads) || 0) +
-        (Number(point.conversions) || 0);
+      if (ehPago) {
+        existing.conversions =
+          Number(existing.conversions) +
+          (Number(point.leads) || 0) +
+          (Number(point.conversions) || 0);
+      }
       dateIndex.set(point.date, existing);
     }
   }
 
   const series = [...dateIndex.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const anyLive = results.some((r) => r.report?.source === "live");
+
+  // Origem conservadora: basta um canal em demonstração para o consolidado
+  // deixar de ser dado real. O critério anterior — "algum canal ao vivo" —
+  // escondia o aviso justamente na configuração mais comum, a de quem acabou de
+  // conectar o primeiro canal, e somava investimento fictício ao total.
+  const todosAoVivo = byChannel.length > 0 && byChannel.every((canal) => canal.source === "live");
+  const failedChannels = results.filter((r) => r.report === null).map((r) => r.channel);
 
   return {
     range,
-    source: anyLive ? "live" : "mock",
+    source: todosAoVivo ? "live" : "mock",
     fetchedAt: new Date().toISOString(),
     kpis: [
       {
@@ -260,6 +277,7 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       { key: "conversions", label: "Conversões", format: "integer", slot: 2 },
     ],
     byChannel,
+    failedChannels,
     notices: [...new Set(notices)],
   };
 }

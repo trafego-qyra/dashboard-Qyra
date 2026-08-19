@@ -140,3 +140,50 @@ describe("comparação de médias e razões", () => {
     }
   });
 });
+
+describe("origem do dado na visão geral", () => {
+  /**
+   * Regressão: bastava um canal ao vivo para o consolidado se declarar ao vivo,
+   * e o investimento fictício dos canais em demonstração entrava no total sem
+   * aviso. Era a configuração mais comum — quem acabou de conectar o primeiro
+   * canal — e a tela somava milhares de reais que não existem.
+   */
+  it("declara demonstração quando qualquer canal ainda não está conectado", async () => {
+    const overview = await getOverviewReport(RANGE);
+
+    // Neste ambiente todos os canais caem no mock, então o consolidado é mock.
+    expect(overview.source).toBe("mock");
+    expect(overview.byChannel.every((c) => c.source === "mock")).toBe(true);
+  });
+
+  it("expõe a origem de cada canal, para a tela poder separar real de fictício", async () => {
+    const overview = await getOverviewReport(RANGE);
+
+    for (const canal of overview.byChannel) {
+      expect(["live", "mock"]).toContain(canal.source);
+    }
+  });
+
+  it("não soma conversões do site às conversões pagas na série", async () => {
+    const overview = await getOverviewReport(RANGE);
+    const [metaAds, googleAds] = await Promise.all([
+      getChannelReport("meta-ads", RANGE, { compare: false }),
+      getChannelReport("google-ads", RANGE, { compare: false }),
+    ]);
+
+    const totalSerie = overview.series.reduce((a, p) => a + Number(p.conversions), 0);
+    const pagas =
+      metaAds.series.reduce((a, p) => a + Number(p.leads), 0) +
+      googleAds.series.reduce((a, p) => a + Number(p.conversions), 0);
+
+    // A soma do gráfico tem de bater com o indicador ao lado. Incluir o GA4
+    // contaria a mesma conversão duas vezes.
+    expect(totalSerie).toBeCloseTo(pagas, 0);
+  });
+
+  it("reporta os canais que falharam, em vez de omiti-los do total", async () => {
+    const overview = await getOverviewReport(RANGE);
+    expect(Array.isArray(overview.failedChannels)).toBe(true);
+    expect(overview.failedChannels).toHaveLength(0);
+  });
+});

@@ -5,7 +5,7 @@ import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
-import { httpJson } from "@/server/lib/http";
+import { type HttpError, httpJson } from "@/server/lib/http";
 
 /**
  * Google Ads via REST (`searchStream` do GAQL).
@@ -58,6 +58,17 @@ async function runQuery(query: string): Promise<GoogleAdsRow[]> {
   return response.flatMap((chunk) => chunk.results ?? []);
 }
 
+/**
+ * O token de desenvolvedor nasce com acesso de teste e só lê contas de teste.
+ * Enquanto o Google não aprova o acesso básico, toda consulta à conta real
+ * volta com este erro. É um estado esperado e temporário — não uma falha de
+ * configuração — então a tela cai em demonstração com aviso, em vez de quebrar.
+ */
+function ehTokenAguardandoAprovacao(erro: unknown): boolean {
+  const texto = erro instanceof Error ? erro.message + (erro as HttpError).body : "";
+  return /DEVELOPER_TOKEN_NOT_APPROVED|DEVELOPER_TOKEN_PROHIBITED/i.test(texto);
+}
+
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -73,17 +84,30 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
 
   const where = `segments.date BETWEEN '${range.from}' AND '${range.to}'`;
 
-  const [daily, byCampaign] = await Promise.all([
-    runQuery(
-      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions
+  let daily: GoogleAdsRow[];
+  let byCampaign: GoogleAdsRow[];
+
+  try {
+    [daily, byCampaign] = await Promise.all([
+      runQuery(
+        `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions
        FROM customer WHERE ${where}`,
-    ),
-    runQuery(
-      `SELECT campaign.name, campaign.advertising_channel_type, metrics.cost_micros,
+      ),
+      runQuery(
+        `SELECT campaign.name, campaign.advertising_channel_type, metrics.cost_micros,
               metrics.impressions, metrics.clicks, metrics.conversions
        FROM campaign WHERE ${where}`,
-    ),
-  ]);
+      ),
+    ]);
+  } catch (erro) {
+    if (!ehTokenAguardandoAprovacao(erro)) throw erro;
+
+    const report = mockGoogleAds(range, new Date().toISOString());
+    report.notices = [
+      "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso. Até lá, esta tela exibe dados de demonstração.",
+    ];
+    return report;
+  }
 
   const byDate = new Map<
     string,

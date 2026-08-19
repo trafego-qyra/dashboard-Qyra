@@ -103,8 +103,62 @@ describe("Meta Ads", () => {
     expect(report.kpis.find((k) => k.key === "spend")?.value).toBe(150);
     // 150 / 10
     expect(report.kpis.find((k) => k.key === "cpl")?.value).toBe(15);
-    // A campanha soma os dois tipos de lead reconhecidos.
-    expect(report.tables[0].rows[0].leads).toBe(15);
+    // A campanha traz o agregado `lead: 10` e o detalhado
+    // `offsite_conversion.fb_pixel_lead: 5`. O agregado JÁ CONTÉM o detalhado —
+    // somar os dois dobraria o número e cortaria o CPL pela metade.
+    expect(report.tables[0].rows[0].leads).toBe(10);
+  });
+
+  it("soma os tipos detalhados quando a Meta não devolve o agregado", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch(() => ({
+      data: [
+        {
+          date_start: "2026-02-01",
+          spend: "100.00",
+          actions: [
+            { action_type: "offsite_conversion.fb_pixel_lead", value: "6" },
+            { action_type: "onsite_conversion.lead_grouped", value: "4" },
+            { action_type: "link_click", value: "300" },
+          ],
+        },
+      ],
+    }));
+
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+
+    // Sem o agregado, os detalhados são somados entre si — e só eles.
+    expect(report.kpis.find((k) => k.key === "leads")?.value).toBe(10);
+  });
+
+  it("marca na tabela de origem que o detalhado já está dentro do agregado", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch(() => ({
+      data: [
+        {
+          date_start: "2026-02-01",
+          spend: "100.00",
+          actions: [
+            { action_type: "lead", value: "10" },
+            { action_type: "offsite_conversion.fb_pixel_lead", value: "10" },
+          ],
+        },
+      ],
+    }));
+
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+
+    const origem = report.tables.find((t) => t.title === "Origem das conversões");
+    const agregado = origem?.rows.find((r) => r.identificador === "lead");
+    const detalhado = origem?.rows.find(
+      (r) => r.identificador === "offsite_conversion.fb_pixel_lead",
+    );
+
+    expect(agregado?.contaComoLead).toBe("sim");
+    // Sem esta marcação, a tabela some 10 + 10 aos olhos de quem confere o KPI.
+    expect(detalhado?.contaComoLead).toBe("já incluído em Lead");
   });
 
   it("preenche com zero os dias sem entrega, para o eixo não pular", async () => {
@@ -292,5 +346,79 @@ describe("Orgânico", () => {
     expect(report.source).toBe("live");
     expect(report.kpis.find((k) => k.key === "reach")?.value).toBe(500);
     expect(report.notices[0]).toMatch(/publicações/);
+  });
+});
+
+describe("Google Ads — token aguardando aprovação", () => {
+  it("cai em demonstração com aviso, em vez de quebrar a tela", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "token-de-teste",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        // Resposta real do Google quando o token ainda é de teste.
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              status: "PERMISSION_DENIED",
+              details: [
+                { errors: [{ errorCode: { authorizationError: "DEVELOPER_TOKEN_NOT_APPROVED" } }] },
+              ],
+            },
+          }),
+          { status: 403, statusText: "Forbidden", headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    expect(report.source).toBe("mock");
+    expect(report.notices[0]).toMatch(/acesso de teste/i);
+    // O relatório continua completo: a tela renderiza normalmente, com aviso.
+    expect(report.kpis.length).toBeGreaterThan(0);
+    expect(report.series.length).toBeGreaterThan(0);
+  });
+
+  it("propaga erro que não seja de aprovação — falha real não vira demonstração", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: { message: "Customer not found" } }), {
+          status: 404,
+          statusText: "Not Found",
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow();
   });
 });
