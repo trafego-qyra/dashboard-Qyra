@@ -23,7 +23,7 @@ export function LightBlock({
       )}
     >
       <div className="qy-light-block absolute inset-0 opacity-70" />
-      {stamp ? <div className="qy-stamp absolute inset-0 text-plum-200/20" /> : null}
+      {stamp ? <div className="qy-stamp absolute inset-0 opacity-25" /> : null}
     </div>
   );
 }

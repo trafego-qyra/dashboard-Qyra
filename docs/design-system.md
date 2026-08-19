@@ -13,10 +13,30 @@ aproximadas a olho.
 | Slab escuro de cantos generosos no topo de cada slide | A coluna de navegação (`AppShell`) — mesma cor, mesmo raio (28px) |
 | **Light Color Block** (pág. 26): luzes de roxo em fundo sólido | Gradiente radial na navegação (`LightBlock`), sutil, decorativo e `aria-hidden` |
 | **QYRA Icon** — o "A" da marca como chevron | O indicador de variação (`Delta`): sobe, desce, estável |
+| **Logotipo QYRA** | `QyraLogo` — contornos extraídos do vetor do brandbook |
 | **Logo Stamp** — contorno do logo como carimbo | Textura de fundo (`qy-stamp`), só em superfície larga |
 | **Larken Italic** — fonte de contraste | Títulos de tela (`font-display`), em itálico |
 | **Gilroy** — família do brandbook | Toda a interface, inclusive números |
 | Paleta de 4 cores com rampa de 5 passos | Rampas `plum`, `lilac`, `sage` + papéis semânticos |
+
+### Sobre o logotipo
+
+`QyraLogo` e `public/brand/stamp.svg` usam os **contornos originais**, extraídos
+do vetor do `QYRA_UniversoVisual` com `pdftocairo -svg` (pág. 30, onde o
+logotipo aparece inteiro — nas demais ele sangra na borda e vem cortado).
+
+Duas armadilhas, se algum dia isso for refeito:
+
+1. A caixa real do desenho é o `clipPath` de cada glifo, **não** o extremo das
+   coordenadas do `path`: pontos de controle de curva estouram a borda e
+   inflam a caixa em ~2,4 unidades no Q.
+2. O logotipo preenche com `currentColor`, então a versão branca e a roxa saem
+   da mesma peça. Já o carimbo é `background-image`, e SVG carregado como
+   imagem **não enxerga** o `currentColor` do documento — ali a cor é cravada
+   no arquivo.
+
+Não redesenhe o logotipo por semelhança. Se precisar de outra variação, extraia
+do brandbook.
 
 O que **não** foi trazido: gradiente roxo sobre foto (o próprio manual aponta
 como datado, pág. 17) e fotografia — um painel de dados não tem lugar para
