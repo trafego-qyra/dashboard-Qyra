@@ -4,7 +4,7 @@ import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockMetaAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
-import { httpJson } from "@/server/lib/http";
+import { httpJson, metaAuthHeaders } from "@/server/lib/http";
 
 /**
  * Meta Ads via Marketing API (Insights).
@@ -26,12 +26,19 @@ interface MetaInsightsResponse {
   paging?: { next?: string };
 }
 
-/** Tipos de ação que a operação da Qyra conta como lead. */
-const LEAD_ACTIONS = new Set([
-  "lead",
+/**
+ * Tipos de ação detalhados que a operação da Qyra conta como lead.
+ *
+ * O tipo agregado `lead` fica **fora** deste conjunto de propósito: ele já
+ * soma os detalhados, e incluí-lo aqui faria a contagem dobrar. Ver `countLeads`.
+ */
+const DETAILED_LEAD_ACTIONS = new Set([
   "offsite_conversion.fb_pixel_lead",
   "onsite_conversion.lead_grouped",
 ]);
+
+/** Todos os tipos que representam lead, para rotular a tabela de origem. */
+const LEAD_ACTIONS = new Set(["lead", ...DETAILED_LEAD_ACTIONS]);
 
 /**
  * Nome legível dos tipos de ação mais comuns.
@@ -63,9 +70,26 @@ function rotularAcao(tipo: string): string {
   return ROTULO_DA_ACAO[tipo] ?? tipo;
 }
 
+/**
+ * Conta os leads de uma linha de insights.
+ *
+ * A Meta devolve a mesma conversão em níveis diferentes de uma hierarquia: o
+ * tipo agregado `lead` já **contém** `offsite_conversion.fb_pixel_lead` e
+ * `onsite_conversion.lead_grouped`. Somar os três dobra o número de leads e
+ * corta o custo por lead pela metade — exibido com a mesma confiança do valor
+ * correto.
+ *
+ * Por isso: havendo o agregado, ele é a resposta. Só na ausência dele os
+ * detalhados são somados entre si.
+ */
 function countLeads(row: MetaInsightsRow): number {
-  return (row.actions ?? [])
-    .filter((a) => LEAD_ACTIONS.has(a.action_type))
+  const acoes = row.actions ?? [];
+
+  const agregado = acoes.find((a) => a.action_type === "lead");
+  if (agregado) return Number(agregado.value || 0);
+
+  return acoes
+    .filter((a) => DETAILED_LEAD_ACTIONS.has(a.action_type))
     .reduce((acc, a) => acc + Number(a.value || 0), 0);
 }
 
@@ -83,7 +107,6 @@ async function fetchInsights(
   const account = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
 
   const url = new URL(`https://graph.facebook.com/${env.META_API_VERSION}/${account}/insights`);
-  url.searchParams.set("access_token", env.META_ACCESS_TOKEN as string);
   url.searchParams.set("time_range", JSON.stringify({ since: range.from, until: range.to }));
   url.searchParams.set("limit", "500");
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
@@ -93,7 +116,9 @@ async function fetchInsights(
 
   // A paginação da Graph API devolve a URL completa do próximo bloco.
   while (next && rows.length < 5_000) {
-    const page: MetaInsightsResponse = await httpJson<MetaInsightsResponse>(next);
+    const page: MetaInsightsResponse = await httpJson<MetaInsightsResponse>(next, {
+      headers: metaAuthHeaders(env.META_ACCESS_TOKEN as string),
+    });
     // A Graph API sempre devolve `data` em sucesso, mas uma resposta
     // inesperada não pode virar TypeError no meio do relatório.
     rows.push(...(page.data ?? []));
@@ -170,12 +195,20 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     }
   }
 
+  // Quando a Meta devolve o tipo agregado, os detalhados já estão dentro dele —
+  // a tabela precisa dizer isso, senão os números não fecham com o KPI.
+  const temAgregado = porTipoDeAcao.has("lead");
+
   const origemDasAcoes = [...porTipoDeAcao.entries()]
     .map(([tipo, quantidade]) => ({
       acao: rotularAcao(tipo),
       identificador: tipo,
       quantidade,
-      contaComoLead: LEAD_ACTIONS.has(tipo) ? "sim" : "não",
+      contaComoLead: !LEAD_ACTIONS.has(tipo)
+        ? "não"
+        : temAgregado && tipo !== "lead"
+          ? "já incluído em Lead"
+          : "sim",
     }))
     .sort((a, b) => b.quantidade - a.quantidade);
 

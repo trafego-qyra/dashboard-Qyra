@@ -23,7 +23,10 @@ export function Card({ className, ...props }: React.ComponentProps<"section">) {
 export function CardHeader({ className, ...props }: React.ComponentProps<"header">) {
   return (
     <header
-      className={cn("flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-3", className)}
+      className={cn(
+        "flex flex-wrap items-start justify-between gap-3 px-4 pt-4 pb-3 sm:px-5 sm:pt-5",
+        className,
+      )}
       {...props}
     />
   );
@@ -38,5 +41,5 @@ export function CardDescription({ className, ...props }: React.ComponentProps<"p
 }
 
 export function CardContent({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("px-5 pb-5", className)} {...props} />;
+  return <div className={cn("px-4 pb-4 sm:px-5 sm:pb-5", className)} {...props} />;
 }

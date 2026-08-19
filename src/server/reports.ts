@@ -71,6 +71,12 @@ export async function getChannelReport(
   const report = await cached(cacheKey(channel, range), () => FETCHERS[channel](range));
   if (!compare) return report;
 
+  // Relatório de período fixo não tem janela anterior: comparar o export com
+  // ele mesmo devolve 0% e a tela exibe "estável", que sugere uma medição de
+  // estabilidade que não existe. Sem comparação, o indicador diz "sem base" —
+  // que é a verdade.
+  if (report.source === "snapshot") return report;
+
   try {
     const prevRange = previousRange(range);
     const previous = await cached(cacheKey(channel, prevRange), () => FETCHERS[channel](prevRange));
@@ -120,11 +126,17 @@ async function collectTotals(range: DateRange) {
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label: getChannel(r.channel).label,
+      label:
+        r.report.source === "snapshot"
+          ? `${getChannel(r.channel).label} · período fixo`
+          : getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
+      source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
-      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+      // Sem `clicks` no fallback: clique não é alcance nem sessão, e sob um
+      // rótulo comum o número engana. Canal sem a métrica mostra "—".
+      sessions: pickTotal(r.report, ["sessions", "reach"]),
     }));
 
   const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
@@ -154,17 +166,35 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label: getChannel(r.channel).label,
+      label:
+        r.report.source === "snapshot"
+          ? `${getChannel(r.channel).label} · período fixo`
+          : getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
+      source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
-      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+      // Sem `clicks` no fallback: clique não é alcance nem sessão, e sob um
+      // rótulo comum o número engana. Canal sem a métrica mostra "—".
+      sessions: pickTotal(r.report, ["sessions", "reach"]),
     }));
 
-  const investment = byChannel.reduce((a, c) => a + c.investment, 0);
-  const paidConversions = byChannel
+  // Canal em período fixo não entra no consolidado: somar 14 dias de um export
+  // com 28 dias de outro canal produz um total que não corresponde a intervalo
+  // nenhum. Ele continua visível em `byChannel`, com a origem declarada.
+  const noPeriodo = byChannel.filter((c) => c.source !== "snapshot");
+
+  const investment = noPeriodo.reduce((a, c) => a + c.investment, 0);
+  const paidConversions = noPeriodo
     .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
     .reduce((a, c) => a + c.conversions, 0);
+
+  for (const canal of byChannel) {
+    if (canal.source !== "snapshot") continue;
+    notices.push(
+      `${canal.label}: exibido em período próprio e fora do consolidado, porque os dados vêm de um export de intervalo fixo.`,
+    );
+  }
 
   const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
   const sessions = ga4 ? pickTotal(ga4, ["sessions"]) : 0;
@@ -186,10 +216,20 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   const prevSiteRate =
     previous && previous.sessions > 0 ? previous.siteConversions / previous.sessions : undefined;
 
-  // Série consolidada: investimento pago somado + sessões do site, por dia.
+  // Série consolidada. As conversões vêm **apenas dos canais pagos**, o mesmo
+  // recorte do KPI "Conversões pagas". Somar as conversões do GA4 aqui contaria
+  // em dobro: uma submissão de formulário aparece no GA4 e também é atribuída
+  // pela plataforma que trouxe a visita — o gráfico ficaria acima do indicador
+  // logo ao lado, e quem confere os dois encontraria contradição.
   const dateIndex = new Map<string, SeriesPoint>();
   for (const result of results) {
     if (!result.report) continue;
+
+    // Período fixo fica fora da série pelo mesmo motivo do KPI.
+    if (result.report.source === "snapshot") continue;
+
+    const ehPago = result.channel === "meta-ads" || result.channel === "google-ads";
+
     for (const point of result.report.series) {
       const existing = dateIndex.get(point.date) ?? {
         date: point.date,
@@ -200,20 +240,28 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       existing.investment =
         Number(existing.investment) + (Number(point.spend) || Number(point.cost) || 0);
       existing.sessions = Number(existing.sessions) + (Number(point.sessions) || 0);
-      existing.conversions =
-        Number(existing.conversions) +
-        (Number(point.leads) || 0) +
-        (Number(point.conversions) || 0);
+      if (ehPago) {
+        existing.conversions =
+          Number(existing.conversions) +
+          (Number(point.leads) || 0) +
+          (Number(point.conversions) || 0);
+      }
       dateIndex.set(point.date, existing);
     }
   }
 
   const series = [...dateIndex.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const anyLive = results.some((r) => r.report?.source === "live");
+
+  // Origem conservadora: basta um canal em demonstração para o consolidado
+  // deixar de ser dado real. O critério anterior — "algum canal ao vivo" —
+  // escondia o aviso justamente na configuração mais comum, a de quem acabou de
+  // conectar o primeiro canal, e somava investimento fictício ao total.
+  const todosAoVivo = byChannel.length > 0 && byChannel.every((canal) => canal.source === "live");
+  const failedChannels = results.filter((r) => r.report === null).map((r) => r.channel);
 
   return {
     range,
-    source: anyLive ? "live" : "mock",
+    source: todosAoVivo ? "live" : "mock",
     fetchedAt: new Date().toISOString(),
     kpis: [
       {
@@ -260,6 +308,7 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       { key: "conversions", label: "Conversões", format: "integer", slot: 2 },
     ],
     byChannel,
+    failedChannels,
     notices: [...new Set(notices)],
   };
 }

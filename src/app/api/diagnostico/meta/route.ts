@@ -197,6 +197,39 @@ export async function GET(request: Request) {
     ),
   );
 
+  // 6. Orgânico: descobrir o ID do Instagram a partir da Página.
+  //    A configuração do orgânico trava justamente aqui — o ID do Instagram
+  //    comercial não aparece em nenhuma interface da Meta, só nesta consulta.
+  if (env.META_PAGE_ID) {
+    etapas.push(
+      await executar(
+        "instagram",
+        "Qual é o ID da conta do Instagram vinculada à Página?",
+        `${base}/${env.META_PAGE_ID}?fields=name,instagram_business_account{id,username}&${auth}`,
+        (d) => {
+          const dados = d as {
+            name?: string;
+            instagram_business_account?: { id?: string; username?: string };
+          };
+          const ig = dados.instagram_business_account;
+          if (!ig?.id) {
+            return `A Página "${dados.name ?? "?"}" não tem conta comercial do Instagram vinculada, ou falta a permissão instagram_basic no token.`;
+          }
+          return `META_IG_USER_ID = ${ig.id}${ig.username ? ` (@${ig.username})` : ""}. Configure esse valor para ativar a tela de orgânico.`;
+        },
+      ),
+    );
+  } else {
+    etapas.push({
+      etapa: "instagram",
+      descricao: "Qual é o ID da conta do Instagram vinculada à Página?",
+      status: null,
+      ok: false,
+      resultado:
+        "META_PAGE_ID não configurado. Configure-o para que este diagnóstico descubra o META_IG_USER_ID sozinho.",
+    });
+  }
+
   const primeiraFalha = etapas.find((e) => !e.ok);
 
   return NextResponse.json(

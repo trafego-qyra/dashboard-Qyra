@@ -19,18 +19,20 @@ export function ChartTooltip({
   label,
   payload,
   defs,
+  axis = "date",
 }: {
   active?: boolean;
   label?: string | number;
   payload?: PayloadItem[];
   defs: SeriesDef[];
+  axis?: "date" | "hour";
 }) {
   if (!active || !payload?.length) return null;
 
   return (
     <div className="rounded-xl border border-line bg-surface-raised px-3 py-2 shadow-lg">
       <p className="text-[11px] font-medium text-ink-muted">
-        {typeof label === "string" ? formatDayShort(label) : label}
+        {typeof label !== "string" ? label : axis === "hour" ? `${label}h` : formatDayShort(label)}
       </p>
       <ul className="mt-1.5 space-y-1">
         {payload.map((item) => {

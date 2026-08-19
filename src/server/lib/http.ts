@@ -90,3 +90,15 @@ export async function httpJson<T>(url: string, options: HttpOptions = {}): Promi
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
+
+/**
+ * Cabeçalho de autenticação da Graph API.
+ *
+ * A Meta aceita `Authorization: Bearer`, e usar isso em vez de
+ * `?access_token=` mantém o segredo fora da URL — que é registrada em log de
+ * plataforma, em breadcrumb de monitoramento e na própria mensagem de erro que
+ * a Graph devolve ecoando a requisição.
+ */
+export function metaAuthHeaders(token: string): Record<string, string> {
+  return { authorization: `Bearer ${token}` };
+}

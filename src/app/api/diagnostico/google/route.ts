@@ -179,6 +179,58 @@ export async function GET(request: Request) {
       });
     }
 
+    // 2b. GA4 — de ONDE vem o tráfego que chega.
+    //     Volume muito abaixo do esperado tem três causas com o mesmo sintoma:
+    //     propriedade errada, tag ausente, ou anúncio que leva para outro
+    //     domínio. O nome do host e a origem separam as três.
+    if (env.GA4_PROPERTY_ID) {
+      const range = rangeFromPreset("7d");
+      etapas.push(
+        await requisitar(
+          "ga4-origem",
+          "De qual domínio e de qual origem vêm as sessões?",
+          {
+            url: `https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`,
+            init: {
+              method: "POST",
+              headers: { ...auth, "content-type": "application/json" },
+              body: JSON.stringify({
+                dateRanges: [{ startDate: range.from, endDate: range.to }],
+                dimensions: [
+                  { name: "hostName" },
+                  { name: "sessionSource" },
+                  { name: "sessionMedium" },
+                ],
+                metrics: [{ name: "sessions" }],
+                orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+                limit: 20,
+              }),
+            },
+          },
+          (d) => {
+            const dados = d as {
+              rows?: Array<{
+                dimensionValues?: Array<{ value?: string }>;
+                metricValues?: Array<{ value?: string }>;
+              }>;
+            };
+            const linhas = dados.rows ?? [];
+            if (linhas.length === 0) {
+              return "Nenhuma sessão no período. Ou a tag não está disparando, ou o tráfego não passa por este site.";
+            }
+            return linhas
+              .map((linha) => {
+                const [host, origem, meio] = (linha.dimensionValues ?? []).map(
+                  (v) => v.value ?? "?",
+                );
+                return `${host} · ${origem}/${meio}: ${linha.metricValues?.[0]?.value ?? "?"}`;
+              })
+              .join(" | ");
+          },
+        ),
+      );
+    }
+
     // 3. Google Ads — quais contas o token alcança?
     if (env.GOOGLE_ADS_DEVELOPER_TOKEN) {
       const cabecalhos: Record<string, string> = {

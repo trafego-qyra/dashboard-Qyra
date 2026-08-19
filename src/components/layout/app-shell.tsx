@@ -27,8 +27,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="relative overflow-x-auto px-2 pb-3 lg:px-2 lg:pb-0">
-          <Sidebar className="flex-row lg:flex-col" />
+        <div className="relative">
+          <div className="overflow-x-auto px-2 pb-3 [scrollbar-width:none] lg:px-2 lg:pb-0 [&::-webkit-scrollbar]:hidden">
+            <Sidebar className="flex-row lg:flex-col" />
+          </div>
+          {/* Esmaecimento na borda: sinaliza que a lista continua além da tela. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-plum-800 to-transparent lg:hidden"
+          />
         </div>
 
         <div className="relative mt-auto hidden px-3 pb-5 lg:block lg:absolute lg:inset-x-0 lg:bottom-0">
@@ -39,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-6 lg:px-2 lg:py-4">{children}</main>
+      <main className="min-w-0 flex-1 px-3 py-5 sm:px-4 sm:py-6 lg:px-2 lg:py-4">{children}</main>
     </div>
   );
 }

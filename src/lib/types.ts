@@ -9,7 +9,15 @@
 export const CHANNEL_IDS = ["meta-ads", "google-ads", "ga4", "organico"] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
-export type DataSource = "live" | "mock";
+/**
+ * De onde veio o número.
+ *
+ * `snapshot` é dado REAL exportado da plataforma, congelado num período fixo —
+ * usado quando a API ainda não está liberada. Precisa ser distinto de `mock`
+ * (número inventado) e de `live` (período acompanha o filtro), porque as três
+ * situações pedem leituras diferentes de quem olha a tela.
+ */
+export type DataSource = "live" | "mock" | "snapshot";
 
 /** Como um número deve ser renderizado. A UI nunca decide formato sozinha. */
 export type MetricFormat = "currency" | "integer" | "decimal" | "percent" | "ratio" | "duration";
@@ -35,6 +43,7 @@ export interface Kpi {
 
 /** Um ponto diário da série. `date` é ISO; o resto são métricas numéricas. */
 export interface SeriesPoint {
+  /** Rótulo do ponto: data ISO, ou hora do dia quando `seriesAxis` é `hour`. */
   date: string;
   [metric: string]: string | number;
 }
@@ -71,6 +80,13 @@ export interface ChannelReport {
   kpis: Kpi[];
   series: SeriesPoint[];
   seriesDefs: SeriesDef[];
+  /**
+   * O que o eixo x representa. `date` é o padrão; `hour` é usado quando a
+   * origem só fornece agregado por hora do dia, sem quebra por data.
+   */
+  seriesAxis?: "date" | "hour";
+  /** Período real dos dados, quando difere do intervalo pedido. */
+  periodLabel?: string;
   tables: TableBlock[];
   /** Avisos não-fatais: credencial ausente, métrica indisponível, etc. */
   notices: string[];
@@ -88,9 +104,13 @@ export interface OverviewReport {
     channel: ChannelId;
     label: string;
     slot: 1 | 2 | 3 | 4 | 5;
+    /** De onde veio este canal. Misturar `live` com `mock` num total é mentira. */
+    source: DataSource;
     investment: number;
     conversions: number;
     sessions: number;
   }>;
+  /** Canais que não responderam. Total parcial precisa ser declarado como tal. */
+  failedChannels: ChannelId[];
   notices: string[];
 }

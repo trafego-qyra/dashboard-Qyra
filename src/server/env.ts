@@ -135,7 +135,13 @@ export function getCredentials(): Credentials {
 
   return {
     metaAds: Boolean(env.META_ACCESS_TOKEN && env.META_AD_ACCOUNT_ID),
-    metaOrganic: Boolean(env.META_ACCESS_TOKEN && (env.META_IG_USER_ID || env.META_PAGE_ID)),
+    // O conector de orgânico consulta métricas exclusivas do Instagram
+    // (`reach`, `follower_count`) na edge de Insights de conta do IG. Com
+    // apenas a Página configurada, a Graph responde `(#100) metric[0] must be
+    // a valid insights metric` — a tela quebrava em vez de cair em
+    // demonstração. A Página serve para *descobrir* o ID do Instagram, não
+    // para substituí-lo.
+    metaOrganic: Boolean(env.META_ACCESS_TOKEN && env.META_IG_USER_ID),
     google,
     googleAds: Boolean(google && env.GOOGLE_ADS_DEVELOPER_TOKEN && env.GOOGLE_ADS_CUSTOMER_ID),
     ga4: Boolean(google && env.GA4_PROPERTY_ID),

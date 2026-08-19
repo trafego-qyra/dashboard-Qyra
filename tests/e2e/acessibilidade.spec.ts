@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { blocoDeDetalhe, ehCelular } from "./responsivo";
+
 /**
  * Acessibilidade das rotas principais. Não substitui auditoria manual, mas
  * trava as regressões que mais aparecem: foco, hierarquia de título e
@@ -35,7 +37,17 @@ test("séries de gráfico têm legenda textual, não só cor", async ({ page }) 
 test("tabela expõe cabeçalhos e legenda para leitor de tela", async ({ page }) => {
   await page.goto("/meta-ads");
 
-  const table = page.getByRole("table").first();
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader").first()).toBeVisible();
+  // `blocoDeDetalhe` localiza pelo nome acessível, então o próprio seletor já
+  // prova que existe legenda: <caption> na tabela, `aria-label` na lista.
+  const bloco = blocoDeDetalhe(page, "Campanhas");
+  await expect(bloco).toBeVisible();
+
+  if (ehCelular(page)) {
+    // No cartão o cabeçalho é o <dt> colado em cada valor — o rótulo viaja
+    // junto do número, que é o que o leitor de tela precisa anunciar.
+    await expect(bloco.locator("dt").first()).toBeVisible();
+    return;
+  }
+
+  await expect(bloco.getByRole("columnheader").first()).toBeVisible();
 });
