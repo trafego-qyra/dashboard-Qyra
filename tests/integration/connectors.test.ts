@@ -396,7 +396,7 @@ describe("Google Ads — token aguardando aprovação", () => {
     expect(report.series.length).toBeGreaterThan(0);
   });
 
-  it("propaga erro que não seja de aprovação — falha real não vira demonstração", async () => {
+  it("falha genérica da API também cai no snapshot, mas o aviso diz o que houve", async () => {
     await withCredentials({
       ...GOOGLE_OAUTH,
       GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
@@ -422,6 +422,57 @@ describe("Google Ads — token aguardando aprovação", () => {
     );
 
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow();
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    // Este canal tem export conferido da plataforma como piso. Derrubar a tela
+    // por erro de API trocaria dado real por nenhum dado — e foi exatamente o
+    // que aconteceu em produção: `/google-ads` virou "não foi possível
+    // carregar" com o snapshot pronto e sem uso.
+    expect(report.source).toBe("snapshot");
+    expect(report.kpis.length).toBeGreaterThan(0);
+
+    // O piso não pode virar disfarce: a falha precisa aparecer na tela.
+    expect(report.notices[0]).toMatch(/não respondeu/i);
+    expect(report.notices[0]).toMatch(/Customer not found/);
+    expect(report.notices[0]).not.toMatch(/acesso de teste/i);
+  });
+
+  it("não vaza segredo no aviso de falha", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        // A Google ecoa a requisição no erro, e a requisição leva credencial.
+        return new Response(
+          JSON.stringify({
+            error: { message: "Bad request: developer-token=segredo-do-cliente" },
+          }),
+          {
+            status: 400,
+            statusText: "Bad Request",
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }),
+    );
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    expect(report.source).toBe("snapshot");
+    expect(report.notices[0]).not.toMatch(/segredo-do-cliente/);
+    expect(report.notices[0]).toMatch(/oculto/);
   });
 });

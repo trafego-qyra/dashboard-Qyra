@@ -5,7 +5,7 @@ import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
-import { type HttpError, httpJson } from "@/server/lib/http";
+import { type HttpError, httpJson, redactSecrets } from "@/server/lib/http";
 import { buildGoogleAdsSnapshotReport } from "./google-ads-snapshot";
 
 /**
@@ -70,6 +70,17 @@ function ehTokenAguardandoAprovacao(erro: unknown): boolean {
   return /DEVELOPER_TOKEN_NOT_APPROVED|DEVELOPER_TOKEN_PROHIBITED/i.test(texto);
 }
 
+/**
+ * Resumo curto do erro para o aviso na tela. Passa pelo `redactSecrets` porque
+ * a resposta da Google costuma ecoar a requisição, e a requisição leva token.
+ */
+function descreverFalha(erro: unknown): string {
+  const bruto = erro instanceof Error ? erro.message : String(erro);
+  const corpo = (erro as HttpError)?.body;
+  const texto = redactSecrets(typeof corpo === "string" && corpo ? `${bruto} — ${corpo}` : bruto);
+  return texto.length > 240 ? `${texto.slice(0, 240)}…` : texto;
+}
+
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -104,11 +115,14 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
       ),
     ]);
   } catch (erro) {
-    if (!ehTokenAguardandoAprovacao(erro)) throw erro;
-
+    // Este canal tem o export da plataforma como piso: dado real da conta, já
+    // conferido. Derrubar a tela por erro de API seria trocar dado bom por
+    // nenhum dado — e é numa reunião que a tela costuma ser aberta.
     const report = buildGoogleAdsSnapshotReport(range);
     report.notices = [
-      "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso.",
+      ehTokenAguardandoAprovacao(erro)
+        ? "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso."
+        : `A API do Google Ads não respondeu, então os números abaixo vêm do export da plataforma. Detalhe técnico: ${descreverFalha(erro)}`,
       ...report.notices,
     ];
     return report;
