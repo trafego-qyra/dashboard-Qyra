@@ -5,6 +5,7 @@
  * (c) storybook visual de estados. Números calibrados para uma operação de
  * tráfego de porte médio — o objetivo é UI realista, não previsão.
  */
+import { ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { dailyValue, noise } from "./generator";
@@ -17,6 +18,35 @@ function sum(points: SeriesPoint[], key: string): number {
 
 function safeDiv(a: number, b: number): number {
   return b === 0 ? 0 : a / b;
+}
+
+/**
+ * Arte de demonstração como SVG embutido.
+ *
+ * A CSP do painel só libera `img-src 'self' data: blob:`, e nenhum dado de
+ * demonstração deve depender de rede para renderizar — o modo mock precisa
+ * funcionar offline, que é metade da razão de ele existir.
+ */
+function arteDeDemonstracao(indice: number): string {
+  const paletas = [
+    ["#2f2535", "#9d5cc1"],
+    ["#4e9e76", "#789180"],
+    ["#9d5cc1", "#d7d2e1"],
+    ["#c96a24", "#2f2535"],
+    ["#4a79d1", "#9d5cc1"],
+  ];
+  const [fundo, brilho] = paletas[indice % paletas.length];
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">` +
+    `<defs><radialGradient id="g" cx="30%" cy="25%" r="85%">` +
+    `<stop offset="0%" stop-color="${brilho}"/>` +
+    `<stop offset="100%" stop-color="${fundo}"/>` +
+    `</radialGradient></defs>` +
+    `<rect width="400" height="400" fill="url(#g)"/>` +
+    `<text x="200" y="216" text-anchor="middle" font-family="sans-serif" ` +
+    `font-size="34" font-weight="600" fill="#ffffff" opacity="0.62">Criativo</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 /* ------------------------------------------------------------------ Meta Ads */
@@ -136,6 +166,60 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
       { key: "impressions", label: "Impressões", format: "integer", slot: 3 },
       { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
+    // A arte da demonstração é um SVG embutido: a CSP libera `data:`, e nenhum
+    // dado de demonstração deve depender de rede para renderizar.
+    creatives: ordenarCriativos(
+      [
+        ["Vídeo 15s | Antes e depois", "Reconhecimento | Marca | Vídeo 15s", 0.09, 0.05, true],
+        ["Carrossel | Protocolo completo", "Conversão | Emagrecimento | Broad", 0.34, 0.38, false],
+        [
+          "Vídeo 30s | Depoimento médica",
+          "Conversão | Terapia Injetável | Lookalike 1%",
+          0.26,
+          0.29,
+          true,
+        ],
+        [
+          "Estático | Consulta em 24h",
+          "Conversão | Check-up | Interesses saúde",
+          0.14,
+          0.16,
+          false,
+        ],
+        ["Reels | Rotina do tratamento", "Tráfego | Institucional | Retargeting", 0.17, 0.12, true],
+      ].map(([nome, campanha, fatiaSpend, fatiaLeads, ehVideo], i) => {
+        const s = spend * (fatiaSpend as number);
+        // A fatia de impressões não pode ser a mesma do investimento: com as
+        // duas iguais o CPM sai idêntico em todo criativo e a coluna parece
+        // quebrada.
+        const impr = Math.round(
+          impressions * (fatiaSpend as number) * (0.66 + noise(`impr-${i}`) * 0.5),
+        );
+        const l = Math.round(leads * (fatiaLeads as number));
+        const reproducoes = Math.round(impr * 0.31);
+        return {
+          id: `mock-${i}`,
+          name: nome as string,
+          campaign: campanha as string,
+          imageUrl: arteDeDemonstracao(i),
+          spend: Math.round(s * 100) / 100,
+          impressions: impr,
+          ctr: 0.006 + noise(`meta-ctr-criativo-${i}`) * 0.038,
+          cpm: Math.round(safeDiv(s, impr) * 1000 * 100) / 100,
+          leads: l,
+          cpl: Math.round(safeDiv(s, l) * 100) / 100,
+          video: ehVideo
+            ? {
+                reproducoes,
+                p25: 0.38 + noise(`v25-${i}`) * 0.22,
+                p50: 0.2 + noise(`v50-${i}`) * 0.16,
+                p75: 0.12 + noise(`v75-${i}`) * 0.1,
+                p100: 0.06 + noise(`v100-${i}`) * 0.09,
+              }
+            : undefined,
+        };
+      }),
+    ),
     tables: [
       {
         title: "Campanhas",

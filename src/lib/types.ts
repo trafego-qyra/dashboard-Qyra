@@ -76,6 +76,42 @@ export interface TableBlock {
   initialRows?: number;
 }
 
+/**
+ * Um anúncio, com a arte. Numa reunião a primeira pergunta depois de "quanto
+ * gastou" é "qual criativo puxou isso" — e a resposta é visual.
+ */
+export interface CreativeCard {
+  /** ID do anúncio na Meta. É o que o proxy de imagem usa para achar a arte. */
+  id: string;
+  name: string;
+  campaign?: string;
+  /**
+   * Caminho no próprio domínio. A arte nunca é linkada direto do CDN da Meta:
+   * a URL de lá carrega token assinado na query, e a CSP do painel não abre
+   * para host de terceiro.
+   */
+  imageUrl?: string;
+  spend: number;
+  impressions: number;
+  ctr: number;
+  cpm: number;
+  leads: number;
+  cpl: number;
+  /**
+   * Retenção deste anúncio, quando ele é vídeo. Retenção agregada da conta não
+   * responde a pergunta que importa — qual vídeo segura a atenção — porque a
+   * média junta o que prende com o que é pulado no primeiro segundo.
+   */
+  video?: {
+    reproducoes: number;
+    /** Fração de quem começou e chegou a cada marca. Entre 0 e 1. */
+    p25: number;
+    p50: number;
+    p75: number;
+    p100: number;
+  };
+}
+
 export interface ChannelReport {
   channel: ChannelId;
   label: string;
@@ -94,6 +130,8 @@ export interface ChannelReport {
   /** Período real dos dados, quando difere do intervalo pedido. */
   periodLabel?: string;
   tables: TableBlock[];
+  /** Anúncios com a arte, quando a origem fornece. Só o Meta Ads preenche. */
+  creatives?: CreativeCard[];
   /** Avisos não-fatais: credencial ausente, métrica indisponível, etc. */
   notices: string[];
 }

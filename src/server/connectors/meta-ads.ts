@@ -1,7 +1,8 @@
 import "server-only";
 
+import { MAX_CRIATIVOS, ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
+import type { ChannelReport, CreativeCard, DateRange, SeriesPoint } from "@/lib/types";
 import { mockMetaAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson, metaAuthHeaders } from "@/server/lib/http";
@@ -16,6 +17,8 @@ type AcoesDaMeta = Array<{ action_type: string; value: string }>;
 
 interface MetaInsightsRow {
   date_start: string;
+  ad_id?: string;
+  ad_name?: string;
   spend?: string;
   impressions?: string;
   /** Pessoas distintas alcançadas. Não é aditivo entre dias. */
@@ -133,6 +136,43 @@ function somarAcoes(acoes: AcoesDaMeta | undefined): number {
   return (acoes ?? []).reduce((total, item) => total + num(item.value), 0);
 }
 
+/** Monta os cartões de anúncio. A ordem vem de `ordenarCriativos`. */
+function montarCriativos(porAnuncio: MetaInsightsRow[]): CreativeCard[] {
+  const cartoes = porAnuncio.map((row) => {
+    const spend = num(row.spend);
+    const impressions = num(row.impressions);
+    const clicks = num(row.clicks);
+    const leads = countLeads(row);
+    const reproducoes = somarAcoes(row.video_play_actions);
+    return {
+      id: row.ad_id ?? "",
+      name: row.ad_name ?? "—",
+      campaign: row.campaign_name,
+      imageUrl: row.ad_id ? `/criativos/${row.ad_id}/imagem` : undefined,
+      spend,
+      impressions,
+      ctr: impressions === 0 ? 0 : clicks / impressions,
+      cpm: impressions === 0 ? 0 : (spend / impressions) * 1000,
+      leads,
+      cpl: leads === 0 ? 0 : spend / leads,
+      // Sem reprodução não é vídeo — ou é vídeo que ninguém abriu. Nos dois
+      // casos, mostrar uma régua de retenção zerada só ocupa espaço.
+      video:
+        reproducoes > 0
+          ? {
+              reproducoes,
+              p25: somarAcoes(row.video_p25_watched_actions) / reproducoes,
+              p50: somarAcoes(row.video_p50_watched_actions) / reproducoes,
+              p75: somarAcoes(row.video_p75_watched_actions) / reproducoes,
+              p100: somarAcoes(row.video_p100_watched_actions) / reproducoes,
+            }
+          : undefined,
+    } satisfies CreativeCard;
+  });
+
+  return ordenarCriativos(cartoes).slice(0, MAX_CRIATIVOS);
+}
+
 export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -146,7 +186,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     return report;
   }
 
-  const [daily, byCampaign] = await Promise.all([
+  const [daily, byCampaign, porAnuncio] = await Promise.all([
     fetchInsights(range, {
       fields: CAMPOS_DE_METRICA,
       time_increment: "1",
@@ -156,6 +196,13 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       fields: `campaign_name,${CAMPOS_DE_METRICA}`,
       level: "campaign",
     }),
+    // Enriquecimento, não requisito: a tela existe sem os criativos. Uma falha
+    // aqui não pode derrubar o relatório inteiro — foi assim que a página do
+    // Google Ads morreu com o dado pronto ao lado.
+    fetchInsights(range, {
+      fields: `ad_id,ad_name,campaign_name,${CAMPOS_DE_METRICA}`,
+      level: "ad",
+    }).catch(() => [] as MetaInsightsRow[]),
   ]);
 
   // A API omite dias sem entrega; a série precisa deles para não "pular" no eixo.
@@ -272,6 +319,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       { key: "impressions", label: "Impressões", format: "integer", slot: 3 },
       { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
+    creatives: montarCriativos(porAnuncio),
     tables: [
       {
         title: "Campanhas",

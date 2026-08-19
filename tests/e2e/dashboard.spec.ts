@@ -22,7 +22,11 @@ test("navega entre canais mantendo o período escolhido", async ({ page }) => {
   await page.getByRole("link", { name: "Meta Ads" }).first().click();
   await expect(page).toHaveURL(/\/meta-ads\?preset=7d/);
   await expect(page.getByRole("heading", { name: "Meta Ads", level: 1 })).toBeVisible();
-  await expect(page.getByText("Custo por lead")).toBeVisible();
+  // Preso à região de indicadores: solto, o texto casava também com a
+  // legenda dos criativos ("ordenados por ... menor custo por lead").
+  await expect(
+    page.getByRole("region", { name: "Indicadores" }).getByText("Custo por lead"),
+  ).toBeVisible();
 });
 
 test("troca de período atualiza os dados pela URL", async ({ page }) => {

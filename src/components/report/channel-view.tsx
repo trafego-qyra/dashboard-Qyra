@@ -1,6 +1,7 @@
 import { TrendSmallMultiples } from "@/components/charts/lazy";
 import { Notices } from "@/components/layout/notices";
 import { PageHeader } from "@/components/layout/page-header";
+import { CreativeGrid } from "@/components/report/creative-grid";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { StatTile } from "@/components/ui/stat-tile";
@@ -68,6 +69,24 @@ export function ChannelView({
           />
         </CardContent>
       </Card>
+
+      {report.creatives && report.creatives.length > 0 ? (
+        <Card className="qy-rise">
+          <CardHeader>
+            <div>
+              <CardTitle>Melhores criativos</CardTitle>
+              <CardDescription>
+                {report.creatives.some((c) => c.leads > 0)
+                  ? "Ordenados por leads, desempatando pelo menor custo por lead."
+                  : "Sem lead atribuído no período, então a ordem é por investimento."}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <CreativeGrid criativos={report.creatives} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {report.tables.map((table) => (
         <Card key={table.title} className="qy-rise">
