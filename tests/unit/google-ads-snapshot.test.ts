@@ -110,6 +110,6 @@ describe("snapshot do Google Ads", () => {
   });
 
   it("avisa que o período é fixo e não acompanha o filtro", () => {
-    expect(report.notices.join(" ")).toMatch(/período é fixo|periodo é fixo/i);
+    expect(report.notices.map((n) => n.text).join(" ")).toMatch(/período próprio|periodo próprio/i);
   });
 });

@@ -1,3 +1,4 @@
+import { avisoCliente } from "@/lib/avisos";
 import "server-only";
 
 import { GOOGLE_ADS_SNAPSHOT as S } from "@/data/google-ads-snapshot";
@@ -174,7 +175,11 @@ export function buildGoogleAdsSnapshotReport(
     ],
 
     notices: [
-      `Dados reais exportados do Google Ads, referentes a ${S.periodoRotulo} (14 dias). O período é fixo e não acompanha o filtro de datas, porque o export não traz quebra diária. A leitura ao vivo entra assim que o token de desenvolvedor da API for aprovado para acesso básico.`,
+      // Cliente: explica por que o filtro de data não move este canal. Sem
+      // isso, quem troca o período e vê o mesmo número acha que travou.
+      avisoCliente(
+        `Números reais exportados do Google Ads, referentes a ${S.periodoRotulo} (14 dias). Este canal tem período próprio e não acompanha o filtro de datas acima.`,
+      ),
     ],
   };
 }

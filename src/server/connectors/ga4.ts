@@ -1,3 +1,4 @@
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { eachDay } from "@/lib/date-range";
@@ -48,9 +49,11 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
   if (forceMock || !getCredentials().ga4) {
     const report = mockGa4(range, new Date().toISOString());
     report.notices = [
-      forceMock
-        ? "Modo mock forçado por QYRA_FORCE_MOCK."
-        : "Sem credencial do Google Analytics — exibindo dados de demonstração.",
+      avisoOperacao(
+        forceMock
+          ? "Modo mock forçado por QYRA_FORCE_MOCK."
+          : "Sem credencial do Google Analytics — exibindo dados de demonstração.",
+      ),
     ];
     return report;
   }

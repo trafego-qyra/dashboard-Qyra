@@ -1,3 +1,4 @@
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { eachDay } from "@/lib/date-range";
@@ -89,7 +90,7 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
   // devolvendo a fixture, que é o que os testes e o ambiente de preview usam.
   if (forceMock) {
     const report = mockGoogleAds(range, new Date().toISOString());
-    report.notices = ["Modo mock forçado por QYRA_FORCE_MOCK."];
+    report.notices = [avisoOperacao("Modo mock forçado por QYRA_FORCE_MOCK.")];
     return report;
   }
 
@@ -120,9 +121,14 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
     // nenhum dado — e é numa reunião que a tela costuma ser aberta.
     const report = buildGoogleAdsSnapshotReport(range);
     report.notices = [
-      ehTokenAguardandoAprovacao(erro)
-        ? "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso."
-        : `A API do Google Ads não respondeu, então os números abaixo vêm do export da plataforma. Detalhe técnico: ${descreverFalha(erro)}`,
+      // Operação: instrução de token e detalhe de erro não são assunto de quem
+      // lê o relatório. O que interessa ao cliente — que os números vêm do
+      // export, e de que período — já está no aviso do próprio snapshot.
+      avisoOperacao(
+        ehTokenAguardandoAprovacao(erro)
+          ? "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso."
+          : `A API do Google Ads não respondeu, então os números abaixo vêm do export da plataforma. Detalhe técnico: ${descreverFalha(erro)}`,
+      ),
       ...report.notices,
     ];
     return report;

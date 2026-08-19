@@ -1,3 +1,4 @@
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { MAX_CRIATIVOS, ordenarCriativos } from "@/lib/criativos";
@@ -179,9 +180,11 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
   if (forceMock || !getCredentials().metaAds) {
     const report = mockMetaAds(range, new Date().toISOString());
     report.notices = [
-      forceMock
-        ? "Modo mock forçado por QYRA_FORCE_MOCK."
-        : "Sem credencial do Meta Ads — exibindo dados de demonstração.",
+      avisoOperacao(
+        forceMock
+          ? "Modo mock forçado por QYRA_FORCE_MOCK."
+          : "Sem credencial do Meta Ads — exibindo dados de demonstração.",
+      ),
     ];
     return report;
   }

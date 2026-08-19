@@ -273,7 +273,7 @@ describe("Meta Ads", () => {
     const report = await fetchMetaAdsReport(RANGE);
 
     expect(report.source).toBe("mock");
-    expect(report.notices[0]).toMatch(/Sem credencial/);
+    expect(report.notices[0].text).toMatch(/Sem credencial/);
   });
 });
 
@@ -433,7 +433,7 @@ describe("Orgânico", () => {
 
     expect(report.source).toBe("live");
     expect(report.kpis.find((k) => k.key === "reach")?.value).toBe(500);
-    expect(report.notices[0]).toMatch(/publicações/);
+    expect(report.notices[0].text).toMatch(/publicações/);
   });
 });
 
@@ -477,7 +477,7 @@ describe("Google Ads — token aguardando aprovação", () => {
     // Cai no snapshot exportado da plataforma — dado real da conta, preferível
     // a número inventado enquanto a API não responde.
     expect(report.source).toBe("snapshot");
-    expect(report.notices[0]).toMatch(/acesso de teste/i);
+    expect(report.notices[0].text).toMatch(/acesso de teste/i);
     expect(report.periodLabel).toBeTruthy();
     // O relatório continua completo: a tela renderiza normalmente, com aviso.
     expect(report.kpis.length).toBeGreaterThan(0);
@@ -520,9 +520,9 @@ describe("Google Ads — token aguardando aprovação", () => {
     expect(report.kpis.length).toBeGreaterThan(0);
 
     // O piso não pode virar disfarce: a falha precisa aparecer na tela.
-    expect(report.notices[0]).toMatch(/não respondeu/i);
-    expect(report.notices[0]).toMatch(/Customer not found/);
-    expect(report.notices[0]).not.toMatch(/acesso de teste/i);
+    expect(report.notices[0].text).toMatch(/não respondeu/i);
+    expect(report.notices[0].text).toMatch(/Customer not found/);
+    expect(report.notices[0].text).not.toMatch(/acesso de teste/i);
   });
 
   it("não vaza segredo no aviso de falha", async () => {
@@ -560,7 +560,7 @@ describe("Google Ads — token aguardando aprovação", () => {
     const report = await fetchGoogleAdsReport(RANGE);
 
     expect(report.source).toBe("snapshot");
-    expect(report.notices[0]).not.toMatch(/segredo-do-cliente/);
-    expect(report.notices[0]).toMatch(/oculto/);
+    expect(report.notices[0].text).not.toMatch(/segredo-do-cliente/);
+    expect(report.notices[0].text).toMatch(/oculto/);
   });
 });

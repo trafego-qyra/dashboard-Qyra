@@ -112,6 +112,23 @@ export interface CreativeCard {
   };
 }
 
+/**
+ * Para quem o aviso é.
+ *
+ * `cliente` é o que ajuda a ler o relatório — por que um canal está fora do
+ * consolidado, por que o filtro de data não move um período fixo.
+ *
+ * `operacao` é encanamento: nome de variável de ambiente, instrução de token,
+ * detalhe de erro da API. Isso nunca vai para a tela do cliente. Continua no
+ * payload, porque é o que `/api/health` e `/api/diagnostico/*` leem.
+ */
+export type NoticeAudience = "cliente" | "operacao";
+
+export interface Notice {
+  text: string;
+  audience: NoticeAudience;
+}
+
 export interface ChannelReport {
   channel: ChannelId;
   label: string;
@@ -133,7 +150,7 @@ export interface ChannelReport {
   /** Anúncios com a arte, quando a origem fornece. Só o Meta Ads preenche. */
   creatives?: CreativeCard[];
   /** Avisos não-fatais: credencial ausente, métrica indisponível, etc. */
-  notices: string[];
+  notices: Notice[];
 }
 
 export interface OverviewReport {
@@ -156,5 +173,5 @@ export interface OverviewReport {
   }>;
   /** Canais que não responderam. Total parcial precisa ser declarado como tal. */
   failedChannels: ChannelId[];
-  notices: string[];
+  notices: Notice[];
 }
