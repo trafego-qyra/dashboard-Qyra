@@ -163,10 +163,22 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
     }));
 
-  const investment = byChannel.reduce((a, c) => a + c.investment, 0);
-  const paidConversions = byChannel
+  // Canal em período fixo não entra no consolidado: somar 14 dias de um export
+  // com 28 dias de outro canal produz um total que não corresponde a intervalo
+  // nenhum. Ele continua visível em `byChannel`, com a origem declarada.
+  const noPeriodo = byChannel.filter((c) => c.source !== "snapshot");
+
+  const investment = noPeriodo.reduce((a, c) => a + c.investment, 0);
+  const paidConversions = noPeriodo
     .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
     .reduce((a, c) => a + c.conversions, 0);
+
+  for (const canal of byChannel) {
+    if (canal.source !== "snapshot") continue;
+    notices.push(
+      `${canal.label}: exibido em período próprio e fora do consolidado, porque os dados vêm de um export de intervalo fixo.`,
+    );
+  }
 
   const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
   const sessions = ga4 ? pickTotal(ga4, ["sessions"]) : 0;
@@ -196,6 +208,9 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   const dateIndex = new Map<string, SeriesPoint>();
   for (const result of results) {
     if (!result.report) continue;
+
+    // Período fixo fica fora da série pelo mesmo motivo do KPI.
+    if (result.report.source === "snapshot") continue;
 
     const ehPago = result.channel === "meta-ads" || result.channel === "google-ads";
 

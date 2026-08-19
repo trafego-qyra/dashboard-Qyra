@@ -28,17 +28,23 @@ export function TrendChart({
   data,
   def,
   height = 260,
+  axis = "date",
 }: {
   data: SeriesPoint[];
   def: SeriesDef;
   height?: number;
+  /** O que o eixo x representa. Nem toda origem fornece quebra por data. */
+  axis?: "date" | "hour";
 }) {
+  const formatarX = axis === "hour" ? (v: string) => `${v}h` : formatDayShort;
   const gradientId = `qy-fill-${def.key}`;
   const color = seriesColor(def.slot);
 
   return (
     <figure className="space-y-3">
-      <figcaption className="sr-only">{def.label} por dia</figcaption>
+      <figcaption className="sr-only">
+        {def.label} por {axis === "hour" ? "hora do dia" : "dia"}
+      </figcaption>
       <div style={{ height }} className="qy-fade">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
@@ -54,7 +60,7 @@ export function TrendChart({
 
             <XAxis
               dataKey="date"
-              tickFormatter={formatDayShort}
+              tickFormatter={formatarX}
               stroke="var(--qy-axis)"
               tick={{ fill: "var(--qy-ink-muted)", fontSize: 11 }}
               tickLine={false}
@@ -71,7 +77,7 @@ export function TrendChart({
             />
             <Tooltip
               cursor={{ stroke: "var(--qy-line-strong)", strokeWidth: 1 }}
-              content={<ChartTooltip defs={[def]} />}
+              content={<ChartTooltip defs={[def]} axis={axis} />}
             />
 
             <Area
@@ -102,10 +108,12 @@ export function TrendSmallMultiples({
   data,
   defs,
   height = 200,
+  axis = "date",
 }: {
   data: SeriesPoint[];
   defs: SeriesDef[];
   height?: number;
+  axis?: "date" | "hour";
 }) {
   return (
     <div className="space-y-4">
@@ -119,7 +127,7 @@ export function TrendSmallMultiples({
                 <span className="ml-1 text-ink-muted">({unitLabel(def.format)})</span>
               ) : null}
             </p>
-            <TrendChart data={data} def={def} height={height} />
+            <TrendChart data={data} def={def} height={height} axis={axis} />
           </div>
         ))}
       </div>

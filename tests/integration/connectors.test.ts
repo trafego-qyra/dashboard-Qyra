@@ -386,8 +386,11 @@ describe("Google Ads — token aguardando aprovação", () => {
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
     const report = await fetchGoogleAdsReport(RANGE);
 
-    expect(report.source).toBe("mock");
+    // Cai no snapshot exportado da plataforma — dado real da conta, preferível
+    // a número inventado enquanto a API não responde.
+    expect(report.source).toBe("snapshot");
     expect(report.notices[0]).toMatch(/acesso de teste/i);
+    expect(report.periodLabel).toBeTruthy();
     // O relatório continua completo: a tela renderiza normalmente, com aviso.
     expect(report.kpis.length).toBeGreaterThan(0);
     expect(report.series.length).toBeGreaterThan(0);

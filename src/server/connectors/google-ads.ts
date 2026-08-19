@@ -6,6 +6,7 @@ import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
 import { type HttpError, httpJson } from "@/server/lib/http";
+import { buildGoogleAdsSnapshotReport } from "./google-ads-snapshot";
 
 /**
  * Google Ads via REST (`searchStream` do GAQL).
@@ -72,14 +73,17 @@ function ehTokenAguardandoAprovacao(erro: unknown): boolean {
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
-  if (forceMock || !getCredentials().googleAds) {
+  // Sem credencial, o canal cai no snapshot exportado da plataforma: dado real
+  // da conta, preferível a número inventado. `QYRA_FORCE_MOCK` continua
+  // devolvendo a fixture, que é o que os testes e o ambiente de preview usam.
+  if (forceMock) {
     const report = mockGoogleAds(range, new Date().toISOString());
-    report.notices = [
-      forceMock
-        ? "Modo mock forçado por QYRA_FORCE_MOCK."
-        : "Sem credencial do Google Ads — exibindo dados de demonstração.",
-    ];
+    report.notices = ["Modo mock forçado por QYRA_FORCE_MOCK."];
     return report;
+  }
+
+  if (!getCredentials().googleAds) {
+    return buildGoogleAdsSnapshotReport(range);
   }
 
   const where = `segments.date BETWEEN '${range.from}' AND '${range.to}'`;
@@ -102,9 +106,10 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
   } catch (erro) {
     if (!ehTokenAguardandoAprovacao(erro)) throw erro;
 
-    const report = mockGoogleAds(range, new Date().toISOString());
+    const report = buildGoogleAdsSnapshotReport(range);
     report.notices = [
-      "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso. Até lá, esta tela exibe dados de demonstração.",
+      "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso.",
+      ...report.notices,
     ];
     return report;
   }

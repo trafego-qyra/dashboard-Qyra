@@ -31,6 +31,7 @@ export function ChannelView({
         title={report.label}
         description={description}
         source={report.source}
+        periodLabel={report.periodLabel}
         actions={actions}
       />
 
@@ -51,14 +52,22 @@ export function ChannelView({
       <Card className="qy-rise">
         <CardHeader>
           <div>
-            <CardTitle>Evolução diária</CardTitle>
+            <CardTitle>
+              {report.seriesAxis === "hour" ? "Desempenho por hora do dia" : "Evolução diária"}
+            </CardTitle>
             <CardDescription>
-              Uma escala por métrica — grandezas diferentes nunca dividem o mesmo eixo.
+              {report.seriesAxis === "hour"
+                ? "Somado nos dias do período. É o recorte que o export sustenta — ele não traz quebra por data."
+                : "Uma escala por métrica — grandezas diferentes nunca dividem o mesmo eixo."}
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
-          <TrendSmallMultiples data={report.series} defs={report.seriesDefs} />
+          <TrendSmallMultiples
+            data={report.series}
+            defs={report.seriesDefs}
+            axis={report.seriesAxis ?? "date"}
+          />
         </CardContent>
       </Card>
 

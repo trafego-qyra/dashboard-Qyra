@@ -13,12 +13,15 @@ export function PageHeader({
   title,
   description,
   source,
+  periodLabel,
   actions,
   className,
 }: {
   title: string;
   description: string;
   source?: DataSource;
+  /** Período real dos dados, quando não acompanha o filtro. */
+  periodLabel?: string;
   actions?: React.ReactNode;
   className?: string;
 }) {
@@ -30,6 +33,13 @@ export function PageHeader({
           {source === "mock" ? (
             <Badge tone="warning" title="Nenhuma credencial configurada para este canal">
               Dados de demonstração
+            </Badge>
+          ) : null}
+          {/* Snapshot é dado real, só que de período fixo — merece rótulo próprio,
+              e o período precisa estar visível para ninguém ler como atual. */}
+          {source === "snapshot" ? (
+            <Badge tone="accent" title="Dados reais exportados da plataforma, em período fixo">
+              {periodLabel ? `Período fixo · ${periodLabel}` : "Período fixo"}
             </Badge>
           ) : null}
         </div>
