@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { blocoDeDetalhe, ehCelular } from "./responsivo";
+
 /**
  * Percursos que precisam funcionar em produção. Cada teste cobre um caminho
  * que um erro de integração ou de roteamento quebraria silenciosamente.
@@ -11,7 +13,7 @@ test("visão geral carrega com indicadores e comparação", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Visão geral", level: 1 })).toBeVisible();
   await expect(page.getByText("Investimento total")).toBeVisible();
   await expect(page.getByText("vs. anterior").first()).toBeVisible();
-  await expect(page.getByRole("table")).toBeVisible();
+  await expect(blocoDeDetalhe(page, "Resumo por canal")).toBeVisible();
 });
 
 test("navega entre canais mantendo o período escolhido", async ({ page }) => {
@@ -46,15 +48,39 @@ test("troca de período atualiza os dados pela URL", async ({ page }) => {
   );
 });
 
+/** "R$ 1.234,56" -> 1234.56 */
+function numero(texto: string): number {
+  return Number(texto.replace(/[^\d,-]/g, "").replace(",", "."));
+}
+
 test("tabela ordena por coluna", async ({ page }) => {
   await page.goto("/meta-ads");
 
-  const header = page.getByRole("button", { name: /Investimento/ }).last();
-  await header.click();
-  await expect(page.getByRole("columnheader", { name: /Investimento/ })).toHaveAttribute(
-    "aria-sort",
-    "descending",
-  );
+  const bloco = blocoDeDetalhe(page, "Campanhas");
+  await expect(bloco).toBeVisible();
+
+  if (!ehCelular(page)) {
+    await bloco.getByRole("button", { name: /Investimento/ }).click();
+    await expect(bloco.getByRole("columnheader", { name: /Investimento/ })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    return;
+  }
+
+  // No celular o cabeçalho não existe — a ordenação é um seletor. Sem ele o
+  // cartão perderia justamente a função que faz a tabela valer no relatório.
+  const raiz = bloco.locator("..");
+  await raiz.getByLabel("Ordenar por").selectOption({ label: "Investimento" });
+
+  const investimentos = bloco.locator("li").locator("dl > div", { hasText: "Investimento" });
+  const decrescente = (await investimentos.locator("dd").allInnerTexts()).map(numero);
+  expect(decrescente.length).toBeGreaterThan(1);
+  expect(decrescente).toEqual([...decrescente].sort((a, b) => b - a));
+
+  await raiz.getByRole("button", { name: "Ordenar do menor para o maior" }).click();
+  const crescente = (await investimentos.locator("dd").allInnerTexts()).map(numero);
+  expect(crescente).toEqual([...crescente].sort((a, b) => a - b));
 });
 
 test("os quatro canais respondem", async ({ page }) => {

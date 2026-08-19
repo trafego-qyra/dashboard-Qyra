@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatMetric } from "@/lib/format";
@@ -14,6 +14,7 @@ import { EmptyState } from "./empty-state";
  */
 export function DataTable({ block, className }: { block: TableBlock; className?: string }) {
   const [sort, setSort] = useState<{ key: string; desc: boolean } | null>(null);
+  const idOrdenacao = useId();
 
   const rows = useMemo(() => {
     if (!sort) return block.rows;
@@ -56,12 +57,59 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
 
   return (
     <div className={className}>
+      {/* No celular não há cabeçalho para clicar, e ordenar é justamente como
+          se acha a campanha que mais gastou. Um `select` nativo abre o picker
+          do sistema — melhor que qualquer popover custom nesse tamanho de tela. */}
+      <div className="flex items-center gap-2 pb-3 md:hidden">
+        <label htmlFor={idOrdenacao} className="shrink-0 text-[11px] text-ink-muted">
+          Ordenar por
+        </label>
+        <select
+          id={idOrdenacao}
+          value={sort?.key ?? ""}
+          onChange={(evento) => {
+            const key = evento.target.value;
+            setSort(key === "" ? null : { key, desc: true });
+          }}
+          className={cn(
+            "min-w-0 flex-1 rounded-full border border-line-strong bg-surface px-3 py-1.5",
+            "text-xs text-ink",
+          )}
+        >
+          <option value="">Ordem original</option>
+          {block.columns.map((coluna) => (
+            <option key={coluna.key} value={coluna.key}>
+              {coluna.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!sort}
+          onClick={() => sort && toggle(sort.key)}
+          aria-label={
+            sort?.desc ? "Ordenar do menor para o maior" : "Ordenar do maior para o menor"
+          }
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-full",
+            "border border-line-strong bg-surface text-ink-secondary",
+            "transition-colors duration-[var(--duration-fast)] disabled:opacity-40",
+          )}
+        >
+          {sort?.desc === false ? (
+            <ArrowUp className="size-3.5" aria-hidden="true" />
+          ) : (
+            <ArrowDown className="size-3.5" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+
       {/* Abaixo de `md` a tabela vira lista de cartões.
           Tabela de 6 colunas em 390px de largura é ilegível: ou o texto encolhe
           além do aceitável, ou a rolagem horizontal esconde justamente as
           colunas de valor. O cartão empilha rótulo e valor, e é o que torna a
           tela útil no celular — que é onde gestor e cliente abrem o relatório. */}
-      <ul className="space-y-2 md:hidden">
+      <ul aria-label={block.title} className="space-y-2 md:hidden">
         {keyed.map(({ row, key }) => (
           <li key={key} className="rounded-2xl border border-line bg-surface-sunken/50 p-3.5">
             <p className="text-sm font-semibold text-ink">
