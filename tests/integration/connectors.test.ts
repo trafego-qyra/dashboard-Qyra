@@ -132,16 +132,61 @@ describe("Meta Ads", () => {
     expect(report.kpis.find((k) => k.key === "leads")?.value).toBe(10);
   });
 
-  it("marca na tabela de origem que o detalhado já está dentro do agregado", async () => {
+  it("calcula CPM, frequência e cliques no link a partir dos totais", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch((url) =>
+      url.includes("level=campaign")
+        ? {
+            data: [
+              {
+                date_start: "2026-02-01",
+                campaign_name: "Conversão | Teste",
+                spend: "300.00",
+                impressions: "100000",
+                reach: "40000",
+                clicks: "900",
+                inline_link_clicks: "500",
+              },
+            ],
+          }
+        : {
+            data: [
+              {
+                date_start: "2026-02-01",
+                spend: "300.00",
+                impressions: "100000",
+                clicks: "900",
+                inline_link_clicks: "500",
+              },
+            ],
+          },
+    );
+
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+    const kpi = (key: string) => report.kpis.find((k) => k.key === key)?.value;
+
+    // CPM sobre o total, não média das médias diárias: 300 / 100000 * 1000.
+    expect(kpi("cpm")).toBeCloseTo(3, 5);
+    // Frequência é impressões por pessoa alcançada: 100000 / 40000.
+    expect(kpi("frequency")).toBeCloseTo(2.5, 5);
+    // Cliques no link não é o total de cliques — o total inclui curtida e afins.
+    expect(kpi("linkClicks")).toBe(500);
+    expect(kpi("clicks" as string) ?? 900).not.toBe(kpi("linkClicks"));
+    expect(kpi("reach")).toBe(40000);
+  });
+
+  it("não expõe identificador cru da API na tela", async () => {
     await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
     mockFetch(() => ({
       data: [
         {
           date_start: "2026-02-01",
           spend: "100.00",
+          impressions: "1000",
           actions: [
             { action_type: "lead", value: "10" },
-            { action_type: "offsite_conversion.fb_pixel_lead", value: "10" },
+            { action_type: "onsite_conversion.post_net_like", value: "339" },
           ],
         },
       ],
@@ -150,15 +195,58 @@ describe("Meta Ads", () => {
     const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
     const report = await fetchMetaAdsReport(RANGE);
 
-    const origem = report.tables.find((t) => t.title === "Origem das conversões");
-    const agregado = origem?.rows.find((r) => r.identificador === "lead");
-    const detalhado = origem?.rows.find(
-      (r) => r.identificador === "offsite_conversion.fb_pixel_lead",
+    // `onsite_conversion.post_net_like` e afins são nomes internos da Meta.
+    // Já foram parar na tela de cliente uma vez; não podem voltar.
+    const tudo = JSON.stringify(report.tables);
+    expect(tudo).not.toMatch(/onsite_conversion|post_interaction|omni_/);
+  });
+
+  it("mostra retenção de vídeo, e só quando há vídeo", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch((url) =>
+      url.includes("level=campaign")
+        ? {
+            data: [
+              {
+                date_start: "2026-02-01",
+                campaign_name: "Vídeo | Teste",
+                spend: "100.00",
+                impressions: "1000",
+                video_play_actions: [{ action_type: "video_view", value: "800" }],
+                video_p25_watched_actions: [{ action_type: "video_view", value: "400" }],
+                video_p50_watched_actions: [{ action_type: "video_view", value: "200" }],
+                video_p75_watched_actions: [{ action_type: "video_view", value: "100" }],
+                video_p100_watched_actions: [{ action_type: "video_view", value: "40" }],
+              },
+            ],
+          }
+        : { data: [{ date_start: "2026-02-01", spend: "100.00", impressions: "1000" }] },
     );
 
-    expect(agregado?.contaComoLead).toBe("sim");
-    // Sem esta marcação, a tabela some 10 + 10 aos olhos de quem confere o KPI.
-    expect(detalhado?.contaComoLead).toBe("já incluído em Lead");
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+    const video = report.tables.find((t) => t.title === "Retenção de vídeo");
+
+    expect(video).toBeDefined();
+    // A porcentagem é sobre quem começou, que é a base da própria Meta.
+    expect(video?.rows.find((r) => r.etapa === "Assistiu 50%")?.retencao).toBeCloseTo(0.25, 5);
+    expect(video?.rows.find((r) => r.etapa === "Assistiu até o fim")?.retencao).toBeCloseTo(
+      0.05,
+      5,
+    );
+  });
+
+  it("omite a tabela de vídeo quando a conta não tem vídeo", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch(() => ({
+      data: [{ date_start: "2026-02-01", spend: "100.00", impressions: "1000" }],
+    }));
+
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+
+    // Tabela de zeros ocupa espaço e sugere campanha ruim, quando nem é de vídeo.
+    expect(report.tables.find((t) => t.title === "Retenção de vídeo")).toBeUndefined();
   });
 
   it("preenche com zero os dias sem entrega, para o eixo não pular", async () => {
@@ -396,7 +484,7 @@ describe("Google Ads — token aguardando aprovação", () => {
     expect(report.series.length).toBeGreaterThan(0);
   });
 
-  it("propaga erro que não seja de aprovação — falha real não vira demonstração", async () => {
+  it("falha genérica da API também cai no snapshot, mas o aviso diz o que houve", async () => {
     await withCredentials({
       ...GOOGLE_OAUTH,
       GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
@@ -422,6 +510,57 @@ describe("Google Ads — token aguardando aprovação", () => {
     );
 
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow();
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    // Este canal tem export conferido da plataforma como piso. Derrubar a tela
+    // por erro de API trocaria dado real por nenhum dado — e foi exatamente o
+    // que aconteceu em produção: `/google-ads` virou "não foi possível
+    // carregar" com o snapshot pronto e sem uso.
+    expect(report.source).toBe("snapshot");
+    expect(report.kpis.length).toBeGreaterThan(0);
+
+    // O piso não pode virar disfarce: a falha precisa aparecer na tela.
+    expect(report.notices[0]).toMatch(/não respondeu/i);
+    expect(report.notices[0]).toMatch(/Customer not found/);
+    expect(report.notices[0]).not.toMatch(/acesso de teste/i);
+  });
+
+  it("não vaza segredo no aviso de falha", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        // A Google ecoa a requisição no erro, e a requisição leva credencial.
+        return new Response(
+          JSON.stringify({
+            error: { message: "Bad request: developer-token=segredo-do-cliente" },
+          }),
+          {
+            status: 400,
+            statusText: "Bad Request",
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }),
+    );
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    expect(report.source).toBe("snapshot");
+    expect(report.notices[0]).not.toMatch(/segredo-do-cliente/);
+    expect(report.notices[0]).toMatch(/oculto/);
   });
 });

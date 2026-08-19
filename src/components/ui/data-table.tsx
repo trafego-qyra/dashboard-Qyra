@@ -12,8 +12,23 @@ import { EmptyState } from "./empty-state";
  * Tabela de detalhe. Também é a "table view" exigida pela acessibilidade dos
  * gráficos: todo número plotado existe aqui em texto.
  */
+/**
+ * Tabela longa empurra o resto da tela para fora da rolagem, e ninguém lê da
+ * décima linha em diante sem procurar algo específico. As demais ficam a um
+ * clique — nada é descartado.
+ */
+const LINHAS_VISIVEIS_PADRAO = 10;
+
+/**
+ * No celular cada linha vira um cartão de quatro campos, então dez linhas
+ * ocupam o que no desktop cabe em uma tabela. Cinco é o que dá para varrer sem
+ * perder o resto da página.
+ */
+const LINHAS_VISIVEIS_MOBILE = 5;
+
 export function DataTable({ block, className }: { block: TableBlock; className?: string }) {
   const [sort, setSort] = useState<{ key: string; desc: boolean } | null>(null);
+  const [expandida, setExpandida] = useState(false);
   const idOrdenacao = useId();
 
   const rows = useMemo(() => {
@@ -31,10 +46,19 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
 
   // Chave estável calculada fora do JSX: a origem não garante identidade única
   // (duas campanhas podem ter o mesmo nome), então a posição desempata.
-  const keyed = useMemo(
-    () => rows.map((row, index) => ({ row, key: `${String(row[block.columns[0].key])}#${index}` })),
-    [rows, block.columns],
-  );
+  const limite = block.initialRows ?? LINHAS_VISIVEIS_PADRAO;
+  const limiteMobile = Math.min(limite, LINHAS_VISIVEIS_MOBILE);
+  const temMais = rows.length > limiteMobile;
+
+  const keyed = useMemo(() => {
+    // O recorte vem depois da ordenação: "as 10 primeiras" tem que respeitar a
+    // coluna escolhida, senão o botão mostraria um top 10 que não é top de nada.
+    const visiveis = expandida ? rows : rows.slice(0, limite);
+    return visiveis.map((row, index) => ({
+      row,
+      key: `${String(row[block.columns[0].key])}#${index}`,
+    }));
+  }, [rows, block.columns, expandida, limite]);
 
   if (block.rows.length === 0) {
     return (
@@ -110,8 +134,14 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
           colunas de valor. O cartão empilha rótulo e valor, e é o que torna a
           tela útil no celular — que é onde gestor e cliente abrem o relatório. */}
       <ul aria-label={block.title} className="space-y-2 md:hidden">
-        {keyed.map(({ row, key }) => (
-          <li key={key} className="rounded-2xl border border-line bg-surface-sunken/50 p-3.5">
+        {keyed.map(({ row, key }, indice) => (
+          <li
+            key={key}
+            className={cn(
+              "rounded-2xl border border-line bg-surface-sunken/50 p-3.5",
+              !expandida && indice >= limiteMobile && "hidden",
+            )}
+          >
             <p className="text-sm font-semibold text-ink">
               {String(row[colunaPrincipal.key] ?? "—")}
             </p>
@@ -210,6 +240,30 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
           </tbody>
         </table>
       </div>
+
+      {temMais ? (
+        <button
+          type="button"
+          onClick={() => setExpandida((atual) => !atual)}
+          aria-expanded={expandida}
+          className={cn(
+            "mt-3 w-full rounded-full border border-line-strong bg-surface px-4 py-2",
+            "text-xs font-medium text-ink-secondary",
+            "transition-colors duration-[var(--duration-fast)] hover:bg-surface-sunken hover:text-ink",
+            // Entre o corte do celular e o do desktop, só o celular tem o que esconder.
+            rows.length <= limite && "md:hidden",
+          )}
+        >
+          <span className="md:hidden">
+            {expandida ? `Mostrar apenas ${limiteMobile}` : `Ver todas as ${rows.length}`}
+          </span>
+          <span className="hidden md:inline">
+            {expandida
+              ? `Mostrar apenas ${limite}`
+              : `Ver todas as ${rows.length} linhas (+${rows.length - limite})`}
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }

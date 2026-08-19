@@ -68,6 +68,12 @@ export interface TableBlock {
   description?: string;
   columns: TableColumn[];
   rows: Array<Record<string, string | number>>;
+  /**
+   * Quantas linhas aparecem antes do "Ver todas". Uma tabela de 34 palavras-chave
+   * empurra o resto da tela para fora da rolagem e ninguém lê da décima em
+   * diante — mas o dado continua a um clique. Padrão: `LINHAS_VISIVEIS_PADRAO`.
+   */
+  initialRows?: number;
 }
 
 export interface ChannelReport {

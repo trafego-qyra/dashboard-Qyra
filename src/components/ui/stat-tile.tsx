@@ -23,7 +23,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface",
+        "group relative @container overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface",
         "p-4 sm:p-5",
         "transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out-soft)]",
         "hover:border-line-strong hover:shadow-[0_8px_28px_-20px_rgba(47,37,53,0.4)]",
@@ -51,12 +51,14 @@ export function StatTile({
         ) : null}
       </div>
 
-      {/* O valor escala com o container: moeda longa (R$ 1.234.567,89) não pode
-          estourar a borda nem quebrar em duas linhas dentro do tile. */}
+      {/* O valor escala com a largura do próprio tile (`cqw`), não com a da
+          janela. Com `vw` a fonte ignorava quantos KPIs dividem a linha: nove
+          indicadores em 1440px estreitam o tile, e "R$ 18.783,83" era cortado
+          pelo `overflow-hidden` acima. */}
       <p
         className={cn(
           "mt-3 font-semibold tracking-tight text-ink",
-          emphasis ? "text-[clamp(1.5rem,2.4vw,2.25rem)]" : "text-[clamp(1.25rem,1.6vw,1.5rem)]",
+          emphasis ? "text-[clamp(1.25rem,11cqw,2.25rem)]" : "text-[clamp(1.125rem,9cqw,1.5rem)]",
         )}
       >
         {formatMetric(kpi.value, kpi.format)}
