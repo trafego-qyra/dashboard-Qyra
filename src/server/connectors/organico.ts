@@ -90,7 +90,7 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
     return report;
   }
 
-  const accountId = (env.META_IG_USER_ID ?? env.META_PAGE_ID) as string;
+  const accountId = env.META_IG_USER_ID as string;
   const notices: string[] = [];
 
   const chunks = chunkRange(range);
