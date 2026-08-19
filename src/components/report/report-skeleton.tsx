@@ -14,11 +14,8 @@ export function ReportSkeleton({ tables = 1 }: { tables?: number }) {
         <Skeleton className="h-4 w-96 max-w-full" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <div className="sm:col-span-2 xl:col-span-2">
-          <StatTileSkeleton />
-        </div>
-        {Array.from({ length: 4 }, (_, i) => (
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">
+        {Array.from({ length: 5 }, (_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: placeholder estático sem identidade
           <StatTileSkeleton key={i} />
         ))}

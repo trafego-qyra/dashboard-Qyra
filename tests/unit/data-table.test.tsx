@@ -21,7 +21,17 @@ const BLOCK: TableBlock = {
 describe("DataTable", () => {
   it("renderiza os valores já formatados", () => {
     render(<DataTable block={BLOCK} />);
-    expect(screen.getByText(/300,00/)).toBeInTheDocument();
+    // Duas apresentações do mesmo dado: a tabela para telas largas e a lista de
+    // cartões para o celular. Só uma fica visível por vez, via CSS.
+    expect(screen.getAllByText(/300,00/).length).toBeGreaterThan(0);
+  });
+
+  it("expõe cada linha também como cartão, para leitura no celular", () => {
+    render(<DataTable block={BLOCK} />);
+
+    // A versão em cartão usa lista de definição: rótulo e valor empilhados.
+    const rotulos = screen.getAllByText("Investimento");
+    expect(rotulos.length).toBeGreaterThanOrEqual(2);
   });
 
   it("ordena por coluna e marca a direção para leitores de tela", async () => {

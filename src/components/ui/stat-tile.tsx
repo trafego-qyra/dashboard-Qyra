@@ -23,12 +23,19 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "group rounded-[var(--radius-card)] border border-line bg-surface p-5",
+        "group relative overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface",
+        "p-4 sm:p-5",
         "transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out-soft)]",
         "hover:border-line-strong hover:shadow-[0_8px_28px_-20px_rgba(47,37,53,0.4)]",
         className,
       )}
     >
+      {/* O indicador principal se distingue por um acento da marca, não por
+          ocupar mais colunas: span quebra a grade quando a contagem de KPIs
+          muda, e deixa um tile órfão na última linha. */}
+      {emphasis ? (
+        <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] bg-accent" />
+      ) : null}
       <div className="flex items-center gap-1.5">
         <p className="text-xs font-medium text-ink-secondary">{kpi.label}</p>
         {kpi.hint ? (

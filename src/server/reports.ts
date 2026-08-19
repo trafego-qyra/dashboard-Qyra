@@ -71,6 +71,12 @@ export async function getChannelReport(
   const report = await cached(cacheKey(channel, range), () => FETCHERS[channel](range));
   if (!compare) return report;
 
+  // Relatório de período fixo não tem janela anterior: comparar o export com
+  // ele mesmo devolve 0% e a tela exibe "estável", que sugere uma medição de
+  // estabilidade que não existe. Sem comparação, o indicador diz "sem base" —
+  // que é a verdade.
+  if (report.source === "snapshot") return report;
+
   try {
     const prevRange = previousRange(range);
     const previous = await cached(cacheKey(channel, prevRange), () => FETCHERS[channel](prevRange));
@@ -120,12 +126,17 @@ async function collectTotals(range: DateRange) {
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label: getChannel(r.channel).label,
+      label:
+        r.report.source === "snapshot"
+          ? `${getChannel(r.channel).label} · período fixo`
+          : getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
       source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
-      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+      // Sem `clicks` no fallback: clique não é alcance nem sessão, e sob um
+      // rótulo comum o número engana. Canal sem a métrica mostra "—".
+      sessions: pickTotal(r.report, ["sessions", "reach"]),
     }));
 
   const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
@@ -155,12 +166,17 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label: getChannel(r.channel).label,
+      label:
+        r.report.source === "snapshot"
+          ? `${getChannel(r.channel).label} · período fixo`
+          : getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
       source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
       conversions: pickTotal(r.report, ["leads", "conversions", "engagement"]),
-      sessions: pickTotal(r.report, ["sessions", "reach", "clicks"]),
+      // Sem `clicks` no fallback: clique não é alcance nem sessão, e sob um
+      // rótulo comum o número engana. Canal sem a métrica mostra "—".
+      sessions: pickTotal(r.report, ["sessions", "reach"]),
     }));
 
   // Canal em período fixo não entra no consolidado: somar 14 dias de um export

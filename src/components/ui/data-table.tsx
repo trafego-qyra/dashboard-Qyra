@@ -51,77 +51,117 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
     );
   }
 
+  const colunaPrincipal = block.columns[0];
+  const demaisColunas = block.columns.slice(1);
+
   return (
-    <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
-        <caption className="sr-only">{block.title}</caption>
-        <thead>
-          <tr className="border-b border-line">
-            {block.columns.map((column) => {
-              const isSorted = sort?.key === column.key;
-              const align = column.align ?? (column.format ? "right" : "left");
-              return (
-                <th
-                  key={column.key}
-                  scope="col"
-                  aria-sort={isSorted ? (sort.desc ? "descending" : "ascending") : "none"}
-                  className={cn(
-                    "px-3 py-2.5 text-xs font-medium text-ink-muted",
-                    align === "right" ? "text-right" : "text-left",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggle(column.key)}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded transition-colors",
-                      "hover:text-ink",
-                      align === "right" && "flex-row-reverse",
-                    )}
-                  >
-                    {column.label}
-                    {isSorted ? (
-                      sort.desc ? (
-                        <ArrowDown className="size-3" aria-hidden="true" />
-                      ) : (
-                        <ArrowUp className="size-3" aria-hidden="true" />
-                      )
-                    ) : null}
-                  </button>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {keyed.map(({ row, key }) => (
-            <tr
-              key={key}
-              className="border-b border-line/60 transition-colors duration-[var(--duration-fast)] last:border-0 hover:bg-surface-sunken/70"
-            >
+    <div className={className}>
+      {/* Abaixo de `md` a tabela vira lista de cartões.
+          Tabela de 6 colunas em 390px de largura é ilegível: ou o texto encolhe
+          além do aceitável, ou a rolagem horizontal esconde justamente as
+          colunas de valor. O cartão empilha rótulo e valor, e é o que torna a
+          tela útil no celular — que é onde gestor e cliente abrem o relatório. */}
+      <ul className="space-y-2 md:hidden">
+        {keyed.map(({ row, key }) => (
+          <li key={key} className="rounded-2xl border border-line bg-surface-sunken/50 p-3.5">
+            <p className="text-sm font-semibold text-ink">
+              {String(row[colunaPrincipal.key] ?? "—")}
+            </p>
+            <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2">
+              {demaisColunas.map((coluna) => {
+                const valor = row[coluna.key];
+                return (
+                  <div key={coluna.key} className="min-w-0">
+                    <dt className="text-[11px] leading-tight text-ink-muted">{coluna.label}</dt>
+                    <dd
+                      className={cn(
+                        "truncate text-sm text-ink",
+                        coluna.format ? "tabular font-medium" : "",
+                      )}
+                    >
+                      {coluna.format && typeof valor === "number"
+                        ? formatMetric(valor, coluna.format)
+                        : String(valor ?? "—")}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <caption className="sr-only">{block.title}</caption>
+          <thead>
+            <tr className="border-b border-line">
               {block.columns.map((column) => {
-                const value = row[column.key];
+                const isSorted = sort?.key === column.key;
                 const align = column.align ?? (column.format ? "right" : "left");
                 return (
-                  <td
+                  <th
                     key={column.key}
+                    scope="col"
+                    aria-sort={isSorted ? (sort.desc ? "descending" : "ascending") : "none"}
                     className={cn(
-                      "px-3 py-2.5 text-ink-secondary",
-                      align === "right" ? "text-right tabular" : "text-left",
-                      column.align === "left" && "max-w-[22rem] truncate text-ink",
+                      "px-3 py-2.5 text-xs font-medium text-ink-muted",
+                      align === "right" ? "text-right" : "text-left",
                     )}
-                    title={typeof value === "string" ? value : undefined}
                   >
-                    {column.format && typeof value === "number"
-                      ? formatMetric(value, column.format)
-                      : String(value ?? "—")}
-                  </td>
+                    <button
+                      type="button"
+                      onClick={() => toggle(column.key)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded transition-colors",
+                        "hover:text-ink",
+                        align === "right" && "flex-row-reverse",
+                      )}
+                    >
+                      {column.label}
+                      {isSorted ? (
+                        sort.desc ? (
+                          <ArrowDown className="size-3" aria-hidden="true" />
+                        ) : (
+                          <ArrowUp className="size-3" aria-hidden="true" />
+                        )
+                      ) : null}
+                    </button>
+                  </th>
                 );
               })}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {keyed.map(({ row, key }) => (
+              <tr
+                key={key}
+                className="border-b border-line/60 transition-colors duration-[var(--duration-fast)] last:border-0 hover:bg-surface-sunken/70"
+              >
+                {block.columns.map((column) => {
+                  const value = row[column.key];
+                  const align = column.align ?? (column.format ? "right" : "left");
+                  return (
+                    <td
+                      key={column.key}
+                      className={cn(
+                        "px-3 py-2.5 text-ink-secondary",
+                        align === "right" ? "text-right tabular" : "text-left",
+                        column.align === "left" && "max-w-[22rem] truncate text-ink",
+                      )}
+                      title={typeof value === "string" ? value : undefined}
+                    >
+                      {column.format && typeof value === "number"
+                        ? formatMetric(value, column.format)
+                        : String(value ?? "—")}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
