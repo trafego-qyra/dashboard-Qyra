@@ -109,7 +109,15 @@ describe("snapshot do Google Ads", () => {
     expect(soma).toBeCloseTo(285.12, 1);
   });
 
-  it("avisa que o período é fixo e não acompanha o filtro", () => {
-    expect(report.notices.map((n) => n.text).join(" ")).toMatch(/período próprio|periodo próprio/i);
+  it("carrega o período no relatório, para o cabeçalho estampar", () => {
+    // O aviso em faixa saiu — repetia o que o cabeçalho já diz e roubava a
+    // primeira dobra. `periodLabel` é o que sobrou carregando a informação, e
+    // sem ele o cabeçalho mostra só "Período fixo", sem o intervalo.
+    expect(report.source).toBe("snapshot");
+    expect(report.periodLabel).toMatch(/agosto de 2026/);
+  });
+
+  it("não emite aviso em faixa", () => {
+    expect(report.notices).toEqual([]);
   });
 });

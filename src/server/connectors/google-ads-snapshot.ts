@@ -1,4 +1,3 @@
-import { avisoCliente } from "@/lib/avisos";
 import "server-only";
 
 import { GOOGLE_ADS_SNAPSHOT as S } from "@/data/google-ads-snapshot";
@@ -174,12 +173,9 @@ export function buildGoogleAdsSnapshotReport(
       },
     ],
 
-    notices: [
-      // Cliente: explica por que o filtro de data não move este canal. Sem
-      // isso, quem troca o período e vê o mesmo número acha que travou.
-      avisoCliente(
-        `Números reais exportados do Google Ads, referentes a ${S.periodoRotulo} (14 dias). Este canal tem período próprio e não acompanha o filtro de datas acima.`,
-      ),
-    ],
+    // Sem aviso: o cabeçalho da tela já estampa "Período fixo · <intervalo>", e
+    // no resumo por canal o rótulo sai como "Google Ads · período fixo". Uma
+    // faixa amarela repetindo isso só rouba a primeira dobra.
+    notices: [],
   };
 }
