@@ -100,8 +100,15 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
     }),
     runReport({
       dateRanges,
-      dimensions: [{ name: "pagePath" }],
-      metrics: [{ name: "screenPageViews" }, { name: "averageSessionDuration" }],
+      // `pagePath` sozinho devolve "/plano", "/", "/blog/artigo-3" — endereço,
+      // não nome. O título é o que a pessoa lendo o relatório reconhece.
+      dimensions: [{ name: "pageTitle" }, { name: "pagePath" }],
+      // `averageSessionDuration` é métrica de sessão: cruzada com página, ela
+      // devolve a duração das sessões que passaram por ali, não o tempo gasto
+      // naquela página. Era por isso que o número não fechava com o indicador
+      // do topo. `userEngagementDuration` dividido por visualizações é o tempo
+      // de engajamento por visualização, que é o que a coluna promete.
+      metrics: [{ name: "screenPageViews" }, { name: "userEngagementDuration" }],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 15,
     }),
@@ -155,7 +162,10 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       sessions: acc.sessions + Number(p.sessions),
       users: acc.users + Number(p.users),
       conversions: acc.conversions + Number(p.conversions),
-      duration: acc.duration + Number(p.avgDuration),
+      // Duração é média por sessão, e média não se soma. Reconstruindo o tempo
+      // total do dia (média x sessões) a soma volta a ser exata: um dia com 2
+      // sessões deixa de pesar igual a um dia com 200.
+      duration: acc.duration + Number(p.avgDuration) * Number(p.sessions),
     }),
     { sessions: 0, users: 0, conversions: 0, duration: 0 },
   );
@@ -179,8 +189,9 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       {
         key: "avgDuration",
         label: "Duração média",
-        value: series.length === 0 ? 0 : totals.duration / series.length,
+        value: totals.sessions === 0 ? 0 : totals.duration / totals.sessions,
         format: "duration",
+        hint: "Tempo médio por sessão no período, ponderado pelo volume de cada dia — não é a média das médias diárias.",
       },
     ],
     series,
@@ -238,16 +249,28 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       },
       {
         title: "Páginas mais vistas",
+        description:
+          "Tempo é de engajamento por visualização — quanto a pessoa passou naquela página, não quanto durou a sessão inteira dela.",
         columns: [
           { key: "page", label: "Página", align: "left" },
+          { key: "path", label: "Endereço", align: "left" },
           { key: "views", label: "Visualizações", format: "integer", align: "right" },
           { key: "avgDuration", label: "Tempo médio", format: "duration", align: "right" },
         ],
-        rows: (byPage.rows ?? []).map((row) => ({
-          page: row.dimensionValues?.[0]?.value ?? "—",
-          views: num(row.metricValues?.[0]?.value),
-          avgDuration: num(row.metricValues?.[1]?.value),
-        })),
+        rows: (byPage.rows ?? []).map((row) => {
+          const views = num(row.metricValues?.[0]?.value);
+          const engajamento = num(row.metricValues?.[1]?.value);
+          const titulo = row.dimensionValues?.[0]?.value?.trim();
+          const caminho = row.dimensionValues?.[1]?.value ?? "—";
+          return {
+            // Página sem título cai no endereço: melhor um "/plano" do que um
+            // travessão que não diz nada.
+            page: titulo || caminho,
+            path: caminho,
+            views,
+            avgDuration: views === 0 ? 0 : engajamento / views,
+          };
+        }),
       },
     ],
     notices: [],

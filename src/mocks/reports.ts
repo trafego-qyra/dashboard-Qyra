@@ -527,13 +527,23 @@ export function mockGa4(range: DateRange, fetchedAt = NOW): ChannelReport {
       },
       {
         title: "Páginas mais vistas",
+        description:
+          "Tempo é de engajamento por visualização — quanto a pessoa passou naquela página, não quanto durou a sessão inteira dela.",
         columns: [
           { key: "page", label: "Página", align: "left" },
+          { key: "path", label: "Endereço", align: "left" },
           { key: "views", label: "Visualizações", format: "integer", align: "right" },
           { key: "avgDuration", label: "Tempo médio", format: "duration", align: "right" },
         ],
-        rows: ["/", "/planos", "/terapia-injetavel", "/agendar", "/sobre"].map((page, i) => ({
+        rows: [
+          ["Qyra — Sua melhor versão começa agora", "/"],
+          ["Planos e preços", "/planos"],
+          ["Terapia injetável para emagrecimento", "/terapia-injetavel"],
+          ["Agendar consulta", "/agendar"],
+          ["Sobre a Qyra", "/sobre"],
+        ].map(([page, path], i) => ({
           page,
+          path,
           views: Math.round(sessions * [0.42, 0.21, 0.16, 0.13, 0.08][i]),
           avgDuration: 60 + noise(`ga4:pg:${i}`) * 180,
         })),
