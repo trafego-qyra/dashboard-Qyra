@@ -25,6 +25,13 @@ const CONFIGURAVEIS = [
   "GOOGLE_REFRESH_TOKEN",
   "GOOGLE_ADS_DEVELOPER_TOKEN",
   "GOOGLE_ADS_CUSTOMER_ID",
+  // Opcionais, mas invisíveis se não estiverem aqui: quem cadastra não tem
+  // como confirmar que colaram, e ficam fora tanto de "presentes" quanto de
+  // "ausentes". Ausência é legítima nas duas — a de login só é necessária
+  // quando o acesso é via conta gerente, e a de versão só para fixar o que o
+  // conector já descobre sozinho.
+  "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+  "GOOGLE_ADS_API_VERSION",
   "GA4_PROPERTY_ID",
   "QYRA_FORCE_MOCK",
 ] as const;
