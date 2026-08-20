@@ -202,6 +202,8 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
           name: nome as string,
           campaign: campanha as string,
           imageUrl: arteDeDemonstracao(i),
+          link: "https://www.facebook.com/ads/library/",
+          linkLabel: "Ver anúncio",
           spend: Math.round(s * 100) / 100,
           impressions: impr,
           ctr: 0.006 + noise(`meta-ctr-criativo-${i}`) * 0.038,
@@ -648,6 +650,18 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
         title: titulo,
         subtitle: legenda,
         imageUrl: arteDeDemonstracao(i + 2),
+        link: "https://www.instagram.com/qyra.saude/",
+        linkLabel: "Ver no Instagram",
+        // Reels tem vídeo; publicação estática não.
+        video: (legenda as string).startsWith("Reels")
+          ? {
+              reproducoes: Math.round(r * 0.72),
+              p25: 0.44,
+              p50: 0.26,
+              p75: 0.15,
+              p100: 0.08,
+            }
+          : undefined,
         metrics: [
           { label: "Alcance", value: r, format: "integer" as const },
           { label: "Interações", value: e, format: "integer" as const },
@@ -660,7 +674,7 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
     creativesLabel: {
       title: "Publicações com melhor desempenho",
       description:
-        "Ordenadas por interações. Clique no título para abrir a publicação no Instagram.",
+        "Ordenadas por interações. O botão em cada cartão abre a publicação no Instagram.",
     },
     tables: [],
     notices: [],
