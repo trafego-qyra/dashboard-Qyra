@@ -564,3 +564,100 @@ describe("Google Ads — token aguardando aprovação", () => {
     expect(report.notices[0].text).toMatch(/oculto/);
   });
 });
+
+describe("GA4 — origem das visitas por UTM", () => {
+  it("pede a origem crua, não só o agrupamento padrão", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    const corpos: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        corpos.push(String(init?.body ?? ""));
+        return new Response(JSON.stringify({ rows: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    await fetchGa4Report(RANGE);
+
+    // `sessionDefaultChannelGroup` joga Instagram e LinkedIn no mesmo balde.
+    // Sem estas três dimensões, a UTM que a equipe monta no post não aparece
+    // em lugar nenhum do painel.
+    const pedidos = corpos.join(" ");
+    expect(pedidos).toContain("sessionSource");
+    expect(pedidos).toContain("sessionMedium");
+    expect(pedidos).toContain("sessionCampaignName");
+  });
+
+  it("traduz os marcadores do GA4 em vez de mostrar (not set)", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        const corpo = String(init?.body ?? "");
+        if (!corpo.includes("sessionCampaignName")) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            rows: [
+              {
+                dimensionValues: [
+                  { value: "instagram" },
+                  { value: "social" },
+                  { value: "bio-agosto" },
+                ],
+                metricValues: [{ value: "50" }, { value: "5" }],
+              },
+              {
+                dimensionValues: [
+                  { value: "(direct)" },
+                  { value: "(none)" },
+                  { value: "(not set)" },
+                ],
+                metricValues: [{ value: "20" }, { value: "0" }],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    const report = await fetchGa4Report(RANGE);
+    const tabela = report.tables.find((t) => t.title === "Origem das visitas");
+
+    expect(tabela?.rows[0]).toMatchObject({
+      origem: "instagram / social",
+      campanha: "bio-agosto",
+      sessions: 50,
+      rate: 0.1,
+    });
+    // "(not set)" na tela do cliente parece defeito, não ausência de UTM.
+    expect(JSON.stringify(tabela?.rows)).not.toMatch(/\(not set\)|\(direct\)|\(none\)/);
+    expect(tabela?.rows[1]).toMatchObject({ origem: "direto / sem mídia" });
+  });
+});

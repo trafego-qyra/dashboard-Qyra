@@ -25,6 +25,23 @@ function num(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * O GA4 devolve marcadores próprios para tráfego sem UTM. Traduzir aqui evita
+ * que "(not set)" apareça na tela do cliente parecendo defeito.
+ */
+const ROTULO_DE_ORIGEM: Record<string, string> = {
+  "(not set)": "não informado",
+  "(direct)": "direto",
+  "(none)": "sem mídia",
+  "(organic)": "orgânico",
+};
+
+function rotularOrigem(valor: string | undefined): string {
+  const bruto = valor?.trim();
+  if (!bruto) return "não informado";
+  return ROTULO_DE_ORIGEM[bruto] ?? bruto;
+}
+
 async function runReport(body: unknown): Promise<RunReportResponse> {
   const env = getEnv();
   const token = await getGoogleAccessToken();
@@ -60,7 +77,7 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
 
   const dateRanges = [{ startDate: range.from, endDate: range.to }];
 
-  const [daily, byChannel, byPage] = await Promise.all([
+  const [daily, byChannel, byPage, byUtm] = await Promise.all([
     runReport({
       dateRanges,
       dimensions: [{ name: "date" }],
@@ -87,6 +104,21 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       metrics: [{ name: "screenPageViews" }, { name: "averageSessionDuration" }],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 15,
+    }),
+    // O agrupamento padrão do GA4 joga todo link de rede social no mesmo balde.
+    // Para saber qual post trouxe visita é preciso a origem crua: é o que a
+    // UTM carrega, e é o único jeito de separar Instagram de LinkedIn, e um
+    // post do outro dentro da mesma rede.
+    runReport({
+      dateRanges,
+      dimensions: [
+        { name: "sessionSource" },
+        { name: "sessionMedium" },
+        { name: "sessionCampaignName" },
+      ],
+      metrics: [{ name: "sessions" }, { name: "conversions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 40,
     }),
   ]);
 
@@ -166,6 +198,31 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
           const conversions = num(row.metricValues?.[1]?.value);
           return {
             channel: row.dimensionValues?.[0]?.value ?? "—",
+            sessions,
+            conversions,
+            rate: sessions === 0 ? 0 : conversions / sessions,
+          };
+        }),
+      },
+      {
+        title: "Origem das visitas",
+        description:
+          "De onde a sessão veio, pela UTM do link. É aqui que se vê qual post de Instagram ou LinkedIn trouxe gente — o agrupamento acima junta tudo num balde só.",
+        columns: [
+          { key: "origem", label: "Origem / mídia", align: "left" },
+          { key: "campanha", label: "Campanha", align: "left" },
+          { key: "sessions", label: "Sessões", format: "integer", align: "right" },
+          { key: "conversions", label: "Conversões", format: "integer", align: "right" },
+          { key: "rate", label: "Taxa de conversão", format: "percent", align: "right" },
+        ],
+        rows: (byUtm.rows ?? []).map((row) => {
+          const sessions = num(row.metricValues?.[0]?.value);
+          const conversions = num(row.metricValues?.[1]?.value);
+          const origem = rotularOrigem(row.dimensionValues?.[0]?.value);
+          const midia = rotularOrigem(row.dimensionValues?.[1]?.value);
+          return {
+            origem: `${origem} / ${midia}`,
+            campanha: rotularOrigem(row.dimensionValues?.[2]?.value),
             sessions,
             conversions,
             rate: sessions === 0 ? 0 : conversions / sessions,

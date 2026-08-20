@@ -489,6 +489,38 @@ export function mockGa4(range: DateRange, fetchedAt = NOW): ChannelReport {
         }),
       },
       {
+        title: "Origem das visitas",
+        description:
+          "De onde a sessão veio, pela UTM do link. É aqui que se vê qual post de Instagram ou LinkedIn trouxe gente — o agrupamento acima junta tudo num balde só.",
+        columns: [
+          { key: "origem", label: "Origem / mídia", align: "left" },
+          { key: "campanha", label: "Campanha", align: "left" },
+          { key: "sessions", label: "Sessões", format: "integer", align: "right" },
+          { key: "conversions", label: "Conversões", format: "integer", align: "right" },
+          { key: "rate", label: "Taxa de conversão", format: "percent", align: "right" },
+        ],
+        rows: [
+          ["instagram / social", "bio-agosto", 0.14, 0.16],
+          ["instagram / social", "post-emagrecimento-12ago", 0.11, 0.13],
+          ["facebook / cpc", "conversao-broad", 0.19, 0.22],
+          ["linkedin / social", "artigo-terapia-injetavel", 0.08, 0.09],
+          ["google / cpc", "search-intencao", 0.16, 0.18],
+          ["google / organic", "não informado", 0.13, 0.07],
+          ["linkedin / social", "vaga-institucional", 0.04, 0.02],
+          ["direto / sem mídia", "não informado", 0.15, 0.13],
+        ].map(([origem, campanha, fs, fc]) => {
+          const se = Math.round(sessions * (fs as number));
+          const co = Math.round(conversions * (fc as number));
+          return {
+            origem: origem as string,
+            campanha: campanha as string,
+            sessions: se,
+            conversions: co,
+            rate: safeDiv(co, se),
+          };
+        }),
+      },
+      {
         title: "Páginas mais vistas",
         columns: [
           { key: "page", label: "Página", align: "left" },
