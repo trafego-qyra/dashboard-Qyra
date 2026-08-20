@@ -138,7 +138,21 @@ function somarAcoes(acoes: AcoesDaMeta | undefined): number {
 }
 
 interface AdsEdgeResponse {
-  data?: Array<{ id: string; preview_shareable_link?: string }>;
+  data?: Array<{
+    id: string;
+    creative?: {
+      /** URL pública do post no Instagram, quando o anúncio roda de um post. */
+      instagram_permalink_url?: string;
+      /** `{page_id}_{post_id}` — vira a URL pública do post no Facebook. */
+      effective_object_story_id?: string;
+    };
+  }>;
+}
+
+/** Link visível para quem abre o relatório, com o rótulo certo. */
+interface LinkDaPeca {
+  url: string;
+  label: string;
 }
 
 /**
@@ -147,30 +161,60 @@ interface AdsEdgeResponse {
  * A Insights não devolve isso — é a borda `/ads` da conta. Enriquecimento
  * puro: sem ele o cartão continua completo, só não abre a peça.
  */
-async function buscarLinksDeAnuncio(): Promise<Map<string, string>> {
+/**
+ * `{page_id}_{post_id}` -> URL pública do post no Facebook.
+ *
+ * A Meta devolve os dois IDs colados. Post de página é público, então o link
+ * abre para qualquer pessoa.
+ */
+function urlDoPostNoFacebook(storyId: string | undefined): string | null {
+  const partes = storyId?.split("_");
+  if (partes?.length !== 2 || !partes[0] || !partes[1]) return null;
+  return `https://www.facebook.com/${partes[0]}/posts/${partes[1]}`;
+}
+
+/**
+ * Link público de cada anúncio, por ID.
+ *
+ * `preview_shareable_link` foi descartado de propósito: ele exige estar logado
+ * numa conta com acesso à conta de anúncios, e para quem abre o relatório vira
+ * uma tela de login. Botão que não leva a lugar nenhum é pior que botão
+ * nenhum — um anúncio sem peça pública simplesmente não ganha botão.
+ */
+async function buscarLinksDeAnuncio(): Promise<Map<string, LinkDaPeca>> {
   const env = getEnv();
   const url = new URL(
     `https://graph.facebook.com/${env.META_API_VERSION}/act_${(env.META_AD_ACCOUNT_ID as string).replace(/^act_/, "")}/ads`,
   );
-  url.searchParams.set("fields", "id,preview_shareable_link");
+  url.searchParams.set("fields", "id,creative{instagram_permalink_url,effective_object_story_id}");
   url.searchParams.set("limit", "200");
 
   try {
     const resposta = await httpJson<AdsEdgeResponse>(url.toString(), {
       headers: metaAuthHeaders(env.META_ACCESS_TOKEN as string),
     });
-    return new Map(
-      (resposta.data ?? [])
-        .filter((a) => a.preview_shareable_link)
-        .map((a) => [a.id, a.preview_shareable_link as string]),
-    );
+
+    const mapa = new Map<string, LinkDaPeca>();
+    for (const anuncio of resposta.data ?? []) {
+      const instagram = anuncio.creative?.instagram_permalink_url;
+      if (instagram) {
+        mapa.set(anuncio.id, { url: instagram, label: "Ver no Instagram" });
+        continue;
+      }
+      const facebook = urlDoPostNoFacebook(anuncio.creative?.effective_object_story_id);
+      if (facebook) mapa.set(anuncio.id, { url: facebook, label: "Ver publicação" });
+    }
+    return mapa;
   } catch {
     return new Map();
   }
 }
 
 /** Monta os cartões de anúncio. A ordem vem de `ordenarCriativos`. */
-function montarCriativos(porAnuncio: MetaInsightsRow[], links: Map<string, string>): ContentCard[] {
+function montarCriativos(
+  porAnuncio: MetaInsightsRow[],
+  links: Map<string, LinkDaPeca>,
+): ContentCard[] {
   const cartoes = porAnuncio.map((row) => {
     const spend = num(row.spend);
     const impressions = num(row.impressions);
@@ -210,8 +254,8 @@ function montarCriativos(porAnuncio: MetaInsightsRow[], links: Map<string, strin
       title: c.name,
       subtitle: c.campaign,
       imageUrl: c.id ? `/criativos/${c.id}/imagem` : undefined,
-      link: links.get(c.id),
-      linkLabel: "Ver anúncio",
+      link: links.get(c.id)?.url,
+      linkLabel: links.get(c.id)?.label,
       metrics: [
         { label: "Investimento", value: c.spend, format: "currency" as const },
         { label: "Leads", value: c.leads, format: "integer" as const },
