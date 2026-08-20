@@ -391,7 +391,9 @@ describe("Orgânico", () => {
 
     const insightCalls: string[] = [];
     mockFetch((url) => {
-      if (url.includes("/insights")) {
+      // Só a consulta diária conta janela: a do alcance deduplicado
+      // (`total_value`) acompanha os mesmos blocos e dobraria a contagem.
+      if (url.includes("/insights") && !url.includes("metric_type=total_value")) {
         insightCalls.push(url);
         return { data: [{ name: "reach", period: "day", values: [] }] };
       }

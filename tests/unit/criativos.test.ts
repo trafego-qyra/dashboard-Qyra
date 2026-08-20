@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { ordenarCriativos } from "@/lib/criativos";
-import type { CreativeCard } from "@/lib/types";
+import { type AdCreative, ordenarCriativos } from "@/lib/criativos";
 
-function criativo(parcial: Partial<CreativeCard> & { name: string }): CreativeCard {
+function criativo(parcial: Partial<AdCreative> & { name: string }): AdCreative {
   return {
     id: parcial.name,
     spend: 0,
     impressions: 0,
     ctr: 0,
     cpm: 0,
+    linkClicks: 0,
     leads: 0,
     cpl: 0,
     ...parcial,

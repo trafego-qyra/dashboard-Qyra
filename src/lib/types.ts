@@ -77,28 +77,29 @@ export interface TableBlock {
 }
 
 /**
- * Um anúncio, com a arte. Numa reunião a primeira pergunta depois de "quanto
- * gastou" é "qual criativo puxou isso" — e a resposta é visual.
+ * Uma peça de conteúdo com a arte e alguns números — anúncio ou publicação.
+ *
+ * É modelo de tela, não de domínio: cada conector calcula as métricas que
+ * fazem sentido para ele e as entrega já rotuladas e formatadas. Anúncio fala
+ * em investimento e CPL, publicação fala em alcance e comentários; forçar os
+ * dois no mesmo conjunto de campos deixaria metade vazia dos dois lados.
  */
-export interface CreativeCard {
-  /** ID do anúncio na Meta. É o que o proxy de imagem usa para achar a arte. */
+export interface ContentCard {
   id: string;
-  name: string;
-  campaign?: string;
+  title: string;
+  /** Campanha, no anúncio. Data da publicação, no orgânico. */
+  subtitle?: string;
   /**
    * Caminho no próprio domínio. A arte nunca é linkada direto do CDN da Meta:
    * a URL de lá carrega token assinado na query, e a CSP do painel não abre
    * para host de terceiro.
    */
   imageUrl?: string;
-  spend: number;
-  impressions: number;
-  ctr: number;
-  cpm: number;
-  leads: number;
-  cpl: number;
+  /** Endereço público da peça, quando existe. Abre em nova aba. */
+  link?: string;
+  metrics: Array<{ label: string; value: number; format: MetricFormat }>;
   /**
-   * Retenção deste anúncio, quando ele é vídeo. Retenção agregada da conta não
+   * Retenção desta peça, quando é vídeo. Retenção agregada da conta não
    * responde a pergunta que importa — qual vídeo segura a atenção — porque a
    * média junta o que prende com o que é pulado no primeiro segundo.
    */
@@ -145,8 +146,14 @@ export interface ChannelReport {
   /** Período real dos dados, quando difere do intervalo pedido. */
   periodLabel?: string;
   tables: TableBlock[];
-  /** Anúncios com a arte, quando a origem fornece. Só o Meta Ads preenche. */
-  creatives?: CreativeCard[];
+  /** Peças com a arte, quando a origem fornece: anúncios ou publicações. */
+  creatives?: ContentCard[];
+  /**
+   * Como a seção de peças se chama e por que está nessa ordem. Quem monta os
+   * cartões é quem sabe o critério — a tela não tem como adivinhar se "melhor"
+   * significa custo por lead ou alcance.
+   */
+  creativesLabel?: { title: string; description: string };
   /** Avisos não-fatais: credencial ausente, métrica indisponível, etc. */
   notices: Notice[];
 }

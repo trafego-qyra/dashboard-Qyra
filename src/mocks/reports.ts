@@ -219,7 +219,25 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
             : undefined,
         };
       }),
-    ),
+    ).map((c) => ({
+      id: c.id,
+      title: c.name,
+      subtitle: c.campaign,
+      imageUrl: c.imageUrl,
+      metrics: [
+        { label: "Investimento", value: c.spend, format: "currency" as const },
+        { label: "Leads", value: c.leads, format: "integer" as const },
+        { label: "CPL", value: c.cpl, format: "currency" as const },
+        { label: "CTR", value: c.ctr, format: "percent" as const },
+        { label: "CPM", value: c.cpm, format: "currency" as const },
+        { label: "Impressões", value: c.impressions, format: "integer" as const },
+      ],
+      video: c.video,
+    })),
+    creativesLabel: {
+      title: "Melhores criativos",
+      description: "Ordenados por leads, desempatando pelo menor custo por lead.",
+    },
     tables: [
       {
         title: "Campanhas",
@@ -615,30 +633,36 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
       { key: "reach", label: "Alcance", format: "integer", slot: 1 },
       { key: "engagement", label: "Interações", format: "integer", slot: 2 },
     ],
-    tables: [
-      {
-        title: "Publicações com melhor desempenho",
-        description: "Instagram e Facebook, ordenadas por interações.",
-        columns: [
-          { key: "post", label: "Publicação", align: "left" },
-          { key: "rede", label: "Rede", align: "left" },
-          { key: "reach", label: "Alcance", format: "integer", align: "right" },
-          { key: "engagement", label: "Interações", format: "integer", align: "right" },
-          { key: "rate", label: "Engajamento", format: "percent", align: "right" },
+    creatives: [
+      ["Como funciona a terapia injetável", "Reels · 18/08/2026"],
+      ["5 mitos sobre emagrecimento que você ainda acredita", "Publicação · 15/08/2026"],
+      ["Bastidores da consulta", "Reels · 12/08/2026"],
+      ["Depoimento de paciente", "Publicação · 09/08/2026"],
+      ["Checklist do check-up anual", "Publicação · 06/08/2026"],
+    ].map(([titulo, legenda], i) => {
+      const r = Math.round(reach * [0.14, 0.11, 0.09, 0.06, 0.05][i]);
+      const e = Math.round(engagement * [0.19, 0.15, 0.12, 0.05, 0.07][i]);
+      const curtidas = Math.round(e * 0.84);
+      return {
+        id: `mock-post-${i}`,
+        title: titulo,
+        subtitle: legenda,
+        imageUrl: arteDeDemonstracao(i + 2),
+        metrics: [
+          { label: "Alcance", value: r, format: "integer" as const },
+          { label: "Interações", value: e, format: "integer" as const },
+          { label: "Curtidas", value: curtidas, format: "integer" as const },
+          { label: "Comentários", value: e - curtidas, format: "integer" as const },
+          { label: "Engajamento", value: safeDiv(e, r), format: "percent" as const },
         ],
-        rows: [
-          ["Reels | Como funciona a terapia injetável", "Instagram"],
-          ["Carrossel | 5 mitos sobre emagrecimento", "Instagram"],
-          ["Reels | Bastidores da consulta", "Instagram"],
-          ["Post | Depoimento de paciente", "Facebook"],
-          ["Carrossel | Checklist do check-up", "Instagram"],
-        ].map(([post, rede], i) => {
-          const r = Math.round(reach * [0.14, 0.11, 0.09, 0.06, 0.05][i]);
-          const e = Math.round(engagement * [0.19, 0.15, 0.12, 0.05, 0.07][i]);
-          return { post, rede, reach: r, engagement: e, rate: safeDiv(e, r) };
-        }),
-      },
-    ],
+      };
+    }),
+    creativesLabel: {
+      title: "Publicações com melhor desempenho",
+      description:
+        "Ordenadas por interações. Clique no título para abrir a publicação no Instagram.",
+    },
+    tables: [],
     notices: [],
   };
 }
