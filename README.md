@@ -105,6 +105,7 @@ contrato de contribuição — para pessoas e para agentes:
 | [`docs/design-system.md`](docs/design-system.md) | Tokens da marca, componentes, regras de gráfico |
 | [`docs/arquitetura.md`](docs/arquitetura.md) | Camadas, fluxo de dados, decisões |
 | [`docs/integracoes.md`](docs/integracoes.md) | Credenciais de cada plataforma |
+| [`docs/utm.md`](docs/utm.md) | Padrão de UTM dos links publicados |
 | [`docs/qualidade.md`](docs/qualidade.md) | Esteira, observabilidade, performance |
 | [`docs/deploy.md`](docs/deploy.md) | Vercel, ambientes, domínio |
 | [`docs/legal/`](docs/legal/) | Termos e privacidade (minuta, pendente de jurídico) |

@@ -491,29 +491,34 @@ export function mockGa4(range: DateRange, fetchedAt = NOW): ChannelReport {
       {
         title: "Origem das visitas",
         description:
-          "De onde a sessão veio, pela UTM do link. É aqui que se vê qual post de Instagram ou LinkedIn trouxe gente — o agrupamento acima junta tudo num balde só.",
+          "De onde a sessão veio, pela UTM do link. `utm_campaign` é o tema, `utm_content` é o post — é a segunda que separa um post do outro dentro do mesmo mês.",
         columns: [
           { key: "origem", label: "Origem / mídia", align: "left" },
           { key: "campanha", label: "Campanha", align: "left" },
+          { key: "conteudo", label: "Post / criativo", align: "left" },
           { key: "sessions", label: "Sessões", format: "integer", align: "right" },
           { key: "conversions", label: "Conversões", format: "integer", align: "right" },
           { key: "rate", label: "Taxa de conversão", format: "percent", align: "right" },
         ],
+        // Segue o padrão de UTM da Qyra: campanha é o tema do mês, conteúdo é
+        // o post. Dois posts do mesmo tema aparecem como linhas separadas.
         rows: [
-          ["instagram / social", "bio-agosto", 0.14, 0.16],
-          ["instagram / social", "post-emagrecimento-12ago", 0.11, 0.13],
-          ["facebook / cpc", "conversao-broad", 0.19, 0.22],
-          ["linkedin / social", "artigo-terapia-injetavel", 0.08, 0.09],
-          ["google / cpc", "search-intencao", 0.16, 0.18],
-          ["google / organic", "não informado", 0.13, 0.07],
-          ["linkedin / social", "vaga-institucional", 0.04, 0.02],
-          ["direto / sem mídia", "não informado", 0.15, 0.13],
-        ].map(([origem, campanha, fs, fc]) => {
+          ["linkedin / social", "institucional_ago", "post_caneta", 0.13, 0.15],
+          ["linkedin / social", "institucional_ago", "post_checkup", 0.07, 0.08],
+          ["instagram / social", "institucional_ago", "bio", 0.12, 0.14],
+          ["instagram / social", "emagrecimento_ago", "reels_antes_depois", 0.1, 0.12],
+          ["facebook / paid_social", "conversao_broad", "criativo_video15s", 0.16, 0.19],
+          ["linkedin / paid_social", "terapia_injetavel_ago", "criativo_estatico", 0.05, 0.05],
+          ["google / cpc", "search_intencao", "não informado", 0.15, 0.16],
+          ["google / organic", "não informado", "não informado", 0.11, 0.06],
+          ["direto / sem mídia", "não informado", "não informado", 0.11, 0.05],
+        ].map(([origem, campanha, conteudo, fs, fc]) => {
           const se = Math.round(sessions * (fs as number));
           const co = Math.round(conversions * (fc as number));
           return {
             origem: origem as string,
             campanha: campanha as string,
+            conteudo: conteudo as string,
             sessions: se,
             conversions: co,
             rate: safeDiv(co, se),

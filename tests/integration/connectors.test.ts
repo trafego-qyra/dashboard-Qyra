@@ -598,6 +598,9 @@ describe("GA4 — origem das visitas por UTM", () => {
     expect(pedidos).toContain("sessionSource");
     expect(pedidos).toContain("sessionMedium");
     expect(pedidos).toContain("sessionCampaignName");
+    // `utm_content` é o que separa um post do outro dentro do mesmo tema, no
+    // padrão de UTM em uso. Sem ele a tabela agrega o mês inteiro numa linha.
+    expect(pedidos).toContain("sessionManualAdContent");
   });
 
   it("traduz os marcadores do GA4 em vez de mostrar (not set)", async () => {
@@ -627,7 +630,8 @@ describe("GA4 — origem das visitas por UTM", () => {
                 dimensionValues: [
                   { value: "instagram" },
                   { value: "social" },
-                  { value: "bio-agosto" },
+                  { value: "institucional_ago" },
+                  { value: "post_caneta" },
                 ],
                 metricValues: [{ value: "50" }, { value: "5" }],
               },
@@ -635,6 +639,7 @@ describe("GA4 — origem das visitas por UTM", () => {
                 dimensionValues: [
                   { value: "(direct)" },
                   { value: "(none)" },
+                  { value: "(not set)" },
                   { value: "(not set)" },
                 ],
                 metricValues: [{ value: "20" }, { value: "0" }],
@@ -652,7 +657,8 @@ describe("GA4 — origem das visitas por UTM", () => {
 
     expect(tabela?.rows[0]).toMatchObject({
       origem: "instagram / social",
-      campanha: "bio-agosto",
+      campanha: "institucional_ago",
+      conteudo: "post_caneta",
       sessions: 50,
       rate: 0.1,
     });

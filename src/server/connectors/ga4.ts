@@ -115,6 +115,11 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
         { name: "sessionSource" },
         { name: "sessionMedium" },
         { name: "sessionCampaignName" },
+        // `utm_content` no padrão da Qyra identifica o post ou o criativo, e
+        // `utm_campaign` é o tema do mês. Sem esta dimensão, todos os posts de
+        // agosto colapsam numa linha "institucional_ago" só — justamente a
+        // granularidade que interessa para saber qual post trouxe gente.
+        { name: "sessionManualAdContent" },
       ],
       metrics: [{ name: "sessions" }, { name: "conversions" }],
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
@@ -207,10 +212,11 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       {
         title: "Origem das visitas",
         description:
-          "De onde a sessão veio, pela UTM do link. É aqui que se vê qual post de Instagram ou LinkedIn trouxe gente — o agrupamento acima junta tudo num balde só.",
+          "De onde a sessão veio, pela UTM do link. `utm_campaign` é o tema, `utm_content` é o post — é a segunda que separa um post do outro dentro do mesmo mês.",
         columns: [
           { key: "origem", label: "Origem / mídia", align: "left" },
           { key: "campanha", label: "Campanha", align: "left" },
+          { key: "conteudo", label: "Post / criativo", align: "left" },
           { key: "sessions", label: "Sessões", format: "integer", align: "right" },
           { key: "conversions", label: "Conversões", format: "integer", align: "right" },
           { key: "rate", label: "Taxa de conversão", format: "percent", align: "right" },
@@ -223,6 +229,7 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
           return {
             origem: `${origem} / ${midia}`,
             campanha: rotularOrigem(row.dimensionValues?.[2]?.value),
+            conteudo: rotularOrigem(row.dimensionValues?.[3]?.value),
             sessions,
             conversions,
             rate: sessions === 0 ? 0 : conversions / sessions,

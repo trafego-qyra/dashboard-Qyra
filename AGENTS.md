@@ -167,6 +167,7 @@ recuperação, e funcionamento em tema claro e escuro.
 | `README.md` | Como rodar, scripts, visão geral |
 | `AGENTS.md` | Este contrato |
 | `docs/design-system.md` | Tokens, tipografia, componentes, regras de gráfico |
+| `docs/utm.md` | Padrão de UTM — o que a tabela de origem do Analytics lê |
 | `docs/arquitetura.md` | Camadas, fluxo de dados, decisões |
 | `docs/integracoes.md` | Como obter credencial de cada plataforma |
 | `docs/qualidade.md` | Esteira, observabilidade, orçamento de performance |
