@@ -1,0 +1,1275 @@
+<title>Quantos impactos com R$16 mil</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&family=Poppins:wght@300;400;500;600;700&display=swap">
+
+<style>
+/* ---------------------------------------------------------------------------
+   Tokens — QYRA (docs/design-system.md)
+   Dark Purple #2F2535 · Lilac #9D5CC1 · Sage #789180 · Silver Purple #D7D2E1
+   Série de gráfico: #9D5CC1 · #4E9E76 · #C96A24 (validada nas duas superfícies)
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --canvas:         #FBFAFC;
+  --surface:        #FFFFFF;
+  --surface-sunken: #F4F1F7;
+  --surface-ink:    #2F2535;
+
+  --ink:            #2F2535;
+  --ink-secondary:  #5C5266;
+  --ink-muted:      #857C8E;
+  --ink-on-dark:    #F6F3F8;
+  --ink-on-dark-2:  #BDB2C6;
+
+  --line:           #E7E2EC;
+  --line-strong:    #D7D2E1;
+
+  --brand:          #2F2535;
+  --accent:         #8A45B0;
+  --accent-soft:    #F1E8F7;
+  --sage:           #5E7768;
+  --sage-soft:      #E9EFEA;
+  --warning:        #A25A18;
+  --warning-soft:   #FBEFE3;
+
+  --s1: #9D5CC1;
+  --s2: #4E9E76;
+  --s3: #C96A24;
+  --grid: #E7E2EC;
+
+  --measure: 68ch;
+  --radius: 14px;
+  --radius-lg: 24px;
+
+  --shadow: 0 1px 2px rgba(47,37,53,.05), 0 8px 24px -12px rgba(47,37,53,.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --canvas:         #241C29;
+    --surface:        #2F2535;
+    --surface-sunken: #392E40;
+    --surface-ink:    #1C1621;
+
+    --ink:            #F6F3F8;
+    --ink-secondary:  #C6BCD0;
+    --ink-muted:      #9A8FA5;
+    --ink-on-dark:    #F6F3F8;
+    --ink-on-dark-2:  #BDB2C6;
+
+    --line:           #453A4D;
+    --line-strong:    #574B60;
+
+    --brand:          #D7D2E1;
+    --accent:         #C08FDD;
+    --accent-soft:    #3D2F48;
+    --sage:           #9DBAA8;
+    --sage-soft:      #2E3A33;
+    --warning:        #E0975A;
+    --warning-soft:   #3E3125;
+
+    --s1: #9D5CC1;
+    --s2: #4E9E76;
+    --s3: #C96A24;
+    --grid: #453A4D;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.24), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas:         #241C29;
+  --surface:        #2F2535;
+  --surface-sunken: #392E40;
+  --surface-ink:    #1C1621;
+
+  --ink:            #F6F3F8;
+  --ink-secondary:  #C6BCD0;
+  --ink-muted:      #9A8FA5;
+  --ink-on-dark:    #F6F3F8;
+  --ink-on-dark-2:  #BDB2C6;
+
+  --line:           #453A4D;
+  --line-strong:    #574B60;
+
+  --brand:          #D7D2E1;
+  --accent:         #C08FDD;
+  --accent-soft:    #3D2F48;
+  --sage:           #9DBAA8;
+  --sage-soft:      #2E3A33;
+  --warning:        #E0975A;
+  --warning-soft:   #3E3125;
+
+  --s1: #9D5CC1;
+  --s2: #4E9E76;
+  --s3: #C96A24;
+  --grid: #453A4D;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.24), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+
+/* --------------------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "Gilroy", "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+}
+
+.flow { display: flex; flex-direction: column; gap: 20px; }
+.prose { max-width: var(--measure); }
+
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+h1 {
+  font-family: "Larken", "Fraunces", Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(2.1rem, 5.2vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -.015em;
+}
+
+h2 {
+  font-family: "Larken", "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.5rem, 3.1vw, 2rem);
+  line-height: 1.14;
+  letter-spacing: -.01em;
+}
+
+h3 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  line-height: 1.35;
+}
+
+p { margin: 0; }
+strong { font-weight: 600; color: var(--ink); }
+
+a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+a:hover { text-decoration-thickness: 2px; }
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.eyebrow {
+  font-size: .69rem;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.lede { font-size: 1.1rem; line-height: 1.62; color: var(--ink-secondary); }
+.note { font-size: .84rem; line-height: 1.55; color: var(--ink-muted); }
+
+/* --- topo --- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+  padding: 26px 0 0;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+.wordmark {
+  font-family: "Larken", "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-size: 1.28rem;
+  letter-spacing: .04em;
+  color: var(--brand);
+}
+
+.hero {
+  margin-top: 48px;
+  display: grid;
+  gap: 34px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  align-items: start;
+}
+@media (max-width: 800px) { .hero { grid-template-columns: 1fr; gap: 28px; } }
+
+.answer {
+  background: var(--surface-ink);
+  color: var(--ink-on-dark);
+  border-radius: var(--radius-lg);
+  padding: 30px 30px 26px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.answer::before {
+  content: "";
+  position: absolute;
+  inset: -50% -20% auto -20%;
+  height: 160%;
+  background:
+    radial-gradient(46% 52% at 18% 8%, rgba(157,92,193,.44), transparent 70%),
+    radial-gradient(40% 46% at 92% 78%, rgba(120,145,128,.3), transparent 72%);
+  z-index: -1;
+  pointer-events: none;
+}
+.answer .eyebrow { color: var(--ink-on-dark-2); }
+.answer-figure {
+  font-family: "Larken", "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 4.6rem);
+  line-height: .95;
+  margin: 14px 0 2px;
+  letter-spacing: -.03em;
+}
+.answer-unit { font-size: 1.02rem; color: var(--ink-on-dark-2); }
+.answer-split {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,.16);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.answer-split .k { font-size: 1.42rem; font-weight: 600; line-height: 1.2; }
+.answer-split .l { font-size: .8rem; color: var(--ink-on-dark-2); line-height: 1.4; }
+
+/* --- blocos --- */
+
+section { margin-top: 62px; scroll-margin-top: 24px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 12px;
+}
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 16px 14px;
+}
+.tile .t-label {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.tile .t-value {
+  font-size: 1.66rem;
+  font-weight: 600;
+  line-height: 1.18;
+  margin-top: 7px;
+  letter-spacing: -.02em;
+}
+.tile .t-sub { font-size: .8rem; color: var(--ink-secondary); margin-top: 3px; line-height: 1.45; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.chip::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.chip-medido  { background: var(--sage-soft);   color: var(--sage);    border-color: color-mix(in srgb, var(--sage) 26%, transparent); }
+.chip-proj    { background: var(--accent-soft); color: var(--accent);  border-color: color-mix(in srgb, var(--accent) 26%, transparent); }
+.chip-alerta  { background: var(--warning-soft);color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+
+/* --- tabelas --- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+table { border-collapse: collapse; width: 100%; font-size: .88rem; min-width: 520px; }
+caption {
+  text-align: left;
+  font-size: .78rem;
+  color: var(--ink-muted);
+  padding: 12px 16px 0;
+  caption-side: top;
+}
+th, td { padding: 10px 16px; text-align: right; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-size: .71rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr.total td { font-weight: 600; background: var(--surface-sunken); border-top: 1px solid var(--line-strong); }
+td.name { font-weight: 500; }
+td .sub { display: block; font-size: .78rem; color: var(--ink-muted); font-weight: 400; }
+
+.bar-cell { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
+.bar-track {
+  width: 74px; height: 7px;
+  background: var(--surface-sunken);
+  border-radius: 4px;
+  overflow: hidden;
+  flex: none;
+}
+.bar-fill { height: 100%; background: var(--s1); border-radius: 4px; }
+
+/* --- gráficos --- */
+
+.viz { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.viz-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.viz-title { font-size: .95rem; font-weight: 600; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; margin-top: 14px; }
+.panel-title { font-size: .78rem; font-weight: 600; color: var(--ink-secondary); margin-bottom: 2px; }
+.panel-unit { font-size: .72rem; color: var(--ink-muted); }
+svg { display: block; width: 100%; height: auto; }
+.gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.axis-text { font-size: 9.5px; fill: var(--ink-muted); font-family: inherit; }
+.axis-text.bold { fill: var(--ink-secondary); font-weight: 600; }
+.hit { fill: transparent; cursor: pointer; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; color: var(--ink-secondary); }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+#tip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: var(--surface-ink);
+  color: var(--ink-on-dark);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: .8rem;
+  line-height: 1.45;
+  box-shadow: 0 10px 28px -10px rgba(0,0,0,.55);
+  max-width: 260px;
+  transition: opacity .12s ease;
+}
+#tip b { display: block; font-weight: 600; margin-bottom: 2px; }
+#tip .tv { color: var(--ink-on-dark-2); }
+
+details.tableview { margin-top: 14px; }
+details.tableview > summary {
+  cursor: pointer;
+  font-size: .8rem;
+  color: var(--ink-secondary);
+  font-weight: 500;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+details.tableview > summary::-webkit-details-marker { display: none; }
+details.tableview > summary::before { content: "▸"; font-size: .7em; color: var(--ink-muted); }
+details.tableview[open] > summary::before { content: "▾"; }
+details.tableview > *:not(summary) { margin-top: 12px; }
+
+/* --- listas e destaques --- */
+
+ul.plain { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 9px; }
+ul.plain li { padding-left: .15em; }
+ul.plain li::marker { color: var(--ink-muted); }
+
+.split2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.finding {
+  border-left: 3px solid var(--line-strong);
+  padding: 2px 0 2px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.finding.alerta { border-left-color: var(--warning); }
+.finding.ok { border-left-color: var(--sage); }
+.finding h3 { font-size: .96rem; }
+.finding p { font-size: .9rem; color: var(--ink-secondary); line-height: 1.55; }
+
+.verdict {
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.verdict .eyebrow { color: var(--ink-secondary); }
+.verdict p { font-size: .94rem; line-height: 1.58; }
+
+ol.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+ol.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+ol.steps li::before {
+  content: counter(step);
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  width: 30px; height: 30px;
+  display: grid;
+  place-items: center;
+}
+ol.steps h3 { margin-bottom: 3px; }
+ol.steps p { font-size: .9rem; color: var(--ink-secondary); line-height: 1.55; }
+
+footer {
+  margin-top: 72px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+footer ul { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 5px; font-size: .84rem; color: var(--ink-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <span class="wordmark">QYRA</span>
+    <p class="eyebrow" style="margin-left:auto">Conta Qyra Saúde · Meta Ads · leitura de 20 ago 2026</p>
+  </header>
+
+  <div class="hero">
+    <div class="flow">
+      <p class="eyebrow">Resposta curta</p>
+      <h1>R$16 mil por mês falam com cerca de 1,4 milhão de pessoas.</h1>
+      <p class="lede">
+        Não é estimativa de mercado: é a projeção da <strong>sua própria conta</strong>. Nos últimos
+        90 dias ela entregou 2,69 milhões de impressões para 1,45 milhão de pessoas com
+        R$8.873,64. Ontem, R$120,54 compraram 31.250 impressões a R$3,86 de CPM.
+        R$16.000/mês é R$533/dia — 4,3× o ritmo de hoje, dentro de um universo que a conta
+        ainda não chegou perto de esgotar.
+      </p>
+      <p class="note">
+        O gargalo do projeto não é alcance. É que <strong>não existe campanha de conversão
+        rodando</strong> — 68% da verba de hoje termina numa visita ao perfil do Instagram, não
+        num contato. Multiplicar a verba sem resolver isso multiplica impressões, não clientes.
+      </p>
+    </div>
+
+    <div class="answer">
+      <p class="eyebrow">Projeção · R$16.000/mês na estrutura recomendada</p>
+      <p class="answer-figure">1,4 mi</p>
+      <p class="answer-unit">pessoas únicas alcançadas por mês</p>
+      <div class="answer-split">
+        <div>
+          <p class="k">2,9 mi</p>
+          <p class="l">impactos (impressões) por mês</p>
+        </div>
+        <div>
+          <p class="k">~1 em 15</p>
+          <p class="l">adultos de 28 a 55 anos em SP, RJ e DF</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="hoje">
+    <div class="flow prose">
+      <p class="eyebrow">De onde sai o número · dados medidos na API</p>
+      <h2>O que a conta faz hoje</h2>
+      <p>
+        Quatro janelas da mesma conta. Elas não concordam entre si — e é justamente aí que
+        está a informação: o preço do impacto na Qyra Saúde varia de <strong>R$2,71 a
+        R$7,86 de CPM</strong> conforme o objetivo da campanha, não conforme a verba.
+      </p>
+    </div>
+
+    <div class="tiles" style="margin-top:22px">
+      <div class="tile">
+        <p class="t-label">Ontem · 19 ago</p>
+        <p class="t-value">R$3,86</p>
+        <p class="t-sub">CPM · R$120,54 compraram 31.250 impressões e 26.598 pessoas</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">Últimos 7 dias</p>
+        <p class="t-value">R$5,23</p>
+        <p class="t-sub">CPM · R$861,52 · 164.816 impressões · 81.061 pessoas · freq. 2,03</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">Últimos 30 dias</p>
+        <p class="t-value">R$7,86</p>
+        <p class="t-sub">CPM · R$1.940,10 · 246.745 impressões · 124.427 pessoas · freq. 1,98</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">Últimos 90 dias</p>
+        <p class="t-value">R$3,30</p>
+        <p class="t-sub">CPM · R$8.873,64 · 2.689.073 impressões · 1.449.772 pessoas · freq. 1,85</p>
+      </div>
+    </div>
+
+    <div class="viz" style="margin-top:14px">
+      <div class="viz-head">
+        <div>
+          <p class="viz-title">Como a conta se comportou em cada período</p>
+          <p class="note">Tudo normalizado por dia — maio e agosto são períodos parciais.</p>
+        </div>
+        <span class="chip chip-medido">medido</span>
+      </div>
+      <div class="panels" id="panels"></div>
+      <details class="tableview">
+        <summary>Ver os números em tabela</summary>
+        <div class="table-wrap">
+          <table>
+            <caption>Conta Qyra Saúde · fuso America/Sao_Paulo · alcance é desduplicado dentro de cada período, por isso não se soma.</caption>
+            <thead>
+              <tr><th>Período</th><th>Investimento</th><th>R$/dia</th><th>Impressões</th><th>Alcance</th><th>Freq.</th><th>CPM</th><th>CTR</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="name">21–31 mai <span class="sub">11 dias</span></td><td>R$2.255,92</td><td>R$205,08</td><td>804.414</td><td>570.182</td><td>1,41</td><td>R$2,80</td><td>0,72%</td></tr>
+              <tr><td class="name">junho <span class="sub">30 dias</span></td><td>R$3.850,69</td><td>R$128,36</td><td>1.419.956</td><td>835.374</td><td>1,70</td><td>R$2,71</td><td>0,85%</td></tr>
+              <tr><td class="name">julho <span class="sub">31 dias</span></td><td>R$1.341,34</td><td>R$43,27</td><td>256.838</td><td>195.701</td><td>1,31</td><td>R$5,22</td><td>2,09%</td></tr>
+              <tr><td class="name">1–18 ago <span class="sub">18 dias</span></td><td>R$1.425,69</td><td>R$79,21</td><td>207.865</td><td>108.164</td><td>1,92</td><td>R$6,86</td><td>3,45%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <div class="flow prose" style="margin-top:26px">
+      <p>
+        Junho é o marco mais importante: <strong>R$3.850,69 num único mês compraram 1.419.956
+        impressões e 835.374 pessoas únicas</strong>, a R$2,71 de CPM e frequência de 1,70. Maio
+        provou que a conta absorve <strong>R$205/dia</strong> sem o CPM subir — R$2,80. Julho e
+        agosto ficaram mais caros não por saturação, mas porque a verba migrou para objetivos
+        mais caros (visita ao perfil e tráfego para a página, em vez de alcance).
+      </p>
+    </div>
+
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <caption>Estrutura ativa nos últimos 7 dias · o que está de fato rodando.</caption>
+        <thead>
+          <tr><th>Conjunto</th><th>Verba/dia</th><th>Investido 7d</th><th>Impressões</th><th>Alcance</th><th>Freq.</th><th>CPM</th><th>Resultado</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name">Topo · Frio-Amplo · Visita ao perfil <span class="sub">28–55 · SP, RJ e DF · IG + FB</span></td>
+            <td>R$85</td><td>R$542,62</td><td>120.789</td><td>68.504</td><td>1,76</td><td>R$4,49</td>
+            <td>1.690 visitas <span class="sub">R$0,32 cada</span></td>
+          </tr>
+          <tr>
+            <td class="name">Meio · Remarketing IG 365d · Página <span class="sub">público de 392,7k–462,1k pessoas</span></td>
+            <td>R$46</td><td>R$276,84</td><td>40.988</td><td>11.625</td><td>3,53</td><td>R$6,75</td>
+            <td>450 visitas à página <span class="sub">R$0,62 cada</span></td>
+          </tr>
+          <tr>
+            <td class="name">Advantage+ · público automático <span class="sub">18–65 · SP e RJ</span></td>
+            <td>CBO</td><td>R$42,06</td><td>3.039</td><td>2.911</td><td>1,04</td><td>R$13,84</td>
+            <td>210 visitas <span class="sub">R$0,20 cada</span></td>
+          </tr>
+          <tr class="total">
+            <td>Conta inteira</td><td>≈R$123</td><td>R$861,52</td><td>164.816</td><td>81.061</td><td>2,03</td><td>R$5,23</td><td>2 leads</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="projecao">
+    <div class="flow prose">
+      <p class="eyebrow">Projeção · três cenários para os mesmos R$16.000</p>
+      <h2>Quantos impactos R$16 mil compram</h2>
+      <p>
+        A resposta muda por um fator de <strong>2,2×</strong> dependendo do mix de objetivos —
+        e isso é uma decisão de vocês, não do leilão. Os três cenários usam CPMs que a
+        própria conta já praticou, com uma folga de 25–35% para a pressão de sair de
+        R$123/dia para R$533/dia.
+      </p>
+    </div>
+
+    <div class="viz" style="margin-top:22px">
+      <div class="viz-head">
+        <div>
+          <p class="viz-title">R$16.000/mês na Meta, por composição de campanha</p>
+          <p class="note">Impacto = impressão. Alcance = pessoa única. A diferença entre os dois é a frequência.</p>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>Impactos</span>
+          <span class="legend-item"><span class="swatch" style="background:var(--s2)"></span>Alcance</span>
+          <span class="chip chip-proj">projeção</span>
+        </div>
+      </div>
+      <div id="scenarios" style="margin-top:16px"></div>
+      <details class="tableview">
+        <summary>Ver os números e as premissas</summary>
+        <div class="table-wrap">
+          <table>
+            <caption>Premissa de CPM ancorada no histórico da conta; frequência ancorada na observada em cada mix.</caption>
+            <thead>
+              <tr><th>Cenário</th><th>Composição</th><th>CPM</th><th>Freq.</th><th>Impactos/mês</th><th>Alcance/mês</th><th>Custo por mil pessoas</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name">Alcance máximo</td>
+                <td style="text-align:left">60% alcance/marca · 30% topo · 10% remarketing</td>
+                <td>R$3,60</td><td>1,8</td><td>4.440.000</td><td>2.470.000</td><td>R$6,48</td>
+              </tr>
+              <tr>
+                <td class="name">Mix atual escalado</td>
+                <td style="text-align:left">65% topo · 20% tráfego · 15% remarketing</td>
+                <td>R$5,60</td><td>2,1</td><td>2.860.000</td><td>1.360.000</td><td>R$11,76</td>
+              </tr>
+              <tr>
+                <td class="name">Conservador</td>
+                <td style="text-align:left">nada muda, só a verba multiplica</td>
+                <td>R$8,00</td><td>2,4</td><td>2.000.000</td><td>833.000</td><td>R$19,20</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <div class="split2" style="margin-top:22px">
+      <div class="card flow">
+        <p class="eyebrow">Por que o número é crível</p>
+        <p style="font-size:.92rem;color:var(--ink-secondary);line-height:1.58">
+          Em junho a conta pagou <strong>R$4,61 por mil pessoas alcançadas</strong>. O cenário
+          recomendado assume R$11,76 — mais que o dobro, para absorver objetivos mais caros e a
+          pressão de leilão. Mesmo com essa penalidade, R$16.000 entregam num mês
+          aproximadamente o que a conta levou 90 dias para entregar.
+        </p>
+      </div>
+      <div class="card flow">
+        <p class="eyebrow">O universo comporta</p>
+        <p style="font-size:.92rem;color:var(--ink-secondary);line-height:1.58">
+          SP, RJ e DF, 28 a 55 anos, no Instagram e Facebook: estimo
+          <strong>18 a 22 milhões de pessoas</strong> (IBGE + penetração das plataformas — este
+          número é estimativa externa, não vem da API). 1,4 milhão por mês é ~7% desse universo,
+          com frequência de 2. Não há risco de saturação no topo do funil.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="travas">
+    <div class="flow prose">
+      <p class="eyebrow">Leitura honesta · o que a projeção não resolve</p>
+      <h2>Cinco coisas que precisam ser ditas antes de aprovar</h2>
+    </div>
+
+    <div class="flow" style="margin-top:22px;gap:18px">
+      <div class="finding alerta">
+        <h3>Não existe campanha de conversão na conta</h3>
+        <p>
+          As campanhas ativas otimizam para <em>visita ao perfil do Instagram</em> e
+          <em>visualização da página</em>. Nenhuma otimiza para lead ou conversa. Os 5 leads dos
+          últimos 30 dias, a R$388,02 cada, saíram de tabela — e 5 eventos são ruído estatístico,
+          não uma taxa. <strong>Multiplicar a verba por 4,3 nessa estrutura entrega 2,9 milhões de
+          impactos e continua entregando leads em dígito único.</strong> O pixel existe
+          (há público de PageView criado), mas a campanha de remarketing de página está pausada
+          com R$0 investido.
+        </p>
+      </div>
+
+      <div class="finding alerta">
+        <h3>68% da verba termina no perfil do Instagram, não no site</h3>
+        <p>
+          Dos R$861,52 dos últimos 7 dias, R$584,68 foram para objetivo de visita ao perfil.
+          Só R$276,84 levaram alguém à página — e esses converteram bem: 526 cliques únicos no
+          link viraram 450 visualizações da página (86%). O funil não está quebrado; ele
+          simplesmente <strong>quase não existe abaixo do topo</strong>.
+        </p>
+      </div>
+
+      <div class="finding alerta">
+        <h3>A conta nunca rodou acima de R$205/dia</h3>
+        <p>
+          R$533/dia é 2,6× o recorde histórico. Subir de uma vez costuma custar CPM e
+          instabilidade de entrega. <strong>Suba 25–30% por semana</strong> — chega em R$533/dia
+          em cerca de 6 semanas, com dado limpo em cada degrau.
+        </p>
+      </div>
+
+      <div class="finding alerta">
+        <h3>O remarketing tem teto de frequência, não de verba</h3>
+        <p>
+          O público "Interagiu com insta 365D" tem 392.700 a 462.100 pessoas, mas com apenas
+          R$46/dia já roda a <strong>frequência 3,53 em 7 dias</strong> — perto de 15 no mês.
+          Quadruplicar essa linha queima o público. Teto sugerido: ~R$1.500/mês, com a
+          frequência semanal monitorada.
+        </p>
+      </div>
+
+      <div class="finding ok">
+        <h3>Brasília está praticamente intocada — e é o CPM mais barato</h3>
+        <p>
+          Nos últimos 30 dias: São Paulo levou R$1.427,49 (74% da verba) a R$8,12 de CPM, Rio
+          R$476,53 a R$7,50, e o <strong>Distrito Federal só R$36,08 — a R$4,90</strong>, o CPM
+          mais baixo dos três. Pouco volume para ser conclusivo, mas é a folga mais óbvia da conta.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="estrutura">
+    <div class="flow prose">
+      <p class="eyebrow">Sugestão · como eu dividiria os R$16.000</p>
+      <h2>A estrutura que eu levaria para o ar</h2>
+      <p>
+        87,5% na Meta, porque é o canal com dado, público e histórico. O resto é aprendizado
+        com data marcada. A linha nova e obrigatória é a de <strong>conversão</strong> — sem ela,
+        nada disso vira cliente.
+      </p>
+    </div>
+
+    <div class="table-wrap" style="margin-top:22px">
+      <table>
+        <caption>Impactos projetados com CPM ancorado no histórico de cada objetivo. A linha de conversão não tem histórico na conta — é a única premissa sem base própria.</caption>
+        <thead>
+          <tr><th>Linha</th><th>Verba/mês</th><th>Participação</th><th>CPM previsto</th><th>Impactos/mês</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name">Meta · Topo frio, prospecção <span class="sub">SP, RJ e DF · 28–55 · escala o que já funciona</span></td>
+            <td>R$6.200</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>38,8%</div></td>
+            <td>R$5,00</td><td>1.240.000</td>
+          </tr>
+          <tr>
+            <td class="name">Meta · Alcance de marca <span class="sub">o CPM de R$2,71–2,80 que maio e junho provaram</span></td>
+            <td>R$3.000</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:48.4%"></div></div>18,8%</div></td>
+            <td>R$3,20</td><td>937.500</td>
+          </tr>
+          <tr>
+            <td class="name">Meta · Meio, tráfego para a página <span class="sub">continua o conjunto que converte clique em visita a 86%</span></td>
+            <td>R$1.800</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:29%"></div></div>11,3%</div></td>
+            <td>R$6,80</td><td>264.706</td>
+          </tr>
+          <tr>
+            <td class="name">Meta · Conversão <span class="sub">campanha nova: lead ou conversa no WhatsApp</span></td>
+            <td>R$1.500</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:24.2%"></div></div>9,4%</div></td>
+            <td>R$12,00</td><td>125.000</td>
+          </tr>
+          <tr>
+            <td class="name">Meta · Remarketing <span class="sub">com teto — o público satura por frequência</span></td>
+            <td>R$1.500</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:24.2%"></div></div>9,4%</div></td>
+            <td>R$7,00</td><td>214.286</td>
+          </tr>
+          <tr>
+            <td class="name">Google · Busca de marca e intenção <span class="sub">captura quem já procura; o painel já tem o conector</span></td>
+            <td>R$1.000</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:16.1%"></div></div>6,3%</div></td>
+            <td>—</td><td>≈30.000</td>
+          </tr>
+          <tr>
+            <td class="name">Teste · Ads no ChatGPT <span class="sub">só se a categoria de saúde for aprovada</span></td>
+            <td>R$1.000</td>
+            <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:16.1%"></div></div>6,3%</div></td>
+            <td>R$15,00</td><td>≈67.000</td>
+          </tr>
+          <tr class="total">
+            <td>Total</td><td>R$16.000</td><td>100%</td><td>≈R$5,50</td><td>≈2.878.000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict" style="margin-top:16px">
+      <p class="eyebrow">O que isso entrega</p>
+      <p>
+        <strong>≈2,9 milhões de impactos e ≈1,39 milhão de pessoas únicas por mês</strong>, com
+        frequência média de 2,0 — sem saturar o topo. Nos rendimentos de hoje, isso são cerca de
+        <strong>27 mil visitas ao perfil</strong> a R$0,39 e <strong>2,3 mil visitas à
+        página</strong> a R$0,78. O número de leads depende inteiramente da linha de conversão,
+        que ainda não existe: é o único item da tabela que eu não consigo projetar com dado
+        próprio.
+      </p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="programatica">
+    <div class="flow prose">
+      <p class="eyebrow">Panorama · mídia programática</p>
+      <h2>Programática: o mercado está certo, o momento não é agora</h2>
+      <p>
+        Programática é compra automatizada de inventário em leilão, fora dos jardins murados —
+        display, vídeo, CTV (TV conectada), áudio, DOOH — através de uma DSP. O mercado
+        brasileiro está no melhor momento dele: a publicidade no país deve crescer
+        <strong>9,1% em 2026</strong>, a maior expansão entre os 12 principais mercados
+        (média global de 5,1%). Vídeo online cresce 11,5%, CTV 9,5% e retail media
+        <strong>38,4%</strong>, chegando a US$1,67 bilhão.
+      </p>
+      <p>
+        O problema é a porta de entrada. As DSPs independentes trabalham com compromisso de
+        compra a partir de <strong>~R$600 mil por ano</strong>. O orçamento anual do projeto
+        seria R$192 mil — um terço do piso. Pela via direta, a conta não entra.
+      </p>
+    </div>
+
+    <div class="split2" style="margin-top:22px">
+      <div class="card flow">
+        <p class="eyebrow">O que dá para fazer hoje</p>
+        <ul class="plain" style="font-size:.9rem;color:var(--ink-secondary)">
+          <li><strong>Meta já é programática.</strong> Leilão em tempo real, entrega algorítmica, otimização por sinal. A diferença é o inventário, não o mecanismo.</li>
+          <li><strong>YouTube e Demand Gen pelo Google Ads</strong> dão acesso a inventário de CTV e vídeo sem contrato de DSP e sem mínimo.</li>
+          <li><strong>Trading desk ou agência com contrato guarda-chuva</strong> é a via realista para DSP de verdade, se um dia fizer sentido.</li>
+        </ul>
+      </div>
+      <div class="verdict">
+        <p class="eyebrow">Recomendação</p>
+        <p>
+          <strong>Não entrar em programática agora.</strong> Com R$16.000, dividir entre três
+          canais faz com que nenhum saia da fase de aprendizado. Programática vira conversa real
+          quando a verba mensal passar de ~R$50 mil, ou quando a linha de conversão da Meta
+          estiver madura e o limite for de inventário, não de estrutura.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="chatgpt">
+    <div class="flow prose">
+      <p class="eyebrow">Panorama · anúncios no ChatGPT</p>
+      <h2>Mídia na IA: vale o teste, não vale o plano</h2>
+      <p>
+        Os anúncios no ChatGPT saíram do papel em 2026. A linha do tempo, resumida:
+        <strong>9 de fevereiro</strong> — estreia nos EUA como compra assistida, com mínimo de
+        US$200–250 mil e CPM fixo de US$60. <strong>5 de maio</strong> — o mínimo cai por
+        completo, abre o autoatendimento em <code>ads.openai.com</code>, entram lance por CPC
+        (faixa recomendada de US$3–5), pixel próprio e API de conversões, e o CPM cai para a
+        casa dos US$25. <strong>7 de maio</strong> — o piloto chega ao Brasil; desde agosto a
+        plataforma aceita anunciantes brasileiros.
+      </p>
+    </div>
+
+    <div class="tiles" style="margin-top:22px">
+      <div class="tile">
+        <p class="t-label">Quem vê</p>
+        <p class="t-value" style="font-size:1.14rem">Free e Go</p>
+        <p class="t-sub">Só usuários adultos logados nos planos gratuitos. Plus, Pro, Team, Business e Enterprise nunca veem anúncio.</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">Formato</p>
+        <p class="t-value" style="font-size:1.14rem">Bloco patrocinado</p>
+        <p class="t-sub">Abaixo da resposta, marcado como patrocinado, contextual à pergunta. Nunca dentro da resposta.</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">CPM estimado no Brasil</p>
+        <p class="t-value">R$8–25</p>
+        <p class="t-sub">Faixa de beta. Para referência: o CPM da sua conta na Meta hoje é R$3,86.</p>
+      </div>
+      <div class="tile">
+        <p class="t-label">Mensuração</p>
+        <p class="t-value" style="font-size:1.14rem">Pixel + CAPI</p>
+        <p class="t-sub">Pixel JS (OAIQ) e API de conversões server-side, com cookie próprio de 30 dias.</p>
+      </div>
+    </div>
+
+    <div class="flow prose" style="margin-top:26px">
+      <h3>O ponto delicado: vocês são categoria restrita</h3>
+      <p style="color:var(--ink-secondary)">
+        Até abril de 2026 a OpenAI excluía por completo contextos médicos, jurídicos e
+        financeiros. A política mudou: saúde e serviços financeiros selecionados passaram a ser
+        aceitos — <strong>com aprovação manual, exigência de licenciamento e limites rígidos de
+        categoria</strong>. Serviços jurídicos seguem proibidos. Anúncios aprovados de saúde
+        ainda não aparecem ao lado de conversas sensíveis sobre a condição médica de alguém,
+        mas a OpenAI citou explicitamente como permitido o caso de
+        <strong>"perguntas gerais sobre exercício ou dieta"</strong>.
+      </p>
+      <p style="color:var(--ink-secondary)">
+        A Meta classifica a conta de vocês como <em>Healthcare · Dieting and Fitness
+        Programmes</em>. Isso cai exatamente na brecha que a OpenAI nomeou — e exatamente no
+        balde que exige aprovação manual. No Brasil, as categorias liberadas no início do piloto
+        eram varejo, e-commerce e turismo. <strong>Plausível, não garantido.</strong>
+      </p>
+    </div>
+
+    <div class="split2" style="margin-top:22px">
+      <div class="card flow">
+        <p class="eyebrow">O sinal que interessa</p>
+        <p style="font-size:.9rem;color:var(--ink-secondary);line-height:1.58">
+          A Criteo, que leva campanhas para o ChatGPT Ads via API, reporta taxas de conversão de
+          tráfego vindo de IA <strong>perto do dobro</strong> das da busca tradicional — subindo
+          de ~1,5× em março. O contato é caro por impressão e barato por intenção: quem pergunta
+          está no meio de uma decisão, não passando o dedo no feed.
+        </p>
+      </div>
+      <div class="verdict">
+        <p class="eyebrow">Recomendação</p>
+        <p>
+          <strong>Entrar na fila agora, testar com R$1.000/mês por 60–90 dias.</strong> A esse
+          CPM, R$1.000 compram algo entre 40 e 125 mil impressões — 2% do volume que a Meta
+          entrega, então não é canal de escala. É canal de posição: aprender o formato e ocupar
+          espaço antes que a categoria de saúde encha. <strong>Se a aprovação não sair, a verba
+          volta para a linha de conversão da Meta</strong> — não fica parada esperando.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section id="primeiro-mes">
+    <div class="flow prose">
+      <p class="eyebrow">Ordem de execução · os primeiros 30 dias</p>
+      <h2>Por onde eu começaria</h2>
+      <p>A ordem importa: cada passo é pré-requisito do seguinte.</p>
+    </div>
+
+    <ol class="steps" style="margin-top:24px">
+      <li>
+        <div>
+          <h3>Subir a campanha de conversão antes de subir a verba</h3>
+          <p>
+            Lead ou conversa no WhatsApp, com o pixel validado e o evento de conversão
+            configurado. É a peça que falta e a única que transforma impacto em cliente.
+            Sem ela, os outros passos só encarecem o mesmo resultado.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Escalar em degraus de 25–30% por semana</h3>
+          <p>
+            De R$123/dia até R$533/dia em ~6 semanas. A cada degrau, olhar CPM, frequência e
+            custo por resultado antes do próximo. A conta nunca passou de R$205/dia — o degrau
+            é o que protege o CPM.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Abrir a linha de alcance de marca em Brasília</h3>
+          <p>
+            CPM de R$4,90 contra R$8,12 em São Paulo, com apenas R$36,08 investidos em 30 dias.
+            É a hipótese mais barata de testar da conta inteira.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Pôr teto no remarketing e monitorar frequência semanal</h3>
+          <p>
+            R$1.500/mês, com alerta se a frequência de 7 dias passar de 4. É onde o dinheiro
+            queima mais rápido quando a verba multiplica.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Solicitar a aprovação no OpenAI Ads</h3>
+          <p>
+            Categoria de saúde exige aprovação manual e documentação. O prazo é da OpenAI, não
+            nosso — quanto antes entrar na fila, melhor. O plano roda sem isso.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <footer>
+    <p class="eyebrow">Método e fontes</p>
+    <div class="prose flow">
+      <p class="note">
+        Todos os números da conta vêm da API de Insights do Meta Ads para a conta Qyra Saúde
+        (<code>act_1610215746739005</code>), fuso <code>America/Sao_Paulo</code>, consultada em
+        20 de agosto de 2026. As janelas usadas foram <em>ontem</em>, <em>últimos 7 dias</em>,
+        <em>últimos 30 dias</em> e <em>últimos 90 dias</em> com recorte mensal. Alcance é
+        desduplicado dentro de cada janela e por isso não se soma entre períodos.
+      </p>
+      <p class="note">
+        As projeções aplicam CPMs já praticados pela própria conta, com folga de 25–35% para a
+        pressão de leilão ao sair de R$123/dia para R$533/dia. O tamanho do universo
+        (18–22 milhões) é estimativa externa a partir de população IBGE e penetração das
+        plataformas — não vem da API. A linha de conversão não tem histórico na conta e é a
+        única premissa sem base própria.
+      </p>
+    </div>
+    <ul>
+      <li><a href="https://ads.openai.com/">OpenAI Ads — Advertise in ChatGPT</a></li>
+      <li><a href="https://openai.com/policies/ad-policies/">OpenAI — Ad policies</a></li>
+      <li><a href="https://www.searchenginejournal.com/openai-allows-some-health-finance-ads-in-chatgpt/585516/">Search Engine Journal — OpenAI allows some health &amp; finance ads in ChatGPT</a></li>
+      <li><a href="https://www.marketingbrew.com/stories/chatgpt-is-opening-the-advertising-door-to-some-regulated-verticals-but-most-marketers-arent-crossing-the-threshold-yet">Marketing Brew — ChatGPT opens the door to regulated verticals</a></li>
+      <li><a href="https://www.meioemensagem.com.br/midia/openai-se-prepara-para-lancar-chatgtp-ads-no-brasil">Meio &amp; Mensagem — OpenAI se prepara para lançar ChatGPT Ads no Brasil</a></li>
+      <li><a href="https://www.nuvemshop.com.br/blog/chatgpt-ads/">Nuvemshop — ChatGPT Ads no Brasil: como anunciar</a></li>
+      <li><a href="https://choice.marketing/blog/chatgpt-ads-2026-field-guide/">Choice OMG — ChatGPT Ads 2026: CPC bids, targeting, OAIQ pixel</a></li>
+      <li><a href="https://www.mediapost.com/publications/article/415465/openai-races-to-add-conversion-optimized-campaigns.html">MediaPost — OpenAI betas conversion campaigns</a></li>
+      <li><a href="https://adseleto.com/mercado-programatico-no-brasil-em-2026/">AdSeleto — Mercado programático no Brasil em 2026</a></li>
+      <li><a href="https://retailmedianews.com.br/noticias/mercado-ads-em-2026-o-salto-do-retail-media-para-uma-plataforma-de-midia-full-funnel-ctv-off-site-e-mensuracao-avancada/">Retail Media News — Retail media full-funnel, CTV e off-site em 2026</a></li>
+      <li><a href="https://publya.com/blog/top-5-plataformas-de-compra-de-midia-dsps-usadas-no-brasil/">Publya — Top 5 DSPs usadas no Brasil</a></li>
+      <li><a href="https://aintegrare.com.br/wiki/midia-programatica">Aintegrare — Mídia programática: o que é, como funciona e quando usar</a></li>
+      <li><a href="https://www.metropoles.com/colunas/m-buzz/publicidade-em-transicao-digital-desafia-o-off-line">Metrópoles — Mídia digital supera a TV aberta em investimento em 2026</a></li>
+    </ul>
+  </footer>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var NS = "http://www.w3.org/2000/svg";
+  var nf = new Intl.NumberFormat("pt-BR");
+  var tip = document.getElementById("tip");
+
+  function fmt(v, d) {
+    return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }).format(v);
+  }
+
+  function el(name, attrs, text) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  /* Barra com as pontas do dado arredondadas e a base ancorada reta. */
+  function barPath(x, y, w, h, r) {
+    var rr = Math.min(r, w / 2, h);
+    if (h <= 0.4) return "M" + x + "," + (y + h) + "h" + w;
+    return "M" + x + "," + (y + h) +
+           "V" + (y + rr) +
+           "a" + rr + "," + rr + " 0 0 1 " + rr + "," + -rr +
+           "h" + (w - 2 * rr) +
+           "a" + rr + "," + rr + " 0 0 1 " + rr + "," + rr +
+           "V" + (y + h) + "Z";
+  }
+
+  function showTip(evt, html) {
+    tip.innerHTML = html;
+    tip.style.opacity = "1";
+    tip.style.left = evt.clientX + "px";
+    tip.style.top = evt.clientY + "px";
+  }
+  function hideTip() { tip.style.opacity = "0"; }
+
+  function wire(node, html) {
+    node.addEventListener("mousemove", function (e) { showTip(e, html); });
+    node.addEventListener("mouseleave", hideTip);
+    node.addEventListener("focus", function (e) {
+      var r = node.getBoundingClientRect();
+      showTip({ clientX: r.left + r.width / 2, clientY: r.top }, html);
+    });
+    node.addEventListener("blur", hideTip);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Painel 1 — pequenos múltiplos, uma série por painel               */
+
+  var periods = ["21–31 mai", "jun", "jul", "1–18 ago"];
+
+  var panels = [
+    {
+      title: "Investimento por dia",
+      unit: "R$",
+      max: 220,
+      ticks: [0, 110, 220],
+      tickLabel: function (v) { return fmt(v); },
+      values: [205.08, 128.36, 43.27, 79.21],
+      value: function (v) { return "R$" + fmt(v, 2); }
+    },
+    {
+      title: "Impressões por dia",
+      unit: "milhares",
+      max: 80,
+      ticks: [0, 40, 80],
+      tickLabel: function (v) { return fmt(v); },
+      values: [73.13, 47.33, 8.28, 11.55],
+      value: function (v) { return fmt(v * 1000) + " impressões/dia"; }
+    },
+    {
+      title: "Custo por mil impressões",
+      unit: "R$",
+      max: 8,
+      ticks: [0, 4, 8],
+      tickLabel: function (v) { return fmt(v); },
+      values: [2.80, 2.71, 5.22, 6.86],
+      value: function (v) { return "R$" + fmt(v, 2) + " de CPM"; }
+    }
+  ];
+
+  var host = document.getElementById("panels");
+
+  panels.forEach(function (p) {
+    var box = document.createElement("div");
+
+    var h = document.createElement("p");
+    h.className = "panel-title";
+    h.textContent = p.title;
+    box.appendChild(h);
+
+    var u = document.createElement("p");
+    u.className = "panel-unit";
+    u.textContent = p.unit;
+    box.appendChild(u);
+
+    var W = 288, H = 156, left = 32, right = 282, top = 12, base = 118;
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.appendChild(el("title", {}, p.title + " — " + p.unit));
+
+    p.ticks.forEach(function (t) {
+      var y = base - (t / p.max) * (base - top);
+      svg.appendChild(el("line", { x1: left, x2: right, y1: y, y2: y, class: "gridline" }));
+      svg.appendChild(el("text", { x: left - 7, y: y + 3.4, class: "axis-text", "text-anchor": "end" }, p.tickLabel(t)));
+    });
+
+    var band = (right - left) / p.values.length;
+    var bw = Math.min(34, band * 0.58);
+
+    p.values.forEach(function (v, i) {
+      var cx = left + band * i + band / 2;
+      var x = cx - bw / 2;
+      var hgt = (v / p.max) * (base - top);
+      var y = base - hgt;
+
+      svg.appendChild(el("path", { d: barPath(x, y, bw, hgt, 4), fill: "var(--s1)" }));
+      svg.appendChild(el("text", { x: cx, y: base + 15, class: "axis-text", "text-anchor": "middle" }, periods[i]));
+
+      var hit = el("rect", { x: cx - band / 2, y: top - 6, width: band, height: base - top + 12, class: "hit", tabindex: "0", role: "img" });
+      hit.appendChild(el("title", {}, periods[i] + ": " + p.value(v)));
+      wire(hit, "<b>" + periods[i] + "</b><span class='tv'>" + p.value(v) + "</span>");
+      svg.appendChild(hit);
+    });
+
+    svg.appendChild(el("line", { x1: left, x2: right, y1: base, y2: base, stroke: "var(--line-strong)", "stroke-width": "1", "shape-rendering": "crispEdges" }));
+
+    box.appendChild(svg);
+    host.appendChild(box);
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* Painel 2 — cenários, barras horizontais agrupadas                 */
+
+  var scen = [
+    { name: "Alcance máximo", hint: "CPM R$3,60 · freq. 1,8", mix: "60% alcance de marca", imp: 4440000, reach: 2470000 },
+    { name: "Mix atual escalado", hint: "CPM R$5,60 · freq. 2,1", mix: "65% topo frio", imp: 2860000, reach: 1360000 },
+    { name: "Conservador", hint: "CPM R$8,00 · freq. 2,4", mix: "nada muda no mix", imp: 2000000, reach: 833000 }
+  ];
+
+  (function () {
+    var W = 760, rowH = 74, padTop = 8, padBottom = 26;
+    var H = padTop + scen.length * rowH + padBottom;
+    var left = 200, right = 672;
+    var max = 4600000;
+
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.appendChild(el("title", {}, "Impactos e alcance mensais projetados por cenário"));
+
+    [0, 1000000, 2000000, 3000000, 4000000].forEach(function (t) {
+      var x = left + (t / max) * (right - left);
+      svg.appendChild(el("line", { x1: x, x2: x, y1: padTop, y2: H - padBottom + 2, class: "gridline" }));
+      svg.appendChild(el("text", { x: x, y: H - padBottom + 16, class: "axis-text", "text-anchor": "middle" }, t === 0 ? "0" : fmt(t / 1000000, 0) + " mi"));
+    });
+
+    scen.forEach(function (s, i) {
+      var y0 = padTop + i * rowH;
+
+      svg.appendChild(el("text", { x: left - 14, y: y0 + 26, class: "axis-text bold", "text-anchor": "end", style: "font-size:11.5px" }, s.name));
+      svg.appendChild(el("text", { x: left - 14, y: y0 + 41, class: "axis-text", "text-anchor": "end", style: "font-size:9px" }, s.hint));
+
+      [
+        { v: s.imp, color: "var(--s1)", label: "Impactos", y: y0 + 10 },
+        { v: s.reach, color: "var(--s2)", label: "Alcance", y: y0 + 34 }
+      ].forEach(function (b) {
+        var w = (b.v / max) * (right - left);
+        var g = el("g", {});
+        g.appendChild(el("path", { d: "M" + left + "," + b.y + "h" + Math.max(0, w - 4) + "a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h" + -Math.max(0, w - 4) + "Z", fill: b.color }));
+        g.appendChild(el("text", { x: left + w + 9, y: b.y + 13, class: "axis-text", style: "font-size:10.5px" }, fmt(b.v)));
+        svg.appendChild(g);
+
+        var hitW = Math.min(Math.max(w, 8) + 60, W - left);
+        var hit = el("rect", { x: left, y: b.y - 3, width: hitW, height: 24, class: "hit", tabindex: "0", role: "img" });
+        var text = s.name + " — " + b.label + ": " + fmt(b.v) + "/mês";
+        hit.appendChild(el("title", {}, text));
+        wire(hit, "<b>" + s.name + "</b><span class='tv'>" + b.label + ": " + fmt(b.v) + " por mês<br>" + s.mix + " · " + s.hint + "</span>");
+        svg.appendChild(hit);
+      });
+    });
+
+    svg.appendChild(el("line", { x1: left, x2: left, y1: padTop, y2: H - padBottom + 2, stroke: "var(--line-strong)", "stroke-width": "1", "shape-rendering": "crispEdges" }));
+
+    document.getElementById("scenarios").appendChild(svg);
+  })();
+})();
+</script>
