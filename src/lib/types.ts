@@ -97,6 +97,10 @@ export interface ContentCard {
   imageUrl?: string;
   /** Endereço público da peça, quando existe. Abre em nova aba. */
   link?: string;
+  /** Texto do botão que abre o link. "Ver no Instagram", "Ver anúncio". */
+  linkLabel?: string;
+  /** Proporção da arte, quando conhecida — evita cortar Reels em quadro largo. */
+  aspectRatio?: number;
   metrics: Array<{ label: string; value: number; format: MetricFormat }>;
   /**
    * Retenção desta peça, quando é vídeo. Retenção agregada da conta não

@@ -257,6 +257,7 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
         .join(" · "),
       imageUrl: `/publicacoes/${item.id}/imagem`,
       link: item.permalink,
+      linkLabel: "Ver no Instagram",
       metrics: [
         { label: "Alcance", value: reach, format: "integer" as const },
         { label: "Interações", value: engagement, format: "integer" as const },
@@ -302,7 +303,7 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
     creativesLabel: {
       title: "Publicações com melhor desempenho",
       description:
-        "Ordenadas por interações. Clique no título para abrir a publicação no Instagram.",
+        "Ordenadas por interações. O botão em cada cartão abre a publicação no Instagram.",
     },
     tables: [],
     notices,

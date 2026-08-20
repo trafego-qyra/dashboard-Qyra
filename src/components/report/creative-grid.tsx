@@ -1,6 +1,6 @@
 "use client";
 
-import { ImageOff } from "lucide-react";
+import { ExternalLink, ImageOff, Play } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -50,31 +50,83 @@ function Retencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
   );
 }
 
+/**
+ * A arte inteira, sem corte.
+ *
+ * `object-cover` num quadro fixo decapitava Reels: 9:16 dentro de 5:4 perde
+ * mais da metade da peça, e o que sobra costuma ser o meio do vídeo — sem
+ * a headline, que é justamente o que se quer avaliar.
+ *
+ * `object-contain` mostra tudo, e a mesma imagem desfocada preenche o fundo
+ * para a sobra não virar barra preta. É o mesmo arquivo, então o navegador
+ * baixa uma vez só.
+ */
 function Arte({ criativo }: { criativo: ContentCard }) {
   const [falhou, setFalhou] = useState(false);
+  const ehVideo = criativo.video !== undefined;
 
   if (!criativo.imageUrl || falhou) {
     return (
-      <div className="flex aspect-[5/4] items-center justify-center bg-surface-sunken">
+      <div className="flex aspect-[4/5] items-center justify-center bg-surface-sunken">
         <ImageOff className="size-6 text-ink-muted" aria-hidden="true" />
         <span className="sr-only">Arte indisponível</span>
       </div>
     );
   }
 
+  const arte = (
+    <div className="relative aspect-[4/5] w-full overflow-hidden bg-plum-800">
+      {/* Fundo: mesma imagem, borrada e ampliada. Preenche a sobra sem
+          inventar cor e sem competir com a peça. */}
+      {/* biome-ignore lint/performance/noImgElement: servida pelo proxy do próprio domínio */}
+      <img
+        src={criativo.imageUrl}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 size-full scale-110 object-cover blur-xl saturate-150"
+      />
+      {/* biome-ignore lint/performance/noImgElement: servida pelo proxy do próprio domínio */}
+      <img
+        src={criativo.imageUrl}
+        alt={`Arte de ${criativo.title}`}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFalhou(true)}
+        className="relative size-full object-contain"
+      />
+
+      {ehVideo ? (
+        <span
+          className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full bg-plum-800/85 px-2 py-1 font-medium text-[10px] text-white"
+          aria-hidden="true"
+        >
+          <Play className="size-3 fill-current" />
+          vídeo
+        </span>
+      ) : null}
+    </div>
+  );
+
+  if (!criativo.link) return arte;
+
   return (
-    // `img` puro, não `next/image`: a arte é servida pela própria rota de
-    // proxy, já dimensionada pela Meta, e o otimizador só acrescentaria um
-    // segundo salto para o mesmo byte.
-    // biome-ignore lint/performance/noImgElement: servida pelo proxy do próprio domínio
-    <img
-      src={criativo.imageUrl}
-      alt={`Arte de ${criativo.title}`}
-      loading="lazy"
-      decoding="async"
-      onError={() => setFalhou(true)}
-      className="aspect-[5/4] w-full bg-surface-sunken object-cover"
-    />
+    <a
+      href={criativo.link}
+      target="_blank"
+      rel="noreferrer"
+      className="group/arte relative block"
+      aria-label={`${criativo.linkLabel ?? "Abrir peça"}: ${criativo.title}`}
+    >
+      {arte}
+      <span className="absolute inset-0 flex items-center justify-center bg-plum-800/0 opacity-0 transition-[background-color,opacity] duration-[var(--duration-base)] group-hover/arte:bg-plum-800/55 group-hover/arte:opacity-100">
+        <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 font-medium text-[11px] text-plum-800">
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+          {criativo.linkLabel ?? "Abrir"}
+        </span>
+      </span>
+    </a>
   );
 }
 
@@ -140,6 +192,26 @@ export function CreativeGrid({ criativos }: { criativos: ContentCard[] }) {
             </dl>
 
             {criativo.video ? <Retencao video={criativo.video} /> : null}
+
+            {/* Botão explícito: o link no título passava despercebido, e o
+                overlay da arte só aparece no hover — que não existe no celular. */}
+            {criativo.link ? (
+              <a
+                href={criativo.link}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  "mt-3 flex w-full items-center justify-center gap-1.5 rounded-full",
+                  "border border-line-strong bg-surface px-3 py-2",
+                  "font-medium text-[11px] text-ink-secondary",
+                  "transition-colors duration-[var(--duration-fast)]",
+                  "hover:bg-surface-sunken hover:text-ink",
+                )}
+              >
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+                {criativo.linkLabel ?? "Abrir peça"}
+              </a>
+            ) : null}
           </div>
         </li>
       ))}

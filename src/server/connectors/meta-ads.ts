@@ -137,8 +137,40 @@ function somarAcoes(acoes: AcoesDaMeta | undefined): number {
   return (acoes ?? []).reduce((total, item) => total + num(item.value), 0);
 }
 
+interface AdsEdgeResponse {
+  data?: Array<{ id: string; preview_shareable_link?: string }>;
+}
+
+/**
+ * Link de pré-visualização de cada anúncio, por ID.
+ *
+ * A Insights não devolve isso — é a borda `/ads` da conta. Enriquecimento
+ * puro: sem ele o cartão continua completo, só não abre a peça.
+ */
+async function buscarLinksDeAnuncio(): Promise<Map<string, string>> {
+  const env = getEnv();
+  const url = new URL(
+    `https://graph.facebook.com/${env.META_API_VERSION}/act_${(env.META_AD_ACCOUNT_ID as string).replace(/^act_/, "")}/ads`,
+  );
+  url.searchParams.set("fields", "id,preview_shareable_link");
+  url.searchParams.set("limit", "200");
+
+  try {
+    const resposta = await httpJson<AdsEdgeResponse>(url.toString(), {
+      headers: metaAuthHeaders(env.META_ACCESS_TOKEN as string),
+    });
+    return new Map(
+      (resposta.data ?? [])
+        .filter((a) => a.preview_shareable_link)
+        .map((a) => [a.id, a.preview_shareable_link as string]),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
 /** Monta os cartões de anúncio. A ordem vem de `ordenarCriativos`. */
-function montarCriativos(porAnuncio: MetaInsightsRow[]): ContentCard[] {
+function montarCriativos(porAnuncio: MetaInsightsRow[], links: Map<string, string>): ContentCard[] {
   const cartoes = porAnuncio.map((row) => {
     const spend = num(row.spend);
     const impressions = num(row.impressions);
@@ -178,6 +210,8 @@ function montarCriativos(porAnuncio: MetaInsightsRow[]): ContentCard[] {
       title: c.name,
       subtitle: c.campaign,
       imageUrl: c.id ? `/criativos/${c.id}/imagem` : undefined,
+      link: links.get(c.id),
+      linkLabel: "Ver anúncio",
       metrics: [
         { label: "Investimento", value: c.spend, format: "currency" as const },
         { label: "Leads", value: c.leads, format: "integer" as const },
@@ -205,7 +239,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     return report;
   }
 
-  const [daily, byCampaign, porAnuncio] = await Promise.all([
+  const [daily, byCampaign, porAnuncio, linksDeAnuncio] = await Promise.all([
     fetchInsights(range, {
       fields: CAMPOS_DE_METRICA,
       time_increment: "1",
@@ -222,6 +256,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       fields: `ad_id,ad_name,campaign_name,${CAMPOS_DE_METRICA}`,
       level: "ad",
     }).catch(() => [] as MetaInsightsRow[]),
+    buscarLinksDeAnuncio(),
   ]);
 
   // A API omite dias sem entrega; a série precisa deles para não "pular" no eixo.
@@ -338,7 +373,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       { key: "impressions", label: "Impressões", format: "integer", slot: 3 },
       { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
-    creatives: montarCriativos(porAnuncio),
+    creatives: montarCriativos(porAnuncio, linksDeAnuncio),
     creativesLabel: {
       title: "Melhores criativos",
       description: porAnuncio.some((r) => countLeads(r) > 0)
