@@ -5,10 +5,10 @@ import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatMetric } from "@/lib/format";
-import type { CreativeCard } from "@/lib/types";
+import type { ContentCard } from "@/lib/types";
 
 /** Régua de retenção: quanto do vídeo cada faixa de gente assistiu. */
-function Retencao({ video }: { video: NonNullable<CreativeCard["video"]> }) {
+function Retencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
   const marcas = [
     { rotulo: "25%", valor: video.p25 },
     { rotulo: "50%", valor: video.p50 },
@@ -50,7 +50,7 @@ function Retencao({ video }: { video: NonNullable<CreativeCard["video"]> }) {
   );
 }
 
-function Arte({ criativo }: { criativo: CreativeCard }) {
+function Arte({ criativo }: { criativo: ContentCard }) {
   const [falhou, setFalhou] = useState(false);
 
   if (!criativo.imageUrl || falhou) {
@@ -69,7 +69,7 @@ function Arte({ criativo }: { criativo: CreativeCard }) {
     // biome-ignore lint/performance/noImgElement: servida pelo proxy do próprio domínio
     <img
       src={criativo.imageUrl}
-      alt={`Arte do anúncio ${criativo.name}`}
+      alt={`Arte de ${criativo.title}`}
       loading="lazy"
       decoding="async"
       onError={() => setFalhou(true)}
@@ -84,12 +84,12 @@ function Arte({ criativo }: { criativo: CreativeCard }) {
  * Numa reunião, a pergunta que vem depois de "quanto gastou" é "qual criativo
  * puxou isso" — e ela não se responde com nome de anúncio numa linha de tabela.
  */
-export function CreativeGrid({ criativos }: { criativos: CreativeCard[] }) {
+export function CreativeGrid({ criativos }: { criativos: ContentCard[] }) {
   return (
     <ul className="qy-stagger grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
       {criativos.map((criativo, posicao) => (
         <li
-          key={criativo.id || criativo.name}
+          key={criativo.id || criativo.title}
           className={cn(
             "overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface",
             "transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out-soft)]",
@@ -107,32 +107,33 @@ export function CreativeGrid({ criativos }: { criativos: CreativeCard[] }) {
           </div>
 
           <div className="p-3.5">
-            <p className="truncate font-semibold text-ink text-sm" title={criativo.name}>
-              {criativo.name}
-            </p>
-            {criativo.campaign ? (
-              <p className="truncate text-[11px] text-ink-muted" title={criativo.campaign}>
-                {criativo.campaign}
+            {criativo.link ? (
+              <a
+                href={criativo.link}
+                target="_blank"
+                rel="noreferrer"
+                className="block truncate font-semibold text-ink text-sm hover:underline"
+                title={criativo.title}
+              >
+                {criativo.title}
+              </a>
+            ) : (
+              <p className="truncate font-semibold text-ink text-sm" title={criativo.title}>
+                {criativo.title}
+              </p>
+            )}
+            {criativo.subtitle ? (
+              <p className="truncate text-[11px] text-ink-muted" title={criativo.subtitle}>
+                {criativo.subtitle}
               </p>
             ) : null}
 
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-              {[
-                { rotulo: "Investimento", valor: criativo.spend, formato: "currency" as const },
-                { rotulo: "Leads", valor: criativo.leads, formato: "integer" as const },
-                { rotulo: "CPL", valor: criativo.cpl, formato: "currency" as const },
-                { rotulo: "CTR", valor: criativo.ctr, formato: "percent" as const },
-                { rotulo: "CPM", valor: criativo.cpm, formato: "currency" as const },
-                {
-                  rotulo: "Impressões",
-                  valor: criativo.impressions,
-                  formato: "integer" as const,
-                },
-              ].map(({ rotulo, valor, formato }) => (
-                <div key={rotulo} className="min-w-0">
-                  <dt className="text-[11px] text-ink-muted leading-tight">{rotulo}</dt>
+              {criativo.metrics.map(({ label, value, format }) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-[11px] text-ink-muted leading-tight">{label}</dt>
                   <dd className="truncate font-medium text-ink text-sm tabular">
-                    {formatMetric(valor, formato)}
+                    {formatMetric(value, format)}
                   </dd>
                 </div>
               ))}

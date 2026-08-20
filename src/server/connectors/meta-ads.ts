@@ -1,9 +1,9 @@
 import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
-import { MAX_CRIATIVOS, ordenarCriativos } from "@/lib/criativos";
+import { type AdCreative, MAX_CRIATIVOS, ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, CreativeCard, DateRange, SeriesPoint } from "@/lib/types";
+import type { ChannelReport, ContentCard, DateRange, SeriesPoint } from "@/lib/types";
 import { mockMetaAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson, metaAuthHeaders } from "@/server/lib/http";
@@ -138,7 +138,7 @@ function somarAcoes(acoes: AcoesDaMeta | undefined): number {
 }
 
 /** Monta os cartões de anúncio. A ordem vem de `ordenarCriativos`. */
-function montarCriativos(porAnuncio: MetaInsightsRow[]): CreativeCard[] {
+function montarCriativos(porAnuncio: MetaInsightsRow[]): ContentCard[] {
   const cartoes = porAnuncio.map((row) => {
     const spend = num(row.spend);
     const impressions = num(row.impressions);
@@ -149,11 +149,11 @@ function montarCriativos(porAnuncio: MetaInsightsRow[]): CreativeCard[] {
       id: row.ad_id ?? "",
       name: row.ad_name ?? "—",
       campaign: row.campaign_name,
-      imageUrl: row.ad_id ? `/criativos/${row.ad_id}/imagem` : undefined,
       spend,
       impressions,
       ctr: impressions === 0 ? 0 : clicks / impressions,
       cpm: impressions === 0 ? 0 : (spend / impressions) * 1000,
+      linkClicks: num(row.inline_link_clicks),
       leads,
       cpl: leads === 0 ? 0 : spend / leads,
       // Sem reprodução não é vídeo — ou é vídeo que ninguém abriu. Nos dois
@@ -168,10 +168,26 @@ function montarCriativos(porAnuncio: MetaInsightsRow[]): CreativeCard[] {
               p100: somarAcoes(row.video_p100_watched_actions) / reproducoes,
             }
           : undefined,
-    } satisfies CreativeCard;
+    } satisfies AdCreative;
   });
 
-  return ordenarCriativos(cartoes).slice(0, MAX_CRIATIVOS);
+  return ordenarCriativos(cartoes)
+    .slice(0, MAX_CRIATIVOS)
+    .map((c) => ({
+      id: c.id,
+      title: c.name,
+      subtitle: c.campaign,
+      imageUrl: c.id ? `/criativos/${c.id}/imagem` : undefined,
+      metrics: [
+        { label: "Investimento", value: c.spend, format: "currency" as const },
+        { label: "Leads", value: c.leads, format: "integer" as const },
+        { label: "CPL", value: c.cpl, format: "currency" as const },
+        { label: "CTR", value: c.ctr, format: "percent" as const },
+        { label: "CPM", value: c.cpm, format: "currency" as const },
+        { label: "Impressões", value: c.impressions, format: "integer" as const },
+      ],
+      video: c.video,
+    }));
 }
 
 export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelReport> {
@@ -323,6 +339,12 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
       { key: "cpm", label: "CPM", format: "currency", slot: 4 },
     ],
     creatives: montarCriativos(porAnuncio),
+    creativesLabel: {
+      title: "Melhores criativos",
+      description: porAnuncio.some((r) => countLeads(r) > 0)
+        ? "Ordenados por leads, desempatando pelo menor custo por lead."
+        : "Sem lead atribuído no período, então a ordem é por investimento.",
+    },
     tables: [
       {
         title: "Campanhas",

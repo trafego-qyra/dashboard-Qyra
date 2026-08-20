@@ -78,12 +78,10 @@ export function ChannelView({
         <Card className="qy-rise">
           <CardHeader>
             <div>
-              <CardTitle>Melhores criativos</CardTitle>
-              <CardDescription>
-                {report.creatives.some((c) => c.leads > 0)
-                  ? "Ordenados por leads, desempatando pelo menor custo por lead."
-                  : "Sem lead atribuído no período, então a ordem é por investimento."}
-              </CardDescription>
+              <CardTitle>{report.creativesLabel?.title ?? "Melhores criativos"}</CardTitle>
+              {report.creativesLabel?.description ? (
+                <CardDescription>{report.creativesLabel.description}</CardDescription>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent>
