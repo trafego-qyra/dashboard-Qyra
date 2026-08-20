@@ -667,3 +667,126 @@ describe("GA4 — origem das visitas por UTM", () => {
     expect(tabela?.rows[1]).toMatchObject({ origem: "direto / sem mídia" });
   });
 });
+
+describe("GA4 — duração média", () => {
+  it("pondera pelo volume de cada dia, não é média das médias", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        const corpo = String(init?.body ?? "");
+        if (!corpo.includes('"date"')) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        // Um dia enorme com sessão curta, um dia minúsculo com sessão longa.
+        return new Response(
+          JSON.stringify({
+            rows: [
+              {
+                dimensionValues: [{ value: "20260201" }],
+                metricValues: [
+                  { value: "100" },
+                  { value: "90" },
+                  { value: "0" },
+                  { value: "0" },
+                  { value: "10" },
+                ],
+              },
+              {
+                dimensionValues: [{ value: "20260202" }],
+                metricValues: [
+                  { value: "1" },
+                  { value: "1" },
+                  { value: "0" },
+                  { value: "0" },
+                  { value: "1000" },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    const report = await fetchGa4Report(RANGE);
+    const duracao = report.kpis.find((k) => k.key === "avgDuration")?.value ?? 0;
+
+    // Ponderado: (100x10 + 1x1000) / 101 = 19,8s.
+    expect(duracao).toBeCloseTo(2000 / 101, 4);
+    // Média das médias daria (10 + 1000) / 2 = 505s — vinte e cinco vezes
+    // maior, e foi o que a tela mostrava antes.
+    expect(duracao).toBeLessThan(100);
+  });
+
+  it("tempo por página vem de engajamento, não da duração da sessão", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    const corpos: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        const corpo = String(init?.body ?? "");
+        corpos.push(corpo);
+        if (!corpo.includes("pageTitle")) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            rows: [
+              {
+                dimensionValues: [{ value: "Planos e preços" }, { value: "/planos" }],
+                metricValues: [{ value: "200" }, { value: "9000" }],
+              },
+              {
+                dimensionValues: [{ value: "" }, { value: "/sem-titulo" }],
+                metricValues: [{ value: "10" }, { value: "300" }],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    const report = await fetchGa4Report(RANGE);
+    const tabela = report.tables.find((t) => t.title === "Páginas mais vistas");
+
+    // Métrica de sessão cruzada com página devolvia a duração da sessão
+    // inteira, e o número não fechava com o indicador do topo.
+    const pedidos = corpos.join(" ");
+    expect(pedidos).toContain("userEngagementDuration");
+    expect(pedidos).toContain("pageTitle");
+
+    expect(tabela?.rows[0]).toMatchObject({
+      page: "Planos e preços",
+      path: "/planos",
+      avgDuration: 45,
+    });
+    // Página sem título cai no endereço: melhor "/sem-titulo" do que vazio.
+    expect(tabela?.rows[1]).toMatchObject({ page: "/sem-titulo" });
+  });
+});
