@@ -16,3 +16,24 @@ Resumo do que ele exige — os detalhes estão lá:
 5. **O visual segue `docs/design-system.md`** — tokens da marca, nada inventado.
 
 Este arquivo existe só para apontar. Regra nova vai no `AGENTS.md`.
+
+---
+
+## Contas — leia antes de qualquer tarefa de mídia
+
+Tarefa que envolva dados de anúncio, projeção, plano de mídia ou relatório para
+cliente começa pelo dossiê da conta. Ele tem a identificação, os números já
+medidos, o que foi entregue e como refazer as consultas.
+
+| Conta | Dossiê |
+|---|---|
+| **Qyra Saúde** — `act_1610215746739005` | [`docs/contas/qyra-saude.md`](./docs/contas/qyra-saude.md) |
+
+Duas coisas que economizam uma sessão inteira:
+
+- A conta da Qyra é a `1610215746739005`, e ela aparece na **segunda página**
+  de `ads_get_ad_accounts` — a primeira só traz contas de clientes.
+- Os números do dossiê têm data de leitura. Confira se ainda valem antes de
+  reaproveitar; a seção "Como refazer os números" traz as chamadas prontas.
+
+Terminou uma entrega de mídia? Atualize o dossiê no mesmo PR.
