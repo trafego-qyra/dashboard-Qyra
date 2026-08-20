@@ -87,10 +87,27 @@ GOOGLE_REFRESH_TOKEN=1//0g...
 GOOGLE_ADS_DEVELOPER_TOKEN=abcdef...
 GOOGLE_ADS_CUSTOMER_ID=123-456-7890
 GOOGLE_ADS_LOGIN_CUSTOMER_ID=999-888-7777   # o MCC, se o acesso for via gerente
-GOOGLE_ADS_API_VERSION=v18
+GOOGLE_ADS_API_VERSION=                      # opcional, ver abaixo
 ```
 
 Os hífens são removidos pelo conector — pode colar como aparece na interface.
+
+**Sobre a versão da API.** Deixe `GOOGLE_ADS_API_VERSION` vazio: o conector
+desce uma lista de candidatas e usa a primeira que responder.
+
+Isso existe porque o Google publica cerca de três versões por ano e aposenta
+cada uma depois de ~13 meses. Versão aposentada **não devolve erro de API** — a
+URL deixa de existir e a resposta é uma página HTML de 404, que na tela parecia
+problema de token. O painel ficou meses apontando para uma versão morta por
+causa disso.
+
+Para fixar depois de saber qual está viva: abra `/api/diagnostico/google`, veja
+a etapa `ads-versao`, e cadastre o valor que ela reporta. Com a variável
+preenchida o conector obedece e não sonda.
+
+Se a etapa disser que nenhuma candidata respondeu, a lista em
+`VERSOES_CANDIDATAS` (`src/server/connectors/google-ads.ts`) envelheceu e
+precisa de uma versão mais nova.
 
 ### GA4 — específico
 

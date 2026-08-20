@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-
 import { rangeFromPreset } from "@/lib/date-range";
+import { VERSOES_CANDIDATAS } from "@/server/connectors/google-ads";
 import { getCredentials, getEnv } from "@/server/env";
 import { guard } from "@/server/lib/api";
 import { redactSecrets } from "@/server/lib/http";
@@ -241,12 +241,47 @@ export async function GET(request: Request) {
         cabecalhos["login-customer-id"] = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, "");
       }
 
+      // Versão aposentada não devolve erro de API: a URL some e o Google
+      // responde 404 com página HTML. Descobrir qual responde é o que separa
+      // "token sem permissão" de "estamos chamando um endereço que não existe".
+      let versaoAds: string | null = env.GOOGLE_ADS_API_VERSION ?? null;
+      if (!versaoAds) {
+        for (const candidata of VERSOES_CANDIDATAS) {
+          try {
+            const teste = await fetch(
+              `https://googleads.googleapis.com/${candidata}/customers:listAccessibleCustomers`,
+              { headers: cabecalhos, signal: AbortSignal.timeout(10_000) },
+            );
+            if (teste.status !== 404) {
+              versaoAds = candidata;
+              break;
+            }
+          } catch {
+            // Falha de rede não distingue versão; segue para a próxima.
+          }
+        }
+      }
+
+      etapas.push({
+        etapa: "ads-versao",
+        descricao: "Qual versão da API do Google Ads ainda existe?",
+        status: null,
+        ok: versaoAds !== null,
+        resultado: versaoAds
+          ? `Respondendo em ${versaoAds}.${
+              env.GOOGLE_ADS_API_VERSION
+                ? " Fixada por GOOGLE_ADS_API_VERSION."
+                : " Descoberta automaticamente — cadastre GOOGLE_ADS_API_VERSION com esse valor para fixar."
+            }`
+          : `Nenhuma das versões testadas respondeu (${VERSOES_CANDIDATAS.join(", ")}). A lista de candidatas provavelmente envelheceu.`,
+      });
+
       etapas.push(
         await requisitar(
           "ads-acesso",
           "O developer token é aceito e quais contas ele alcança?",
           {
-            url: `https://googleads.googleapis.com/${env.GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`,
+            url: `https://googleads.googleapis.com/${versaoAds}/customers:listAccessibleCustomers`,
             init: { headers: cabecalhos },
           },
           (d) => {
@@ -273,7 +308,7 @@ export async function GET(request: Request) {
             "ads-consulta",
             "A consulta GAQL do conector responde?",
             {
-              url: `https://googleads.googleapis.com/${env.GOOGLE_ADS_API_VERSION}/customers/${env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, "")}/googleAds:searchStream`,
+              url: `https://googleads.googleapis.com/${versaoAds}/customers/${env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, "")}/googleAds:searchStream`,
               init: {
                 method: "POST",
                 headers: { ...cabecalhos, "content-type": "application/json" },
@@ -318,7 +353,7 @@ export async function GET(request: Request) {
         analytics: temEscopoAnalytics,
       },
       configuracao: {
-        versaoApiAds: env.GOOGLE_ADS_API_VERSION,
+        versaoApiAds: env.GOOGLE_ADS_API_VERSION ?? "descoberta automaticamente",
         propriedadeGa4: env.GA4_PROPERTY_ID ? mascarar(env.GA4_PROPERTY_ID) : null,
         contaAds: env.GOOGLE_ADS_CUSTOMER_ID ? mascarar(env.GOOGLE_ADS_CUSTOMER_ID) : null,
         usaContaGerente: Boolean(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID),

@@ -6,7 +6,7 @@ import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
-import { type HttpError, httpJson, redactSecrets } from "@/server/lib/http";
+import { HttpError, httpJson, redactSecrets } from "@/server/lib/http";
 import { buildGoogleAdsSnapshotReport } from "./google-ads-snapshot";
 
 /**
@@ -38,6 +38,45 @@ function num(value: string | number | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * Versões candidatas da API, da mais nova para a mais antiga.
+ *
+ * O Google publica cerca de três por ano e aposenta cada uma depois de ~13
+ * meses. Versão aposentada não devolve erro de API: a URL deixa de existir e a
+ * resposta é uma página HTML de 404. Foi assim que o painel ficou meses
+ * apontando para a `v18` sem ninguém perceber — o erro parecia problema de
+ * token.
+ */
+export const VERSOES_CANDIDATAS = ["v22", "v21", "v20", "v19"];
+
+/** Memoriza a versão que respondeu, para não sondar a cada requisição. */
+let versaoEmUso: string | null = null;
+
+/**
+ * URL inexistente, não erro da API. A Graph do Google devolve 404 com corpo
+ * HTML quando a versão foi aposentada; erro de permissão ou de token vem como
+ * JSON, com outro status.
+ */
+function ehVersaoInexistente(erro: unknown): boolean {
+  return erro instanceof HttpError && erro.status === 404;
+}
+
+/**
+ * Versões a tentar. Com `GOOGLE_ADS_API_VERSION` preenchido, obedece e não
+ * sonda — é assim que se fixa uma versão depois de descobrir qual funciona.
+ */
+function versoesParaTentar(): string[] {
+  const fixada = getEnv().GOOGLE_ADS_API_VERSION;
+  if (fixada) return [fixada];
+  if (versaoEmUso) return [versaoEmUso, ...VERSOES_CANDIDATAS.filter((v) => v !== versaoEmUso)];
+  return VERSOES_CANDIDATAS;
+}
+
+/** Versão que respondeu na última consulta bem-sucedida, para o diagnóstico. */
+export function versaoDaApiEmUso(): string | null {
+  return getEnv().GOOGLE_ADS_API_VERSION ?? versaoEmUso;
+}
+
 async function runQuery(query: string): Promise<GoogleAdsRow[]> {
   const env = getEnv();
   const token = await getGoogleAccessToken();
@@ -52,12 +91,27 @@ async function runQuery(query: string): Promise<GoogleAdsRow[]> {
     headers["login-customer-id"] = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, "");
   }
 
-  const response = await httpJson<SearchStreamResponse>(
-    `https://googleads.googleapis.com/${env.GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`,
-    { method: "POST", headers, body: JSON.stringify({ query }) },
-  );
+  const versoes = versoesParaTentar();
+  let ultimoErro: unknown;
 
-  return response.flatMap((chunk) => chunk.results ?? []);
+  for (const versao of versoes) {
+    try {
+      const response = await httpJson<SearchStreamResponse>(
+        `https://googleads.googleapis.com/${versao}/customers/${customerId}/googleAds:searchStream`,
+        { method: "POST", headers, body: JSON.stringify({ query }) },
+      );
+      versaoEmUso = versao;
+      return response.flatMap((chunk) => chunk.results ?? []);
+    } catch (erro) {
+      ultimoErro = erro;
+      // Só 404 significa "esta versão não existe mais". Token recusado,
+      // permissão negada ou conta errada precisam propagar na hora — insistir
+      // em outra versão só transformaria um erro claro em confusão.
+      if (!ehVersaoInexistente(erro)) throw erro;
+    }
+  }
+
+  throw ultimoErro;
 }
 
 /**

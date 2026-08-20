@@ -77,7 +77,10 @@ const schema = z.object({
   GOOGLE_ADS_DEVELOPER_TOKEN: optionalString,
   GOOGLE_ADS_CUSTOMER_ID: optionalString,
   GOOGLE_ADS_LOGIN_CUSTOMER_ID: optionalString,
-  GOOGLE_ADS_API_VERSION: trimmedString("v18"),
+  // Sem padrão fixo de propósito: o Google aposenta uma versão por ano, e
+  // uma constante no código vira 404 silencioso meses depois. Vazio faz o
+  // conector descobrir a versão em uso; preenchido, ele obedece e não testa.
+  GOOGLE_ADS_API_VERSION: optionalString,
 
   GA4_PROPERTY_ID: optionalString,
 
