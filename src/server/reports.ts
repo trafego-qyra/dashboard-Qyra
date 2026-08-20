@@ -1,4 +1,4 @@
-import { avisoCliente, avisoOperacao } from "@/lib/avisos";
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { CHANNELS, getChannel } from "@/lib/channels";
@@ -199,15 +199,6 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   const paidConversions = noPeriodo
     .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
     .reduce((a, c) => a + c.conversions, 0);
-
-  for (const canal of byChannel) {
-    if (canal.source !== "snapshot") continue;
-    notices.push(
-      avisoCliente(
-        `${canal.label}: exibido em período próprio e fora do consolidado, porque os dados vêm de um export de intervalo fixo.`,
-      ),
-    );
-  }
 
   const ga4 = results.find((r) => r.channel === "ga4")?.report ?? null;
   const sessions = ga4 ? pickTotal(ga4, ["sessions"]) : 0;
