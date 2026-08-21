@@ -637,10 +637,10 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
     ],
     creatives: [
       ["Como funciona a terapia injetável", "Reels · 18/08/2026"],
-      ["5 mitos sobre emagrecimento que você ainda acredita", "Publicação · 15/08/2026"],
+      ["5 mitos sobre emagrecimento que você ainda acredita", "Carrossel · 15/08/2026"],
       ["Bastidores da consulta", "Reels · 12/08/2026"],
       ["Depoimento de paciente", "Publicação · 09/08/2026"],
-      ["Checklist do check-up anual", "Publicação · 06/08/2026"],
+      ["Checklist do check-up anual", "Carrossel · 06/08/2026"],
     ].map(([titulo, legenda], i) => {
       const r = Math.round(reach * [0.14, 0.11, 0.09, 0.06, 0.05][i]);
       const e = Math.round(engagement * [0.19, 0.15, 0.12, 0.05, 0.07][i]);
@@ -650,6 +650,11 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
         title: titulo,
         subtitle: legenda,
         imageUrl: arteDeDemonstracao(i + 2),
+        // Carrossel de demonstração: artes diferentes para dar para ver que a
+        // rolagem troca a peça, e não só desloca a mesma imagem.
+        galeria: (legenda as string).startsWith("Carrossel")
+          ? [0, 1, 2, 3].map((n) => arteDeDemonstracao(i + 2 + n))
+          : undefined,
         link: "https://www.instagram.com/qyra.saude/",
         linkLabel: "Ver no Instagram",
         // Reels tem vídeo; publicação estática não.
