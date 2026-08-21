@@ -235,6 +235,16 @@
     );
 }
 
+/* Trilho de rolagem sem a barra à vista: o carrossel de artes tem setas e
+   marcadores próprios, e a barra do sistema só sujaria a peça. A rolagem
+   continua inteira — dedo, trackpad e teclado seguem funcionando. */
+@utility qy-sem-barra {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Textura "Logo Stamp" (pág. 26): contorno do logo como carimbo de fundo. */
 @utility qy-stamp {
   background-image: url("/brand/stamp.svg");

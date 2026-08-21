@@ -99,6 +99,25 @@ test("os quatro canais respondem", async ({ page }) => {
   }
 });
 
+test("o carrossel do orgânico mostra todas as artes, não só a capa", async ({ page }) => {
+  await page.goto("/organico");
+
+  const carrossel = page.getByRole("group", { name: /Carrossel com \d+ artes/ }).first();
+  await carrossel.scrollIntoViewIfNeeded();
+  await expect(carrossel).toBeVisible();
+
+  const cartao = page.locator("li", { has: carrossel }).first();
+  await expect(cartao.getByText(/^1\/\d+$/)).toBeVisible();
+
+  // Encaixe de rolagem é comportamento de navegador — vitest com jsdom não
+  // consegue provar que a arte seguinte realmente entra em quadro.
+  await cartao.getByRole("button", { name: "Próxima arte" }).click();
+  await expect(cartao.getByText(/^2\/\d+$/)).toBeVisible();
+
+  const artes = carrossel.locator("img:not([aria-hidden='true'])");
+  expect(await artes.count()).toBeGreaterThan(1);
+});
+
 test("endereço inexistente devolve a tela de não encontrado", async ({ page }) => {
   await page.goto("/rota-que-nao-existe");
   await expect(page.getByText("Página não encontrada")).toBeVisible();

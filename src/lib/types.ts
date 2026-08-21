@@ -103,6 +103,15 @@ export interface ContentCard {
   linkLabel?: string;
   /** Proporção da arte, quando conhecida — evita cortar Reels em quadro largo. */
   aspectRatio?: number;
+  /**
+   * Todas as artes da peça, na ordem publicada, quando é carrossel.
+   *
+   * A Meta devolve o álbum como uma mídia só, e a `media_url` dela é a
+   * primeira imagem — mostrar apenas isso esconde o resto do carrossel, que
+   * costuma ser onde está o argumento. A primeira entrada é a mesma capa de
+   * `imageUrl`, então a lista se lê sozinha, sem precisar juntar as duas.
+   */
+  galeria?: string[];
   metrics: Array<{ label: string; value: number; format: MetricFormat }>;
   /**
    * Retenção desta peça, quando é vídeo. Retenção agregada da conta não

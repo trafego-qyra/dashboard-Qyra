@@ -36,11 +36,29 @@ interface MediaResponse {
     thumbnail_url?: string;
     like_count?: number;
     comments_count?: number;
+    /** Presente só em carrossel: cada imagem/vídeo do álbum, na ordem publicada. */
+    children?: { data: Array<{ id: string }> };
     insights?: { data: Array<{ name: string; values: InsightValue[] }> };
   }>;
 }
 
 const MAX_WINDOW_DAYS = 30;
+
+/** Teto de artes por carrossel — o Instagram permite 20, e é o que cabe. */
+const MAX_ARTES_DO_ALBUM = 20;
+
+/**
+ * As artes de um carrossel, cada uma pelo proxy do próprio domínio.
+ *
+ * Devolve `undefined` para publicação simples: o cartão então usa só a capa,
+ * e a galeria nem chega ao navegador. Cada filho é uma mídia como outra
+ * qualquer na Graph, então o mesmo proxy resolve — inclusive vídeo dentro do
+ * álbum, de que ele já sabe tirar o quadro de capa.
+ */
+function galeriaDoAlbum(filhos: Array<{ id: string }> | undefined): string[] | undefined {
+  if (!filhos || filhos.length < 2) return undefined;
+  return filhos.slice(0, MAX_ARTES_DO_ALBUM).map((filho) => `/publicacoes/${filho.id}/imagem`);
+}
 
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -163,7 +181,9 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
     "fields",
     // `media_url` é a arte do post; para vídeo ela é o arquivo, e o quadro de
     // capa vem em `thumbnail_url`. Os dois entram para o cartão ter prévia.
-    "id,caption,media_type,permalink,timestamp,like_count,comments_count,media_url,thumbnail_url,insights.metric(reach)",
+    // `children` é o que abre o carrossel: sem ele a Meta devolve o álbum como
+    // mídia única e só a primeira arte aparece.
+    "id,caption,media_type,permalink,timestamp,like_count,comments_count,media_url,thumbnail_url,children{id},insights.metric(reach)",
   );
   mediaUrl.searchParams.set("since", range.from);
   mediaUrl.searchParams.set("until", addDays(range.to, 1));
@@ -256,6 +276,7 @@ export async function fetchOrganicoReport(range: DateRange): Promise<ChannelRepo
         .filter(Boolean)
         .join(" · "),
       imageUrl: `/publicacoes/${item.id}/imagem`,
+      galeria: galeriaDoAlbum(item.children?.data),
       link: item.permalink,
       linkLabel: "Ver no Instagram",
       metrics: [
