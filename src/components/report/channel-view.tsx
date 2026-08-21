@@ -20,10 +20,13 @@ export function ChannelView({
   report,
   description,
   actions,
+  extra,
 }: {
   report: ChannelReport;
   description: string;
   actions?: React.ReactNode;
+  /** Seção de outra origem, abaixo das tabelas. Hoje só o Clarity usa. */
+  extra?: React.ReactNode;
 }) {
   const [primary, ...rest] = report.kpis;
 
@@ -103,6 +106,8 @@ export function ChannelView({
           </CardContent>
         </Card>
       ))}
+
+      {extra}
     </div>
   );
 }

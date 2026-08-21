@@ -84,6 +84,13 @@ const schema = z.object({
 
   GA4_PROPERTY_ID: optionalString,
 
+  // ID do projeto no Microsoft Clarity. Não é segredo — vai no script público
+  // do site. Serve para o painel apontar para os mapas de calor: o GA4 diz
+  // quanto tempo a pessoa ficou na página, o Clarity mostra até onde ela leu.
+  CLARITY_PROJECT_ID: optionalString,
+  // Token da API de exportação do Clarity. Esse é segredo, ao contrário do ID.
+  CLARITY_API_TOKEN: optionalString,
+
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
@@ -126,6 +133,7 @@ export interface Credentials {
   google: boolean;
   googleAds: boolean;
   ga4: boolean;
+  clarity: boolean;
 }
 
 /** Quais integrações têm credencial completa **agora**. */
@@ -148,5 +156,6 @@ export function getCredentials(): Credentials {
     google,
     googleAds: Boolean(google && env.GOOGLE_ADS_DEVELOPER_TOKEN && env.GOOGLE_ADS_CUSTOMER_ID),
     ga4: Boolean(google && env.GA4_PROPERTY_ID),
+    clarity: Boolean(env.CLARITY_API_TOKEN),
   };
 }
