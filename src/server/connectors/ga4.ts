@@ -77,7 +77,7 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
 
   const dateRanges = [{ startDate: range.from, endDate: range.to }];
 
-  const [daily, byChannel, byPage, byUtm] = await Promise.all([
+  const [daily, byChannel, byPage, byUtm, totalDoPeriodo] = await Promise.all([
     runReport({
       dateRanges,
       dimensions: [{ name: "date" }],
@@ -132,6 +132,10 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       limit: 40,
     }),
+    // Usuário é pessoa distinta, e pessoa não se soma: quem entrou segunda e
+    // voltou quinta apareceria duas vezes. Sem a dimensão de data, o GA4
+    // deduplica dentro da janela pedida — é a única forma de ter o número certo.
+    runReport({ dateRanges, metrics: [{ name: "totalUsers" }] }),
   ]);
 
   const byDate = new Map(
@@ -170,6 +174,10 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
     { sessions: 0, users: 0, conversions: 0, duration: 0 },
   );
 
+  // `totals.users` é a soma diária e continua servindo de rede: se a consulta
+  // sem dimensão não vier, é melhor um número inflado que um zero.
+  const usuariosDoPeriodo = num(totalDoPeriodo.rows?.[0]?.metricValues?.[0]?.value) || totals.users;
+
   return {
     channel: "ga4",
     label: "Google Analytics",
@@ -178,7 +186,13 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
     fetchedAt: new Date().toISOString(),
     kpis: [
       { key: "sessions", label: "Sessões", value: totals.sessions, format: "integer" },
-      { key: "users", label: "Usuários", value: totals.users, format: "integer" },
+      {
+        key: "users",
+        label: "Usuários",
+        value: usuariosDoPeriodo,
+        format: "integer",
+        hint: "Pessoas distintas no período, contadas uma única vez. Somar o total de cada dia contaria de novo quem voltou.",
+      },
       { key: "conversions", label: "Conversões", value: totals.conversions, format: "integer" },
       {
         key: "conversionRate",
