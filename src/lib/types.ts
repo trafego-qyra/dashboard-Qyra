@@ -134,7 +134,13 @@ export interface ClarityResumo {
   voltasRapidas: number;
   errosDeScript: number;
   /** Rolagem por página, para a régua visual. */
-  porPagina: Array<{ pagina: string; rolagem: number; sessoes: number }>;
+  porPagina: Array<{
+    pagina: string;
+    rolagem: number;
+    sessoes: number;
+    cliquesMortos: number;
+    cliquesDeRaiva: number;
+  }>;
   /** Dias efetivamente cobertos — a API limita, o pedido não manda. */
   dias: number;
   /** ID do projeto, para os atalhos. */

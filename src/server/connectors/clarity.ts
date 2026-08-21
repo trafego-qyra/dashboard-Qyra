@@ -106,6 +106,10 @@ export async function fetchClarityResumo(): Promise<ClarityResumo | null> {
       trafegoPorPagina.map((linha) => [String(linha.URL ?? ""), num(linha.totalSessionCount)]),
     );
 
+    /** Índice de uma métrica de atrito por URL, montado sob demanda. */
+    const atritoPorPagina = (nome: string) =>
+      new Map(metrica(porUrl, nome).map((l) => [String(l.URL ?? ""), num(l.subTotal)]));
+
     return {
       // A API devolve a profundidade em porcentagem (0-100); a tela trabalha
       // em fração, como todo percentual do painel.
@@ -122,6 +126,10 @@ export async function fetchClarityResumo(): Promise<ClarityResumo | null> {
             pagina,
             rolagem: num(linha.averageScrollDepth) / 100,
             sessoes: visitasPorPagina.get(pagina) ?? 0,
+            // A resposta por URL já traz todas as métricas — pedir só rolagem e
+            // descartar o resto gastaria a mesma cota por menos informação.
+            cliquesMortos: atritoPorPagina("DeadClickCount").get(pagina) ?? 0,
+            cliquesDeRaiva: atritoPorPagina("RageClickCount").get(pagina) ?? 0,
           };
         })
         .sort((a, b) => Number(b.sessoes) - Number(a.sessoes)),

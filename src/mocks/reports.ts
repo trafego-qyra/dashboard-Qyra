@@ -691,12 +691,13 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
  * a leitura.
  */
 export function mockClarity(): ClarityResumo {
+  // página, rolagem, fatia das sessões, cliques mortos, cliques de raiva
   const paginas = [
-    ["/", 0.71, 0.42],
-    ["/planos", 0.38, 0.21],
-    ["/terapia-injetavel", 0.62, 0.16],
-    ["/agendar", 0.84, 0.13],
-    ["/sobre", 0.29, 0.08],
+    ["/", 0.71, 0.42, 62, 8],
+    ["/planos", 0.38, 0.21, 94, 19],
+    ["/terapia-injetavel", 0.62, 0.16, 21, 3],
+    ["/agendar", 0.84, 0.13, 31, 6],
+    ["/sobre", 0.29, 0.08, 6, 1],
   ] as const;
 
   const sessoes = 1_840;
@@ -708,10 +709,12 @@ export function mockClarity(): ClarityResumo {
     cliquesDeRaiva: 37,
     voltasRapidas: 96,
     errosDeScript: 12,
-    porPagina: paginas.map(([pagina, rolagem, fatia]) => ({
+    porPagina: paginas.map(([pagina, rolagem, fatia, cliquesMortos, cliquesDeRaiva]) => ({
       pagina,
       rolagem,
       sessoes: Math.round(sessoes * fatia),
+      cliquesMortos,
+      cliquesDeRaiva,
     })),
     dias: 3,
     projeto: "y5l8wdf890",
