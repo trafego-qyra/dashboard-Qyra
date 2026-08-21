@@ -29,6 +29,13 @@ interface Etapa {
   resultado: string;
 }
 
+/** A Graph trata `until` como exclusivo na borda: sem o dia a mais, o último fica de fora. */
+function addDays(iso: string, dias: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 /** `act_1610215746739005` → `act_1610…9005`. */
 function mascarar(valor: string): string {
   if (valor.length <= 12) return valor;
@@ -230,6 +237,62 @@ export async function GET(request: Request) {
     });
   }
 
+  // 7. Orgânico: as publicações do período, com o carrossel aberto.
+  //    Responde a pergunta que print nenhum responde: se o álbum não aparece
+  //    porque a Meta não mandou os filhos, ou porque não houve carrossel
+  //    publicado no período.
+  if (env.META_IG_USER_ID) {
+    const desde = `since=${range.from}&until=${addDays(range.to, 1)}`;
+    etapas.push(
+      await executar(
+        "instagram-carrossel",
+        "As publicações do período trazem as artes do carrossel?",
+        `${base}/${env.META_IG_USER_ID}/media?fields=id,media_type,timestamp,children{id}&limit=50&${desde}&${auth}`,
+        (d) => {
+          const dados = d as {
+            data?: Array<{
+              media_type?: string;
+              timestamp?: string;
+              children?: { data?: Array<{ id: string }> };
+            }>;
+          };
+          const posts = dados.data ?? [];
+          if (posts.length === 0) {
+            return `Consulta aceita, mas SEM PUBLICAÇÕES entre ${range.from} e ${range.to}.`;
+          }
+
+          const albuns = posts.filter((p) => p.media_type === "CAROUSEL_ALBUM");
+          const tipos = posts.reduce<Record<string, number>>((acc, p) => {
+            const tipo = p.media_type ?? "?";
+            acc[tipo] = (acc[tipo] ?? 0) + 1;
+            return acc;
+          }, {});
+          const resumoDeTipos = Object.entries(tipos)
+            .map(([tipo, quantos]) => `${quantos} ${tipo}`)
+            .join(", ");
+
+          if (albuns.length === 0) {
+            return `${posts.length} publicação(ões) no período (${resumoDeTipos}). NENHUM CARROSSEL — não há álbum para o painel abrir.`;
+          }
+
+          const semFilhos = albuns.filter((p) => !p.children?.data?.length).length;
+          const contagens = albuns
+            .map((p) => p.children?.data?.length ?? 0)
+            .filter((n) => n > 0)
+            .join(", ");
+
+          if (semFilhos === albuns.length) {
+            return `${albuns.length} carrossel(éis) de ${posts.length} publicação(ões) (${resumoDeTipos}), mas a Meta NÃO devolveu os filhos de nenhum — provável falta de permissão instagram_basic no token.`;
+          }
+
+          return `${albuns.length} carrossel(éis) de ${posts.length} publicação(ões) (${resumoDeTipos}). Artes por álbum: ${contagens}.${
+            semFilhos > 0 ? ` ${semFilhos} álbum(ns) veio(vieram) sem filhos.` : ""
+          }`;
+        },
+      ),
+    );
+  }
+
   const primeiraFalha = etapas.find((e) => !e.ok);
 
   return NextResponse.json(
@@ -239,6 +302,9 @@ export async function GET(request: Request) {
         : "Todas as etapas passaram. Se o painel ainda aparece vazio, o problema está na montagem do relatório, não na integração.",
       periodoTestado: range,
       configuracao: {
+        // Sem isto não dá para separar "a correção não funcionou" de "a
+        // correção ainda não subiu".
+        commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
         versaoApi: versao,
         conta: mascarar(conta),
         contaTinhaPrefixo: contaBruta.startsWith("act_"),

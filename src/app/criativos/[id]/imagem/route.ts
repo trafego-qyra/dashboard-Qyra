@@ -23,11 +23,29 @@ const ID_VALIDO = /^\d{1,25}$/;
 const HOSTS_PERMITIDOS = /(^|\.)(fbcdn\.net|facebook\.com)$/;
 
 interface RespostaDoCriativo {
-  creative?: { thumbnail_url?: string; image_url?: string };
+  creative?: {
+    thumbnail_url?: string;
+    image_url?: string;
+    /** Anúncio carrossel: uma arte por cartão, na ordem em que rodam. */
+    object_story_spec?: { link_data?: { child_attachments?: Array<{ picture?: string }> } };
+  };
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+/** Teto do carrossel na Meta. Serve de sanidade para o índice vindo da query. */
+const MAX_CARTOES = 10;
+
+/** `?cartao=2` → 2. Ausente, fora de faixa ou lixo → `null`, e serve a arte única. */
+function cartaoPedido(request: Request): number | null {
+  const bruto = new URL(request.url).searchParams.get("cartao");
+  if (bruto === null) return null;
+  const indice = Number(bruto);
+  if (!Number.isInteger(indice) || indice < 0 || indice >= MAX_CARTOES) return null;
+  return indice;
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
+  const cartao = cartaoPedido(request);
 
   if (!ID_VALIDO.test(id)) {
     return NextResponse.json({ erro: "Identificador inválido." }, { status: 400 });
@@ -41,14 +59,21 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const anuncio = await httpJson<RespostaDoCriativo>(
       `https://graph.facebook.com/${env.META_API_VERSION}/${id}` +
-        "?fields=creative.thumbnail_width(600).thumbnail_height(600){thumbnail_url,image_url}",
+        "?fields=creative.thumbnail_width(600).thumbnail_height(600)" +
+        "{thumbnail_url,image_url,object_story_spec{link_data{child_attachments{picture}}}}",
       { headers: metaAuthHeaders(env.META_ACCESS_TOKEN as string) },
     );
 
     // `image_url` é a arte em tamanho cheio; `thumbnail_url` existe também para
     // vídeo, onde a Meta gera o quadro de capa. Preferir a primeira, cair na
     // segunda.
-    const origem = anuncio.creative?.image_url ?? anuncio.creative?.thumbnail_url;
+    const arteUnica = anuncio.creative?.image_url ?? anuncio.creative?.thumbnail_url;
+    const cartoes = anuncio.creative?.object_story_spec?.link_data?.child_attachments ?? [];
+
+    // Pedido de cartão que não existe cai na arte do anúncio em vez de 404:
+    // um álbum que encolheu entre o relatório e o clique não deve deixar
+    // buraco no carrossel.
+    const origem = (cartao === null ? undefined : cartoes[cartao]?.picture) ?? arteUnica;
     if (!origem) {
       return NextResponse.json({ erro: "Anúncio sem arte." }, { status: 404 });
     }

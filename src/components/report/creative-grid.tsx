@@ -62,6 +62,12 @@ function Retencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
  * baixa uma vez só.
  */
 function Quadro({ src, alt, prioridade }: { src: string; alt: string; prioridade?: boolean }) {
+  const [falhou, setFalhou] = useState(false);
+
+  // Uma arte que não carrega deixaria o slide em branco, e no carrossel isso
+  // se lê como "acabou" — pior que dizer que faltou.
+  if (falhou) return <SemArte dentroDoQuadro />;
+
   return (
     <>
       {/* Fundo: mesma imagem, borrada e ampliada. Preenche a sobra sem
@@ -81,15 +87,22 @@ function Quadro({ src, alt, prioridade }: { src: string; alt: string; prioridade
         alt={alt}
         loading={prioridade ? undefined : "lazy"}
         decoding="async"
+        onError={() => setFalhou(true)}
         className="relative size-full object-contain"
       />
     </>
   );
 }
 
-function SemArte() {
+/** `dentroDoQuadro`: já existe um quadro em volta (slide do carrossel), então não repete a proporção. */
+function SemArte({ dentroDoQuadro }: { dentroDoQuadro?: boolean }) {
   return (
-    <div className="flex aspect-[4/5] items-center justify-center bg-surface-sunken">
+    <div
+      className={cn(
+        "flex items-center justify-center bg-surface-sunken",
+        dentroDoQuadro ? "size-full" : "aspect-[4/5]",
+      )}
+    >
       <ImageOff className="size-6 text-ink-muted" aria-hidden="true" />
       <span className="sr-only">Arte indisponível</span>
     </div>
