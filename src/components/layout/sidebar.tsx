@@ -1,6 +1,14 @@
 "use client";
 
-import { LayoutGrid, MousePointerClick } from "lucide-react";
+import {
+  ChartLine,
+  Heart,
+  LayoutGrid,
+  type LucideIcon,
+  Megaphone,
+  MousePointerClick,
+  Search,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -9,19 +17,35 @@ import { CHANNELS } from "@/lib/channels";
 import { cn } from "@/lib/cn";
 
 /**
+ * O que cada canal é, em ícone.
+ *
+ * Antes o canal vinha como bolinha na cor do slot que ele ocupa nos gráficos.
+ * Ligava as duas coisas, mas ao preço de quatro cores fortes empilhadas fora
+ * da paleta da marca, num painel que já é roxo — e a bolinha não dizia nada
+ * sobre o canal, só repetia uma legenda.
+ *
+ * O ícone diz. A cor continua identificando a série onde ela tem função: no
+ * gráfico, ao lado do número.
+ */
+const ICONE: Record<string, LucideIcon> = {
+  "meta-ads": Megaphone,
+  "google-ads": Search,
+  ga4: ChartLine,
+  organico: Heart,
+};
+
+/**
  * Navegação principal.
  *
  * O slab escuro de cantos arredondados vem do cabeçalho do manual; aqui ele
- * vira a âncora vertical da tela. O ponto colorido ao lado de cada canal usa o
- * mesmo slot que o canal ocupa nos gráficos — a cor é a mesma em toda a
- * aplicação.
+ * vira a âncora vertical da tela.
  */
 const NAV = [
-  { href: "/", label: "Visão geral", icon: LayoutGrid, slot: null },
-  ...CHANNELS.map((c) => ({ href: c.href, label: c.label, icon: null, slot: c.slot })),
+  { href: "/", label: "Visão geral", icon: LayoutGrid },
+  ...CHANNELS.map((c) => ({ href: c.href, label: c.label, icon: ICONE[c.id] })),
   // Fora de CHANNELS de propósito: não é canal de aquisição e não produz
   // relatório de período — é o que acontece depois que a pessoa chega.
-  { href: "/comportamento", label: "Comportamento", icon: MousePointerClick, slot: null },
+  { href: "/comportamento", label: "Comportamento", icon: MousePointerClick },
 ];
 
 export function Sidebar({ className }: { className?: string }) {
@@ -48,15 +72,7 @@ export function Sidebar({ className }: { className?: string }) {
                 : "text-plum-200 hover:bg-white/8 hover:text-white",
             )}
           >
-            {Icon ? (
-              <Icon className="size-4 shrink-0" aria-hidden="true" />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: `var(--color-series-${item.slot})` }}
-              />
-            )}
+            <Icon className="size-4 shrink-0" aria-hidden="true" />
             <span className="truncate">{item.label}</span>
           </Link>
         );

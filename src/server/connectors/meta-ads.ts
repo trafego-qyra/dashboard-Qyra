@@ -145,14 +145,18 @@ interface AdsEdgeResponse {
       instagram_permalink_url?: string;
       /** `{page_id}_{post_id}` — vira a URL pública do post no Facebook. */
       effective_object_story_id?: string;
+      /** Anúncio carrossel: um cartão por `child_attachments`, na ordem em que rodam. */
+      object_story_spec?: { link_data?: { child_attachments?: Array<{ picture?: string }> } };
     };
   }>;
 }
 
-/** Link visível para quem abre o relatório, com o rótulo certo. */
-interface LinkDaPeca {
-  url: string;
-  label: string;
+/** O que a borda `/ads` acrescenta ao cartão: para onde ele abre e quantas artes tem. */
+interface PecaDoAnuncio {
+  url?: string;
+  label?: string;
+  /** Quantidade de cartões do carrossel. 0 quando o anúncio é de arte única. */
+  cartoes: number;
 }
 
 /**
@@ -181,12 +185,18 @@ function urlDoPostNoFacebook(storyId: string | undefined): string | null {
  * uma tela de login. Botão que não leva a lugar nenhum é pior que botão
  * nenhum — um anúncio sem peça pública simplesmente não ganha botão.
  */
-async function buscarLinksDeAnuncio(): Promise<Map<string, LinkDaPeca>> {
+async function buscarLinksDeAnuncio(): Promise<Map<string, PecaDoAnuncio>> {
   const env = getEnv();
   const url = new URL(
     `https://graph.facebook.com/${env.META_API_VERSION}/act_${(env.META_AD_ACCOUNT_ID as string).replace(/^act_/, "")}/ads`,
   );
-  url.searchParams.set("fields", "id,creative{instagram_permalink_url,effective_object_story_id}");
+  url.searchParams.set(
+    "fields",
+    // `child_attachments` é o que abre o anúncio carrossel: sem ele a Meta
+    // devolve uma arte só, e o cartão mostra a capa como se fosse a peça toda.
+    "id,creative{instagram_permalink_url,effective_object_story_id," +
+      "object_story_spec{link_data{child_attachments{picture}}}}",
+  );
   url.searchParams.set("limit", "200");
 
   try {
@@ -194,15 +204,25 @@ async function buscarLinksDeAnuncio(): Promise<Map<string, LinkDaPeca>> {
       headers: metaAuthHeaders(env.META_ACCESS_TOKEN as string),
     });
 
-    const mapa = new Map<string, LinkDaPeca>();
+    const mapa = new Map<string, PecaDoAnuncio>();
     for (const anuncio of resposta.data ?? []) {
+      const filhos = anuncio.creative?.object_story_spec?.link_data?.child_attachments ?? [];
+      // Só conta como carrossel o que tem arte em todos os cartões — cartão
+      // sem `picture` viraria um slide vazio no meio do álbum.
+      const cartoes = filhos.every((filho) => filho.picture) ? filhos.length : 0;
+
       const instagram = anuncio.creative?.instagram_permalink_url;
       if (instagram) {
-        mapa.set(anuncio.id, { url: instagram, label: "Ver no Instagram" });
+        mapa.set(anuncio.id, { url: instagram, label: "Ver no Instagram", cartoes });
         continue;
       }
       const facebook = urlDoPostNoFacebook(anuncio.creative?.effective_object_story_id);
-      if (facebook) mapa.set(anuncio.id, { url: facebook, label: "Ver publicação" });
+      if (facebook) {
+        mapa.set(anuncio.id, { url: facebook, label: "Ver publicação", cartoes });
+        continue;
+      }
+      // Sem link público, mas com carrossel: o cartão ainda ganha as artes.
+      if (cartoes > 1) mapa.set(anuncio.id, { cartoes });
     }
     return mapa;
   } catch {
@@ -210,10 +230,21 @@ async function buscarLinksDeAnuncio(): Promise<Map<string, LinkDaPeca>> {
   }
 }
 
+/**
+ * As artes de um anúncio carrossel, cada uma pelo proxy do próprio domínio.
+ *
+ * `undefined` para arte única: assim a galeria nem é serializada para o
+ * navegador, e o cartão cai no quadro simples.
+ */
+function galeriaDoAnuncio(id: string, cartoes: number): string[] | undefined {
+  if (!id || cartoes < 2) return undefined;
+  return Array.from({ length: cartoes }, (_, n) => `/criativos/${id}/imagem?cartao=${n}`);
+}
+
 /** Monta os cartões de anúncio. A ordem vem de `ordenarCriativos`. */
 function montarCriativos(
   porAnuncio: MetaInsightsRow[],
-  links: Map<string, LinkDaPeca>,
+  links: Map<string, PecaDoAnuncio>,
 ): ContentCard[] {
   const cartoes = porAnuncio.map((row) => {
     const spend = num(row.spend);
@@ -254,6 +285,7 @@ function montarCriativos(
       title: c.name,
       subtitle: c.campaign,
       imageUrl: c.id ? `/criativos/${c.id}/imagem` : undefined,
+      galeria: galeriaDoAnuncio(c.id, links.get(c.id)?.cartoes ?? 0),
       link: links.get(c.id)?.url,
       linkLabel: links.get(c.id)?.label,
       metrics: [

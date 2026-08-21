@@ -202,6 +202,10 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
           name: nome as string,
           campaign: campanha as string,
           imageUrl: arteDeDemonstracao(i),
+          // Anúncio carrossel: a Meta devolve um cartão por `child_attachments`.
+          galeria: (nome as string).toLowerCase().includes("carrossel")
+            ? [0, 1, 2].map((n) => arteDeDemonstracao(i + n))
+            : undefined,
           link: "https://www.instagram.com/qyra.saude/",
           linkLabel: "Ver no Instagram",
           spend: Math.round(s * 100) / 100,
@@ -226,6 +230,11 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
       title: c.name,
       subtitle: c.campaign,
       imageUrl: c.imageUrl,
+      galeria: c.galeria,
+      // Faltava no mock: sem o link, o cartão de demonstração perdia o botão
+      // de abrir a peça — e o carrossel, que não é clicável, ficava sem saída.
+      link: c.link,
+      linkLabel: c.linkLabel,
       metrics: [
         { label: "Investimento", value: c.spend, format: "currency" as const },
         { label: "Leads", value: c.leads, format: "integer" as const },

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -77,6 +77,20 @@ describe("CreativeGrid — carrossel", () => {
     expect(links.some((link) => link.contains(regiao))).toBe(false);
     // O acesso ao post continua existindo, pelo botão do rodapé do cartão.
     expect(links.some((link) => /ver no instagram/i.test(link.textContent ?? ""))).toBe(true);
+  });
+
+  it("arte que não carrega vira aviso, não slide em branco", () => {
+    render(<CreativeGrid criativos={[CARROSSEL]} />);
+
+    const segunda = screen.getByAltText(/Arte 2 de 3/);
+    fireEvent.error(segunda);
+
+    // Slide vazio no meio do carrossel se lê como "acabou" — pior que dizer
+    // que faltou.
+    expect(screen.getAllByText("Arte indisponível").length).toBe(1);
+    // As outras continuam de pé: uma arte quebrada não derruba o álbum.
+    expect(screen.getByAltText(/Arte 1 de 3/)).toBeTruthy();
+    expect(screen.getByAltText(/Arte 3 de 3/)).toBeTruthy();
   });
 });
 

@@ -136,3 +136,97 @@ describe("link da peça no Meta Ads", () => {
     expect((await cartoes()).find((c) => c.id === "ad-face")?.link).toBeUndefined();
   });
 });
+
+describe("carrossel do anúncio", () => {
+  it("abre as artes do carrossel em galeria, uma por cartão", async () => {
+    vi.stubGlobal(
+      "fetch",
+      graph({
+        "ad-insta": {
+          instagram_permalink_url: "https://www.instagram.com/p/ABC/",
+          object_story_spec: {
+            link_data: {
+              child_attachments: [
+                { picture: "https://scontent.fbcdn.net/1.png" },
+                { picture: "https://scontent.fbcdn.net/2.png" },
+                { picture: "https://scontent.fbcdn.net/3.png" },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    const card = (await cartoes()).find((c) => c.id === "ad-insta");
+    // Cada cartão sai pelo proxy do próprio domínio, indexado: a URL do CDN da
+    // Meta expira e a CSP não abre `img-src` para host de terceiro.
+    expect(card?.galeria).toEqual([
+      "/criativos/ad-insta/imagem?cartao=0",
+      "/criativos/ad-insta/imagem?cartao=1",
+      "/criativos/ad-insta/imagem?cartao=2",
+    ]);
+    // O botão de abrir a peça continua de pé.
+    expect(card?.link).toBe("https://www.instagram.com/p/ABC/");
+  });
+
+  it("anúncio de arte única não carrega galeria", async () => {
+    vi.stubGlobal(
+      "fetch",
+      graph({ "ad-insta": { instagram_permalink_url: "https://www.instagram.com/p/ABC/" } }),
+    );
+
+    // `undefined` em vez de lista de um: a galeria nem chega ao navegador.
+    expect((await cartoes()).find((c) => c.id === "ad-insta")?.galeria).toBeUndefined();
+  });
+
+  it("cartão sem arte invalida o carrossel inteiro", async () => {
+    vi.stubGlobal(
+      "fetch",
+      graph({
+        "ad-insta": {
+          object_story_spec: {
+            link_data: {
+              child_attachments: [{ picture: "https://scontent.fbcdn.net/1.png" }, {}],
+            },
+          },
+        },
+      }),
+    );
+
+    // Um cartão sem `picture` viraria slide vazio no meio do álbum — melhor
+    // cair na arte única do anúncio.
+    expect((await cartoes()).find((c) => c.id === "ad-insta")?.galeria).toBeUndefined();
+  });
+
+  it("carrossel sem link público ainda ganha as artes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      graph({
+        "ad-sem-peca": {
+          object_story_spec: {
+            link_data: {
+              child_attachments: [
+                { picture: "https://scontent.fbcdn.net/1.png" },
+                { picture: "https://scontent.fbcdn.net/2.png" },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    const card = (await cartoes()).find((c) => c.id === "ad-sem-peca");
+    expect(card?.galeria).toHaveLength(2);
+    expect(card?.link).toBeUndefined();
+  });
+
+  it("pede child_attachments à borda /ads", async () => {
+    const espiao = graph({});
+    vi.stubGlobal("fetch", espiao);
+    await cartoes();
+
+    const urls = espiao.mock.calls.map(([e]) => (typeof e === "string" ? e : String(e)));
+    // Sem o campo no pedido, a Meta devolve uma arte só e o carrossel some.
+    expect(urls.some((u) => u.includes("child_attachments"))).toBe(true);
+  });
+});
