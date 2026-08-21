@@ -15,6 +15,19 @@ import { getOverviewReport } from "@/server/reports";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Quais canais estão em período fixo, para o selo do consolidado.
+ *
+ * `undefined` quando não há nenhum — aí o selo nem aparece.
+ */
+function rotuloDePeriodoFixo(
+  byChannel: Array<{ label: string; source: string }>,
+): string | undefined {
+  const congelados = byChannel.filter((c) => c.source === "snapshot").map((c) => c.label);
+  if (congelados.length === 0) return undefined;
+  return `${congelados.join(" e ")} em período fixo`;
+}
+
 export default async function OverviewPage({
   searchParams,
 }: {
@@ -32,6 +45,10 @@ export default async function OverviewPage({
         title="Visão geral"
         description="Investimento, resultado e audiência somados de Meta Ads, Google Ads, Analytics e orgânico."
         source={report.source}
+        // "Período fixo" sozinho, aqui, sugeriria que a tela toda está
+        // congelada. Nomear o canal é o que separa "parte disto é de outro
+        // período" de "nada disto é atual".
+        sourceLabel={rotuloDePeriodoFixo(report.byChannel)}
         actions={<DateRangePicker range={range} preset={preset} />}
       />
 

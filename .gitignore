@@ -36,3 +36,4 @@ yarn-error.log*
 /reports
 /.stryker-tmp
 /.lighthouseci
+tests/e2e/.auth/

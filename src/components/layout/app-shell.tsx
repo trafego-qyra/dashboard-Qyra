@@ -1,5 +1,7 @@
+import { LogOut } from "lucide-react";
 import type * as React from "react";
 
+import { sair } from "@/app/login/actions";
 import { LightBlock } from "@/components/brand/light-block";
 import { Sidebar, SidebarBrand } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
@@ -22,8 +24,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <LightBlock className="opacity-60" />
         <div className="relative flex items-center justify-between gap-4 px-4 py-4 lg:block lg:px-3 lg:py-6">
           <SidebarBrand />
-          <div className="lg:hidden">
+          {/* No celular a barra não tem rodapé, então tema e saída moram aqui
+              — sem isto, quem abre no telefone não consegue sair. */}
+          <div className="flex items-center gap-2 lg:hidden">
             <ThemeToggle />
+            <form action={sair}>
+              <button
+                type="submit"
+                aria-label="Sair"
+                className="grid size-9 place-items-center rounded-full text-plum-200 transition-colors duration-[var(--duration-fast)] hover:bg-white/8 hover:text-white"
+              >
+                <LogOut className="size-4" aria-hidden="true" />
+              </button>
+            </form>
           </div>
         </div>
 
@@ -43,6 +56,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="px-1 text-[11px] text-plum-300">Tema</span>
             <ThemeToggle />
           </div>
+          {/* Sair fica junto do rodapé, e não no topo: em computador
+              compartilhado é o último gesto, não o primeiro. */}
+          <form action={sair} className="pt-2">
+            <button
+              type="submit"
+              className="flex w-full items-center gap-3 rounded-full px-3 py-2 text-left text-plum-200 text-sm transition-colors duration-[var(--duration-fast)] hover:bg-white/8 hover:text-white"
+            >
+              <LogOut className="size-4 shrink-0" aria-hidden="true" />
+              Sair
+            </button>
+          </form>
         </div>
       </aside>
 

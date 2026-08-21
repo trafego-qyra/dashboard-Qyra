@@ -172,6 +172,7 @@ recuperação, e funcionamento em tema claro e escuro.
 | `docs/integracoes.md` | Como obter credencial de cada plataforma |
 | `docs/qualidade.md` | Esteira, observabilidade, orçamento de performance |
 | `docs/deploy.md` | Vercel, ambientes, domínio |
+| `docs/historico.md` | Por que o painel é assim, e como retomar numa máquina nova |
 | `docs/legal/` | Termos de uso e política de privacidade (**pendentes de aprovação jurídica**) |
 
 Mudou o comportamento? Atualize a doc no mesmo PR.
