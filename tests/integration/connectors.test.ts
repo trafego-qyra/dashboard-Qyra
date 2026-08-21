@@ -792,3 +792,113 @@ describe("GA4 — duração média", () => {
     expect(tabela?.rows[1]).toMatchObject({ page: "/sem-titulo" });
   });
 });
+
+describe("GA4 — usuários", () => {
+  it("usa o total deduplicado do período, não a soma dos dias", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        const corpo = String(init?.body ?? "");
+
+        // A consulta sem dimensão é a que devolve o número deduplicado.
+        if (!corpo.includes('"dimensions"')) {
+          return new Response(JSON.stringify({ rows: [{ metricValues: [{ value: "120" }] }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (!corpo.includes('"date"')) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        // Três dias com 100 usuários cada — em grande parte os mesmos.
+        return new Response(
+          JSON.stringify({
+            rows: ["20260201", "20260202", "20260203"].map((d) => ({
+              dimensionValues: [{ value: d }],
+              metricValues: [
+                { value: "150" },
+                { value: "100" },
+                { value: "0" },
+                { value: "0" },
+                { value: "60" },
+              ],
+            })),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    const report = await fetchGa4Report(RANGE);
+
+    // Soma diária daria 300. Pessoas distintas são 120.
+    expect(report.kpis.find((k) => k.key === "users")?.value).toBe(120);
+    // Sessão é aditiva e continua somando: 150 x 3.
+    expect(report.kpis.find((k) => k.key === "sessions")?.value).toBe(450);
+  });
+
+  it("sem o total deduplicado, cai na soma — inflado é melhor que zero", async () => {
+    await withCredentials({ ...GOOGLE_OAUTH, GA4_PROPERTY_ID: "123" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify(TOKEN_RESPONSE), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        const corpo = String(init?.body ?? "");
+        if (!corpo.includes('"dimensions"')) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (!corpo.includes('"date"')) {
+          return new Response(JSON.stringify({ rows: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            rows: [
+              {
+                dimensionValues: [{ value: "20260201" }],
+                metricValues: [
+                  { value: "10" },
+                  { value: "7" },
+                  { value: "0" },
+                  { value: "0" },
+                  { value: "0" },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const { fetchGa4Report } = await import("@/server/connectors/ga4");
+    const report = await fetchGa4Report(RANGE);
+
+    expect(report.kpis.find((k) => k.key === "users")?.value).toBe(7);
+  });
+});
