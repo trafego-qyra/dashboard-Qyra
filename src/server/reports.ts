@@ -6,6 +6,7 @@ import { previousRange } from "@/lib/date-range";
 import type {
   ChannelId,
   ChannelReport,
+  ClarityResumo,
   DateRange,
   Kpi,
   Notice,
@@ -13,6 +14,7 @@ import type {
   SeriesPoint,
 } from "@/lib/types";
 import { cached } from "@/server/lib/cache";
+import { fetchClarityResumo } from "./connectors/clarity";
 import { fetchGa4Report } from "./connectors/ga4";
 import { fetchGoogleAdsReport } from "./connectors/google-ads";
 import { fetchMetaAdsReport } from "./connectors/meta-ads";
@@ -23,6 +25,20 @@ import { fetchOrganicoReport } from "./connectors/organico";
  * conector direto — para que cache, comparação de período e degradação de
  * erro sejam idênticos em toda a aplicação.
  */
+
+/**
+ * Resumo do Clarity, com cache longo.
+ *
+ * A cota da API é diária, não horária: uma chamada por carregamento de página
+ * estouraria o limite antes do almoço, e a partir daí a seção sumiria da tela
+ * pelo resto do dia. Como a janela do Clarity é de dias, meia hora de cache
+ * não perde nada de útil.
+ */
+const TTL_CLARITY_SEGUNDOS = 1_800;
+
+export function getClarityResumo(): Promise<ClarityResumo | null> {
+  return cached("clarity:resumo", fetchClarityResumo, TTL_CLARITY_SEGUNDOS);
+}
 
 const FETCHERS: Record<ChannelId, (range: DateRange) => Promise<ChannelReport>> = {
   "meta-ads": fetchMetaAdsReport,

@@ -118,6 +118,35 @@ precisa de uma versão mais nova.
 GA4_PROPERTY_ID=123456789
 ```
 
+### Microsoft Clarity — específico
+
+O Clarity responde o que o GA4 não responde: até onde a pessoa rolou, onde
+clicou no que não era clicável, onde desistiu.
+
+6. Instale o script no site. A integração nativa com o Tag Manager, dentro do
+   Clarity, cria e publica a tag sozinha — **ligar o Clarity ao GA4 ou ao
+   Google Ads não instala nada**, apenas cruza os dados.
+7. O **Project ID** está na URL do projeto, entre `view/` e `/settings`.
+8. O **token da API** sai em Settings → Exportação de dados.
+
+```env
+CLARITY_PROJECT_ID=y5l8wdf890   # não é segredo, vai no script público do site
+CLARITY_API_TOKEN=...           # este é segredo
+```
+
+Sem o token, a seção some da tela do Analytics e o resto continua igual.
+
+**Duas restrições da API moldam o que dá para mostrar:**
+
+| Restrição | Consequência |
+|---|---|
+| Janela máxima de 3 dias | A seção é uma fotografia recente, não série histórica. Não acompanha o filtro de datas. |
+| Cota diária baixa | O resultado é cacheado por 30 minutos e a chamada nunca é repetida em erro. |
+
+**O mapa de calor em si não sai por API** — o Clarity não expõe a imagem. O que
+o painel traz é o número por trás dele (profundidade de rolagem por página) e o
+atalho para ver o mapa lá.
+
 ---
 
 ## Erros comuns

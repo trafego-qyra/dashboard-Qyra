@@ -251,6 +251,19 @@ export async function fetchGa4Report(range: DateRange): Promise<ChannelReport> {
         title: "Páginas mais vistas",
         description:
           "Tempo é de engajamento por visualização — quanto a pessoa passou naquela página, não quanto durou a sessão inteira dela.",
+        // O GA4 responde quanto tempo a pessoa ficou; o Clarity responde até
+        // onde ela leu. Uma pergunta puxa a outra, e o atalho evita procurar o
+        // projeto do zero. Aponta para a seção de mapas de calor, onde a página
+        // é escolhida — não para a página específica, porque o formato do
+        // filtro na URL do Clarity não foi verificado contra a ferramenta.
+        ...(getEnv().CLARITY_PROJECT_ID
+          ? {
+              action: {
+                label: "Mapas de calor no Clarity",
+                href: `https://clarity.microsoft.com/projects/view/${getEnv().CLARITY_PROJECT_ID}/heatmaps`,
+              },
+            }
+          : {}),
         columns: [
           { key: "page", label: "Página", align: "left" },
           { key: "path", label: "Endereço", align: "left" },

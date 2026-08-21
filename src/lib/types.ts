@@ -74,6 +74,8 @@ export interface TableBlock {
    * diante — mas o dado continua a um clique. Padrão: `LINHAS_VISIVEIS_PADRAO`.
    */
   initialRows?: number;
+  /** Atalho para fora do painel, no cabeçalho da tabela. */
+  action?: { label: string; href: string };
 }
 
 /**
@@ -115,6 +117,28 @@ export interface ContentCard {
     p75: number;
     p100: number;
   };
+}
+
+/**
+ * Fotografia recente do comportamento no site, pelo Clarity.
+ *
+ * Mora aqui, e não no conector, porque `components/` não pode importar de
+ * `server/` — é o contrato de arquitetura cravado na CI.
+ */
+export interface ClarityResumo {
+  /** Fração média da página que as pessoas percorreram. Entre 0 e 1. */
+  rolagemMedia: number;
+  sessoes: number;
+  cliquesMortos: number;
+  cliquesDeRaiva: number;
+  voltasRapidas: number;
+  errosDeScript: number;
+  /** Rolagem por página, para a régua visual. */
+  porPagina: Array<{ pagina: string; rolagem: number; sessoes: number }>;
+  /** Dias efetivamente cobertos — a API limita, o pedido não manda. */
+  dias: number;
+  /** ID do projeto, para os atalhos. */
+  projeto: string | null;
 }
 
 /**

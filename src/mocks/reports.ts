@@ -7,7 +7,7 @@
  */
 import { ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
+import type { ChannelReport, ClarityResumo, DateRange, SeriesPoint } from "@/lib/types";
 import { dailyValue, noise } from "./generator";
 
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -678,5 +678,42 @@ export function mockOrganico(range: DateRange, fetchedAt = NOW): ChannelReport {
     },
     tables: [],
     notices: [],
+  };
+}
+
+/* ------------------------------------------------------------------- Clarity */
+
+/**
+ * Comportamento na página, para a demonstração.
+ *
+ * As páginas repetem as de `mockGa4` de propósito: a seção só faz sentido ao
+ * lado da tabela de páginas mais vistas, e nomes diferentes nas duas quebrariam
+ * a leitura.
+ */
+export function mockClarity(): ClarityResumo {
+  const paginas = [
+    ["/", 0.71, 0.42],
+    ["/planos", 0.38, 0.21],
+    ["/terapia-injetavel", 0.62, 0.16],
+    ["/agendar", 0.84, 0.13],
+    ["/sobre", 0.29, 0.08],
+  ] as const;
+
+  const sessoes = 1_840;
+
+  return {
+    rolagemMedia: 0.57,
+    sessoes,
+    cliquesMortos: 214,
+    cliquesDeRaiva: 37,
+    voltasRapidas: 96,
+    errosDeScript: 12,
+    porPagina: paginas.map(([pagina, rolagem, fatia]) => ({
+      pagina,
+      rolagem,
+      sessoes: Math.round(sessoes * fatia),
+    })),
+    dias: 3,
+    projeto: "y5l8wdf890",
   };
 }

@@ -1,9 +1,10 @@
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import { ChannelView } from "@/components/report/channel-view";
+import { ClarityPanel } from "@/components/report/clarity-panel";
 import { getChannel } from "@/lib/channels";
 import { parseRange } from "@/lib/date-range";
 import type { ChannelId } from "@/lib/types";
-import { getChannelReport } from "@/server/reports";
+import { getChannelReport, getClarityResumo } from "@/server/reports";
 
 export interface ChannelPageProps {
   searchParams: Promise<{ preset?: string; from?: string; to?: string }>;
@@ -26,13 +27,20 @@ export async function ChannelPage({
 }: ChannelPageProps & { channel: ChannelId }) {
   const meta = getChannel(channel);
   const { range, preset } = parseRange(await searchParams);
-  const report = await getChannelReport(channel, range);
+
+  // O Clarity só complementa a tela do Analytics, e é opcional: sem token, sem
+  // seção. A busca vai em paralelo para não somar latência ao relatório.
+  const [report, clarity] = await Promise.all([
+    getChannelReport(channel, range),
+    channel === "ga4" ? getClarityResumo() : Promise.resolve(null),
+  ]);
 
   return (
     <ChannelView
       report={report}
       description={meta.description}
       actions={<DateRangePicker range={range} preset={preset} />}
+      extra={clarity ? <ClarityPanel resumo={clarity} /> : null}
     />
   );
 }
