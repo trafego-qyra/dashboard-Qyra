@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -19,6 +19,9 @@ import { cn } from "@/lib/cn";
 const NAV = [
   { href: "/", label: "Visão geral", icon: LayoutGrid, slot: null },
   ...CHANNELS.map((c) => ({ href: c.href, label: c.label, icon: null, slot: c.slot })),
+  // Fora de CHANNELS de propósito: não é canal de aquisição e não produz
+  // relatório de período — é o que acontece depois que a pessoa chega.
+  { href: "/comportamento", label: "Comportamento", icon: MousePointerClick, slot: null },
 ];
 
 export function Sidebar({ className }: { className?: string }) {

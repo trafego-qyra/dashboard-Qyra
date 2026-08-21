@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -81,6 +81,27 @@ export function DataTable({ block, className }: { block: TableBlock; className?:
 
   return (
     <div className={className}>
+      {/* Atalho para fora do painel. Fica antes da tabela e alinhado à direita,
+          longe do fluxo de leitura dos números — quem veio ler o dado não
+          esbarra nele, quem quer sair encontra sem procurar. */}
+      {block.action ? (
+        <div className="flex justify-end pb-2">
+          <a
+            href={block.action.href}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border border-line-strong",
+              "bg-surface px-3 py-1.5 font-medium text-[11px] text-ink-secondary",
+              "transition-colors duration-[var(--duration-fast)] hover:bg-surface-sunken hover:text-ink",
+            )}
+          >
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+            {block.action.label}
+          </a>
+        </div>
+      ) : null}
+
       {/* No celular não há cabeçalho para clicar, e ordenar é justamente como
           se acha a campanha que mais gastou. Um `select` nativo abre o picker
           do sistema — melhor que qualquer popover custom nesse tamanho de tela. */}
