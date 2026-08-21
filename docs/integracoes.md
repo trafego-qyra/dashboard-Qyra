@@ -4,6 +4,44 @@ Sem credencial o painel roda em **modo de demonstração**, com dados fictícios
 um aviso visível em cada tela. Nada quebra — é assim que se desenvolve e se
 avalia a interface sem tocar em conta de produção.
 
+## Acesso ao painel
+
+O painel é protegido por **uma senha, compartilhada pela equipe**. Não há
+cadastro de usuário: o volume de gente é pequeno e uma lista de contas seria
+mais coisa para manter do que para proteger.
+
+| Variável | Obrigatória | O que é |
+|---|---|---|
+| `QYRA_SENHA` | **em produção** | A senha de acesso |
+| `QYRA_SESSAO_SECRET` | não | Chave de assinatura da sessão, quando se quer trocar a senha sem deslogar ninguém |
+
+**Sem `QYRA_SENHA` em produção o painel tranca tudo** e mostra um aviso na tela
+de login. É de propósito: uma variável esquecida no painel da Vercel deixaria o
+faturamento da empresa aberto na internet sem ninguém perceber, e um erro que se
+anuncia é melhor que um vazamento silencioso. Em desenvolvimento, deixar em
+branco libera o acesso local.
+
+Quem entra recebe um cookie assinado, válido por **sete dias**. O cookie não
+guarda a senha — guarda um prazo de validade e a assinatura HMAC desse prazo,
+então nem se extrai a senha dele nem se forja um novo sem a chave.
+
+**Trocar a senha derruba todas as sessões em aberto**, porque a assinatura usa a
+própria senha como chave. É o comportamento esperado de uma troca de senha —
+tirar acesso de quem não deve mais ter. Se a intenção for outra (rotação de
+rotina, sem incomodar ninguém), defina `QYRA_SESSAO_SECRET` e a sessão passa a
+depender só dele.
+
+A porta cobre **tudo**: telas, `/api` e os endpoints de diagnóstico. Proteger só
+as telas deixaria o dado cru acessível por URL direta, que é o descuido comum
+nesse tipo de barreira.
+
+### Trocar a senha
+
+1. Painel da Vercel → Settings → Environment Variables → `QYRA_SENHA`
+2. Salve e **faça um novo deploy** — variável de ambiente só entra em vigor no
+   próximo build
+3. Avise a equipe: todo mundo precisa entrar de novo
+
 `QYRA_FORCE_MOCK=true` força a demonstração mesmo com credencial configurada.
 
 Verifique o que está ativo em **`/api/health`** — ele reporta apenas se a

@@ -123,8 +123,10 @@ test("endereço inexistente devolve a tela de não encontrado", async ({ page })
   await expect(page.getByText("Página não encontrada")).toBeVisible();
 });
 
-test("a API responde no contrato esperado", async ({ request }) => {
-  const response = await request.get("/api/v1/reports/meta-ads?preset=7d");
+// `page.request` e não o fixture `request`: só o primeiro carrega os cookies do
+// contexto, e a API agora exige sessão. É também como o painel a chama.
+test("a API responde no contrato esperado", async ({ page }) => {
+  const response = await page.request.get("/api/v1/reports/meta-ads?preset=7d");
   expect(response.status()).toBe(200);
 
   const body = await response.json();
@@ -133,8 +135,8 @@ test("a API responde no contrato esperado", async ({ request }) => {
   expect(response.headers()["x-ratelimit-limit"]).toBeTruthy();
 });
 
-test("canal desconhecido devolve 404 sem detalhe interno", async ({ request }) => {
-  const response = await request.get("/api/v1/reports/tiktok");
+test("canal desconhecido devolve 404 sem detalhe interno", async ({ page }) => {
+  const response = await page.request.get("/api/v1/reports/tiktok");
   expect(response.status()).toBe(404);
   expect(await response.text()).not.toMatch(/token|stack|at\s+\//i);
 });
