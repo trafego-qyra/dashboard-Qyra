@@ -7,6 +7,7 @@ import type {
   ChannelId,
   ChannelReport,
   ClarityResumo,
+  DataSource,
   DateRange,
   Kpi,
   Notice,
@@ -129,6 +130,27 @@ export async function getAllReports(range: DateRange): Promise<ChannelResult[]> 
 }
 
 /** Soma a primeira métrica existente entre as candidatas. */
+/**
+ * De onde vem o consolidado, dadas as origens de cada canal.
+ *
+ * As três origens não têm o mesmo peso. `mock` é número inventado, e somar isso
+ * a dado real produz um total que não existe — basta um canal assim para a tela
+ * inteira precisar avisar. `snapshot` é dado REAL da conta, só que congelado no
+ * período do export: some com honestidade num total, desde que o rótulo diga
+ * que parte do período é fixa.
+ *
+ * A regra anterior era "todo canal ao vivo, senão demonstração", e tratava
+ * snapshot como se fosse invenção. Resultado: com o Google Ads congelado, a
+ * visão geral carimbava "Dados de demonstração" sobre investimento, sessões e
+ * conversões reais — o pior erro que um painel pode cometer, que é desacreditar
+ * o próprio número certo.
+ */
+export function origemDoConsolidado(origens: DataSource[]): DataSource {
+  if (origens.length === 0) return "mock";
+  if (origens.includes("mock")) return "mock";
+  return origens.includes("snapshot") ? "snapshot" : "live";
+}
+
 function pickTotal(report: ChannelReport, keys: string[]): number {
   for (const key of keys) {
     if (report.series.some((p) => key in p)) return total(report.series, key);
@@ -272,16 +294,11 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
 
   const series = [...dateIndex.values()].sort((a, b) => a.date.localeCompare(b.date));
 
-  // Origem conservadora: basta um canal em demonstração para o consolidado
-  // deixar de ser dado real. O critério anterior — "algum canal ao vivo" —
-  // escondia o aviso justamente na configuração mais comum, a de quem acabou de
-  // conectar o primeiro canal, e somava investimento fictício ao total.
-  const todosAoVivo = byChannel.length > 0 && byChannel.every((canal) => canal.source === "live");
   const failedChannels = results.filter((r) => r.report === null).map((r) => r.channel);
 
   return {
     range,
-    source: todosAoVivo ? "live" : "mock",
+    source: origemDoConsolidado(byChannel.map((canal) => canal.source)),
     fetchedAt: new Date().toISOString(),
     kpis: [
       {
