@@ -36,6 +36,13 @@ const CONFIGURAVEIS = [
   "CLARITY_PROJECT_ID",
   "CLARITY_API_TOKEN",
   "QYRA_FORCE_MOCK",
+  // A senha de acesso. Só a presença — o valor nunca sai daqui. Sem ela na
+  // lista, a variável mais importante do painel era a única que ninguém
+  // conseguia conferir.
+  "QYRA_SENHA",
+  "QYRA_SESSAO_SECRET",
+  "KOMMO_SUBDOMAIN",
+  "KOMMO_ACCESS_TOKEN",
 ] as const;
 
 /**
