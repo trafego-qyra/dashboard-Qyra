@@ -43,6 +43,10 @@ const CONFIGURAVEIS = [
   "QYRA_SESSAO_SECRET",
   "KOMMO_SUBDOMAIN",
   "KOMMO_ACCESS_TOKEN",
+  // Entrou depois das outras duas e ficou de fora da lista — a mesma armadilha
+  // de antes: variável que ninguém consegue conferir se pegou. Opcional, então
+  // aparecer em "ausentes" é resultado legítimo.
+  "KOMMO_PIPELINE_ID",
 ] as const;
 
 /**
