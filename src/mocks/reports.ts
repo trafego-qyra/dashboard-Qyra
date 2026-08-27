@@ -734,3 +734,143 @@ export function mockClarity(): ClarityResumo {
     projeto: "y5l8wdf890",
   };
 }
+
+/* -------------------------------------------------------------- Vendas (Kommo) */
+
+export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
+  const days = eachDay(range);
+
+  const series: SeriesPoint[] = days.map((date) => {
+    const leads = Math.round(dailyValue("vendas:leads", date, 11));
+    // Nem todo dia tem venda: uma clínica fecha em blocos, e uma série que
+    // nunca toca o zero descreve um negócio que não existe.
+    const fecha = noise(`vendas:fecha:${date}`) > 0.42;
+    const vendas = fecha ? Math.max(1, Math.round(dailyValue("vendas:qtd", date, 2.4))) : 0;
+    const ticket = 1_180 + noise(`vendas:ticket:${date}`) * 900;
+    return {
+      date,
+      leads,
+      vendas,
+      receita: Math.round(vendas * ticket * 100) / 100,
+    };
+  });
+
+  const leads = sum(series, "leads");
+  const vendas = sum(series, "vendas");
+  const receita = sum(series, "receita");
+
+  return {
+    channel: "vendas",
+    label: "Vendas",
+    source: "mock",
+    range,
+    fetchedAt,
+    kpis: [
+      {
+        key: "vendas",
+        label: "Vendas ganhas",
+        value: vendas,
+        previousValue: vendas * 0.87,
+        format: "integer",
+      },
+      {
+        key: "receita",
+        label: "Receita",
+        value: receita,
+        previousValue: receita * 0.81,
+        format: "currency",
+      },
+      {
+        key: "ticket",
+        label: "Ticket médio",
+        value: safeDiv(receita, vendas),
+        previousValue: safeDiv(receita * 0.81, vendas * 0.87),
+        format: "currency",
+      },
+      {
+        key: "conversao",
+        label: "Lead vira venda",
+        value: safeDiv(vendas, leads),
+        previousValue: safeDiv(vendas * 0.87, leads * 0.94),
+        format: "percent",
+        hint: "Negócios ganhos sobre todos os negócios criados no período.",
+      },
+      {
+        key: "ciclo",
+        label: "Ciclo de fechamento",
+        value: 6.4,
+        previousValue: 7.1,
+        format: "decimal",
+        lowerIsBetter: true,
+        hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
+      },
+      { key: "emAberto", label: "Em aberto", value: Math.round(leads * 0.34), format: "integer" },
+    ],
+    series,
+    seriesDefs: [
+      { key: "receita", label: "Receita", format: "currency", slot: 5 },
+      { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
+    ],
+    tables: [
+      {
+        title: "Negócios por etapa",
+        description: "Onde os negócios do período estão parados, e quanto há em cada etapa.",
+        columns: [
+          { key: "etapa", label: "Etapa", align: "left" },
+          { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+          { key: "valor", label: "Valor", format: "currency", align: "right" },
+        ],
+        // As etapas saem dos mesmos totais dos indicadores. Inventar fatias
+        // soltas produzia um funil que contradizia o topo da tela — e num
+        // painel de demonstração isso lê como erro de cálculo, não como dado
+        // fictício.
+        rows: (() => {
+          const perdidos = Math.round((leads - vendas) * 0.34);
+          const abertos = leads - vendas - perdidos;
+          return [
+            ["Primeiro contato", Math.round(abertos * 0.52)],
+            ["Avaliação agendada", Math.round(abertos * 0.31)],
+            ["Proposta enviada", abertos - Math.round(abertos * 0.52) - Math.round(abertos * 0.31)],
+            ["Venda ganha", vendas],
+            ["Perdido", perdidos],
+          ].map(([etapa, negocios]) => ({
+            etapa: etapa as string,
+            negocios: negocios as number,
+            valor: Math.round((negocios as number) * 1_620 * 100) / 100,
+          }));
+        })(),
+      },
+      {
+        title: "Vendas por origem",
+        description: "De onde vieram os negócios que fecharam, pela UTM registrada no Kommo.",
+        columns: [
+          { key: "origem", label: "Origem", align: "left" },
+          { key: "leads", label: "Negócios", format: "integer", align: "right" },
+          { key: "vendas", label: "Ganhos", format: "integer", align: "right" },
+          { key: "taxa", label: "Conversão", format: "percent", align: "right" },
+          { key: "receita", label: "Receita", format: "currency", align: "right" },
+        ],
+        // Mesma disciplina do funil: as fatias somam 1, e os ganhos de cada
+        // origem somam as vendas do período.
+        rows: [
+          ["meta · Conversão | Emagrecimento", 0.42, 0.44],
+          ["google · Search | Marca", 0.18, 0.27],
+          ["instagram · Bio", 0.15, 0.08],
+          ["indicação", 0.11, 0.17],
+          ["Sem UTM", 0.14, 0.04],
+        ].map(([origem, fatiaLeads, fatiaVendas]) => {
+          const n = Math.round(leads * (fatiaLeads as number));
+          const ganhos = Math.round(vendas * (fatiaVendas as number));
+          return {
+            origem: origem as string,
+            leads: n,
+            vendas: ganhos,
+            taxa: safeDiv(ganhos, n),
+            receita: Math.round(ganhos * 1_640 * 100) / 100,
+          };
+        }),
+      },
+    ],
+    notices: [],
+  };
+}

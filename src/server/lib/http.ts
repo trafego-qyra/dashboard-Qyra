@@ -33,9 +33,38 @@ export class HttpError extends Error {
  * diagnóstico vazaria o segredo.
  */
 export function redactSecrets(text: string): string {
-  return text
-    .replace(/(access_token|client_secret|refresh_token|developer-token)=[^&"\s]+/gi, "$1=[oculto]")
-    .replace(/\b(EAA[A-Za-z0-9]{20,})\b/g, "[token-oculto]");
+  return (
+    text
+      // Nomeado, em query string (`?access_token=…`) ou em JSON
+      // (`"client_secret": "…"`). A Graph ecoa a query; o Google responde em
+      // JSON — cobrir só um dos dois deixa metade dos vazamentos passar.
+      .replace(
+        /("?\b(?:access_token|client_secret|refresh_token|developer[-_]token)"?\s*[:=]\s*"?)[^",&\s}]+/gi,
+        "$1[oculto]",
+      )
+      // Pelo formato, para o caso de o segredo aparecer solto no meio de uma
+      // mensagem, sem o nome do campo por perto.
+      .replace(/\bEAA[A-Za-z0-9]{20,}\b/g, "[token-oculto]")
+      // Google: token de acesso OAuth, segredo do cliente e refresh token.
+      .replace(/\bya29\.[A-Za-z0-9._-]{10,}/g, "[token-oculto]")
+      .replace(/\bGOCSPX-[A-Za-z0-9._-]{10,}/g, "[segredo-oculto]")
+      .replace(/\b1\/\/[A-Za-z0-9._-]{20,}/g, "[token-oculto]")
+  );
+}
+
+/**
+ * Resumo curto de um erro, para virar aviso na tela.
+ *
+ * Passa pelo `redactSecrets` porque a resposta das plataformas costuma ecoar a
+ * requisição, e a requisição leva token. Mora aqui, e não no conector, porque
+ * todo conector precisa da mesma coisa — e duplicar significaria um deles
+ * esquecer a redação um dia.
+ */
+export function descreverFalha(erro: unknown): string {
+  const bruto = erro instanceof Error ? erro.message : String(erro);
+  const corpo = (erro as HttpError)?.body;
+  const texto = redactSecrets(typeof corpo === "string" && corpo ? `${bruto} — ${corpo}` : bruto);
+  return texto.length > 240 ? `${texto.slice(0, 240)}…` : texto;
 }
 
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);

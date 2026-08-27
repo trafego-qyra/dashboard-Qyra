@@ -18,6 +18,7 @@ import { cached } from "@/server/lib/cache";
 import { fetchClarityResumo } from "./connectors/clarity";
 import { fetchGa4Report } from "./connectors/ga4";
 import { fetchGoogleAdsReport } from "./connectors/google-ads";
+import { fetchVendasReport } from "./connectors/kommo";
 import { fetchMetaAdsReport } from "./connectors/meta-ads";
 import { fetchOrganicoReport } from "./connectors/organico";
 
@@ -46,6 +47,7 @@ const FETCHERS: Record<ChannelId, (range: DateRange) => Promise<ChannelReport>> 
   "google-ads": fetchGoogleAdsReport,
   ga4: fetchGa4Report,
   organico: fetchOrganicoReport,
+  vendas: fetchVendasReport,
 };
 
 function cacheKey(channel: ChannelId, range: DateRange): string {

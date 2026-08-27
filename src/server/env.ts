@@ -91,6 +91,12 @@ const schema = z.object({
   // Token da API de exportação do Clarity. Esse é segredo, ao contrário do ID.
   CLARITY_API_TOKEN: optionalString,
 
+  // ---- Kommo (CRM de vendas) ----
+  /** O nome que aparece na URL da conta: `https://SUBDOMINIO.kommo.com`. */
+  KOMMO_SUBDOMAIN: optionalString,
+  /** Chave de longa duração da integração privada. */
+  KOMMO_ACCESS_TOKEN: optionalString,
+
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
@@ -134,6 +140,7 @@ export interface Credentials {
   googleAds: boolean;
   ga4: boolean;
   clarity: boolean;
+  vendas: boolean;
 }
 
 /** Quais integrações têm credencial completa **agora**. */
@@ -157,5 +164,7 @@ export function getCredentials(): Credentials {
     googleAds: Boolean(google && env.GOOGLE_ADS_DEVELOPER_TOKEN && env.GOOGLE_ADS_CUSTOMER_ID),
     ga4: Boolean(google && env.GA4_PROPERTY_ID),
     clarity: Boolean(env.CLARITY_API_TOKEN),
+    // As duas juntas: o token sem o subdomínio não sabe para qual conta ir.
+    vendas: Boolean(env.KOMMO_SUBDOMAIN && env.KOMMO_ACCESS_TOKEN),
   };
 }

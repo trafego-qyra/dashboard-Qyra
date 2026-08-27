@@ -6,7 +6,15 @@
  * não toca em nenhum componente.
  */
 
-export const CHANNEL_IDS = ["meta-ads", "google-ads", "ga4", "organico"] as const;
+/**
+ * `vendas` está aqui, mas **fora de `CHANNELS`** (ver `lib/channels.ts`).
+ *
+ * Ela é um relatório como os outros — tem período, série e indicadores, e usa
+ * a mesma tela. Não é canal de aquisição: não tem investimento, e somar
+ * receita ao total de mídia na visão geral produziria um número sem
+ * significado.
+ */
+export const CHANNEL_IDS = ["meta-ads", "google-ads", "ga4", "organico", "vendas"] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
 /**
