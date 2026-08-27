@@ -28,6 +28,13 @@ interface LeadFalso {
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
 }
 
+/**
+ * Dublê da API, respeitando o filtro pedido.
+ *
+ * O conector faz duas consultas — uma por criação, outra por fechamento — e
+ * devolver o mesmo conjunto para as duas esconderia justamente o que separa
+ * "quantos entraram" de "quanto vendemos".
+ */
 function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> = []) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -39,7 +46,19 @@ function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> =
       );
     }
 
-    return new Response(JSON.stringify({ _embedded: { leads } }), {
+    const endereco = new URL(url);
+    const campo = endereco.searchParams.has("filter[closed_at][from]") ? "closed_at" : "created_at";
+    const de = Number(endereco.searchParams.get(`filter[${campo}][from]`) ?? 0);
+    const ate = Number(
+      endereco.searchParams.get(`filter[${campo}][to]`) ?? Number.MAX_SAFE_INTEGER,
+    );
+
+    const recorte = leads.filter((lead) => {
+      const quando = lead[campo];
+      return typeof quando === "number" && quando >= de && quando <= ate;
+    });
+
+    return new Response(JSON.stringify({ _embedded: { leads: recorte } }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -73,8 +92,20 @@ afterEach(() => {
 describe("vendas pelo Kommo", () => {
   it("só conta como receita o negócio ganho", async () => {
     const { report } = await relatorio([
-      { id: 1, price: 1000, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
-      { id: 2, price: 5000, status_id: PERDIDO, created_at: emSegundos("2026-02-04T10:00:00Z") },
+      {
+        id: 1,
+        price: 1000,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
+      },
+      {
+        id: 2,
+        price: 5000,
+        status_id: PERDIDO,
+        created_at: emSegundos("2026-02-04T10:00:00Z"),
+        closed_at: emSegundos("2026-02-06T10:00:00Z"),
+      },
       { id: 3, price: 9000, status_id: 20, created_at: emSegundos("2026-02-05T10:00:00Z") },
     ]);
 
@@ -88,7 +119,13 @@ describe("vendas pelo Kommo", () => {
 
   it("a taxa de conversão usa todos os negócios como base", async () => {
     const { report } = await relatorio([
-      { id: 1, price: 100, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      {
+        id: 1,
+        price: 100,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-04T10:00:00Z"),
+      },
       { id: 2, status_id: PERDIDO, created_at: emSegundos("2026-02-03T10:00:00Z") },
       { id: 3, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
       { id: 4, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
@@ -119,6 +156,63 @@ describe("vendas pelo Kommo", () => {
     expect(fechamento?.vendas).toBe(1);
   });
 
+  it("conta a venda no período em que ela fechou, não no que o lead entrou", async () => {
+    const { report } = await relatorio([
+      // Entrou antes do período e fechou dentro dele: é venda deste mês.
+      {
+        id: 1,
+        price: 4000,
+        status_id: GANHO,
+        created_at: emSegundos("2026-01-10T10:00:00Z"),
+        closed_at: emSegundos("2026-02-14T10:00:00Z"),
+      },
+      // Entrou dentro do período e ainda não fechou: não é venda de mês nenhum.
+      { id: 2, status_id: 20, created_at: emSegundos("2026-02-15T10:00:00Z") },
+    ]);
+
+    expect(kpi(report, "vendas")).toBe(1);
+    expect(kpi(report, "receita")).toBe(4000);
+    expect(kpi(report, "emAberto")).toBe(1);
+  });
+
+  it("o total dos indicadores bate com a soma das barras", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        price: 1500,
+        status_id: GANHO,
+        created_at: emSegundos("2026-01-20T10:00:00Z"),
+        closed_at: emSegundos("2026-02-03T10:00:00Z"),
+      },
+      {
+        id: 2,
+        price: 2500,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-01T10:00:00Z"),
+        closed_at: emSegundos("2026-02-20T10:00:00Z"),
+      },
+    ]);
+
+    // A regressão que motivou o teste: o indicador contava criado-e-ganho, o
+    // gráfico creditava no fechamento, e os dois números discordavam na tela.
+    const somaDasBarras = report.series.reduce((acc, p) => acc + Number(p.receita), 0);
+    const vendasNasBarras = report.series.reduce((acc, p) => acc + Number(p.vendas), 0);
+
+    expect(somaDasBarras).toBe(kpi(report, "receita"));
+    expect(vendasNasBarras).toBe(kpi(report, "vendas"));
+  });
+
+  it("restringe ao funil de vendas quando configurado", async () => {
+    vi.stubEnv("KOMMO_PIPELINE_ID", "14120879");
+    vi.resetModules();
+    const { chamadas } = await relatorio([]);
+
+    const urls = chamadas.mock.calls.map(([e]) => (typeof e === "string" ? e : String(e)));
+    // `142` é etapa de ganho em todo funil: sem restringir, um pipeline de
+    // suporte entraria no faturamento.
+    expect(urls.some((u) => u.includes("filter%5Bpipeline_id%5D=14120879"))).toBe(true);
+  });
+
   it("o ciclo médio ignora quem não fechou", async () => {
     const { report } = await relatorio([
       {
@@ -147,6 +241,7 @@ describe("vendas pelo Kommo", () => {
         price: 3000,
         status_id: GANHO,
         created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
         custom_fields_values: utm("meta", "emagrecimento"),
       },
       {
@@ -160,6 +255,7 @@ describe("vendas pelo Kommo", () => {
         price: 1000,
         status_id: GANHO,
         created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
         custom_fields_values: utm("google", "marca"),
       },
     ]);
@@ -175,7 +271,13 @@ describe("vendas pelo Kommo", () => {
 
   it("sem UTM nenhuma, avisa em vez de inventar origem", async () => {
     const { report } = await relatorio([
-      { id: 1, price: 100, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      {
+        id: 1,
+        price: 100,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-04T10:00:00Z"),
+      },
     ]);
 
     // O aviso é de operação: quem abre o painel não precisa vê-lo, quem
@@ -188,8 +290,18 @@ describe("vendas pelo Kommo", () => {
     const { report } = await relatorio([
       // É o estado real da conta: negócio movido para ganho, campo de valor
       // nunca preenchido.
-      { id: 1, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
-      { id: 2, status_id: GANHO, created_at: emSegundos("2026-02-04T10:00:00Z") },
+      {
+        id: 1,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
+      },
+      {
+        id: 2,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-04T10:00:00Z"),
+        closed_at: emSegundos("2026-02-06T10:00:00Z"),
+      },
     ]);
 
     expect(kpi(report, "vendas")).toBe(2);
@@ -201,7 +313,13 @@ describe("vendas pelo Kommo", () => {
 
   it("não inventa aviso de valor quando a receita existe", async () => {
     const { report } = await relatorio([
-      { id: 1, price: 500, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      {
+        id: 1,
+        price: 500,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-04T10:00:00Z"),
+      },
     ]);
 
     expect(report.kpis.find((k) => k.key === "receita")?.hint).toBeUndefined();

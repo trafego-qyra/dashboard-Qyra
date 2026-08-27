@@ -211,6 +211,7 @@ Kommo diz quanto daquilo virou dinheiro.
 |---|---|
 | `KOMMO_SUBDOMAIN` | `marketingqyracombr` — o nome na URL da conta. Não é segredo |
 | `KOMMO_ACCESS_TOKEN` | Chave de longa duração da integração privada. **É segredo** |
+| `KOMMO_PIPELINE_ID` | Opcional. O funil de vendas, quando a conta tem mais de um — o do Kommo aparece na URL do funil |
 
 ### Passo a passo
 
@@ -266,6 +267,29 @@ que não passa por URL com parâmetro e portanto não carrega UTM naturalmente.
 Ligar venda a campanha nesses casos exige uma automação capturando a origem da
 conversa e gravando no negócio — é o ponto em que uma ferramenta como o n8n
 tem função de verdade.
+
+### Quando uma venda conta
+
+**Pela data de fechamento.** "Vendemos 17 em agosto" significa 17 negócios que
+foram marcados como ganhos em agosto — não 17 que entraram em agosto e
+fecharam algum dia. É a conta que a operação usa, e é a que faz o total dos
+indicadores bater com a soma das barras do gráfico.
+
+Por isso o conector faz **duas consultas**: uma por data de criação, que
+responde "quantos negócios entraram e onde estão agora", e outra por data de
+fechamento, que responde "quanto vendemos".
+
+A taxa de conversão é a exceção, e de propósito: ela olha só os **criados** no
+período e pergunta quantos daquela safra já viraram venda. Cruzar "fechados no
+mês" com "criados no mês" produziria uma taxa que pode passar de 100% quando o
+ciclo é longo.
+
+### Mais de um funil
+
+`142` é a etapa de ganho em **todo** funil do Kommo. Numa conta com pipeline de
+suporte ou pós-venda, negócios ganhos ali entrariam no faturamento sem ninguém
+notar. `KOMMO_PIPELINE_ID` restringe ao funil de vendas; sem ele, a conta
+inteira é somada.
 
 ### Leads de entrada
 

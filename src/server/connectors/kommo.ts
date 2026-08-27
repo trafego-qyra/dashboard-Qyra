@@ -106,18 +106,31 @@ function campo(lead: LeadDoKommo, nomes: string[]): string | null {
  * O Kommo responde **204 sem corpo** quando não há nada na página — que o
  * `httpJson` entrega como objeto vazio, e o laço encerra sozinho.
  */
-async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
+function inicioDoDia(dia: string): number {
+  return Date.parse(`${dia}T00:00:00Z`) / 1000;
+}
+
+function fimDoDia(dia: string): number {
+  return Date.parse(`${dia}T23:59:59Z`) / 1000;
+}
+
+/**
+ * Negócios de uma janela, filtrados por criação ou por fechamento.
+ *
+ * As duas perguntas do relatório precisam de conjuntos diferentes: "quantos
+ * negócios entraram" olha a criação, "quanto vendemos" olha o fechamento. Um
+ * negócio criado em julho e fechado em agosto pertence ao agosto do segundo, e
+ * ao julho do primeiro.
+ */
+async function buscarLeads(range: DateRange, campoDeData: "created_at" | "closed_at") {
   const url = new URL(`${baseDaApi()}/leads`);
-  // Fechamento pode cair fora da janela em que o lead nasceu, então o filtro é
-  // por criação e o corte por data de fechamento acontece depois, em memória.
-  url.searchParams.set(
-    "filter[created_at][from]",
-    String(Date.parse(`${range.from}T00:00:00Z`) / 1000),
-  );
-  url.searchParams.set(
-    "filter[created_at][to]",
-    String(Date.parse(`${range.to}T23:59:59Z`) / 1000),
-  );
+  url.searchParams.set(`filter[${campoDeData}][from]`, String(inicioDoDia(range.from)));
+  url.searchParams.set(`filter[${campoDeData}][to]`, String(fimDoDia(range.to)));
+  const funil = getEnv().KOMMO_PIPELINE_ID;
+  // Sem funil configurado, conta a conta inteira. Com ele, só o funil de
+  // vendas — `142` é etapa de ganho em **todo** funil, e um pipeline de
+  // suporte com etapa de ganho entraria no faturamento sem ninguém notar.
+  if (funil) url.searchParams.set("filter[pipeline_id]", funil);
   url.searchParams.set("limit", String(POR_PAGINA));
 
   const todos: LeadDoKommo[] = [];
@@ -132,7 +145,15 @@ async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
     proxima = leads.length === POR_PAGINA ? (resposta._links?.next?.href ?? null) : null;
   }
 
-  return todos;
+  // Confere a janela de novo em memória. Filtro que a API não reconheça é
+  // ignorado em silêncio, e "ignorado em silêncio" num relatório de vendas
+  // significa somar negócio de outro período sem ninguém perceber.
+  const de = inicioDoDia(range.from);
+  const ate = fimDoDia(range.to);
+  return todos.filter((lead) => {
+    const quando = lead[campoDeData];
+    return typeof quando === "number" && quando >= de && quando <= ate;
+  });
 }
 
 /**
@@ -224,28 +245,36 @@ function montarFunil(
  * Só existe se o Kommo estiver recebendo a UTM no negócio. Quando não estiver,
  * a tabela sai vazia em vez de inventar origem, e o aviso diz o que configurar.
  */
-function montarOrigens(leads: LeadDoKommo[]): TableBlock {
+function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBlock {
   const porOrigem = new Map<string, { leads: number; vendas: number; receita: number }>();
 
-  for (const lead of leads) {
-    const origem =
-      campo(lead, ["utm_source", "utm source", "origem"]) ??
-      (lead.custom_fields_values ? "Sem UTM" : "Sem UTM");
+  const chaveDaOrigem = (lead: LeadDoKommo): string => {
+    const origem = campo(lead, ["utm_source", "utm source", "origem"]) ?? "Sem UTM";
     const campanha = campo(lead, ["utm_campaign", "utm campaign", "campanha"]);
-    const chave = campanha ? `${origem} · ${campanha}` : origem;
+    return campanha ? `${origem} · ${campanha}` : origem;
+  };
 
+  const linha = (chave: string) => {
     const atual = porOrigem.get(chave) ?? { leads: 0, vendas: 0, receita: 0 };
-    atual.leads += 1;
-    if (lead.status_id === GANHO) {
-      atual.vendas += 1;
-      atual.receita += lead.price ?? 0;
-    }
     porOrigem.set(chave, atual);
+    return atual;
+  };
+
+  // Negócios contam por criação, vendas por fechamento — a mesma separação do
+  // resto da tela. Por isso a coluna de conversão aqui é aproximada quando o
+  // ciclo é longo, e a descrição diz isso.
+  for (const lead of criados) linha(chaveDaOrigem(lead)).leads += 1;
+
+  for (const lead of ganhos) {
+    const atual = linha(chaveDaOrigem(lead));
+    atual.vendas += 1;
+    atual.receita += lead.price ?? 0;
   }
 
   return {
     title: "Vendas por origem",
-    description: "De onde vieram os negócios que fecharam, pela UTM registrada no Kommo.",
+    description:
+      "De onde vieram os negócios, pela UTM registrada no Kommo. Negócios contam por criação e vendas por fechamento, então a conversão é aproximada quando o ciclo passa do período.",
     columns: [
       { key: "origem", label: "Origem", align: "left" },
       { key: "leads", label: "Negócios", format: "integer", align: "right" },
@@ -281,15 +310,26 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
   }
 
   try {
-    const [leads, etapas, deEntrada] = await Promise.all([
-      buscarLeads(range),
+    // Dois conjuntos, duas perguntas. `criados` responde "quantos negócios
+    // entraram e onde estão agora"; `fechados` responde "quanto vendemos".
+    // Antes o indicador contava criado-e-ganho e o gráfico creditava no dia do
+    // fechamento — bases diferentes na mesma tela, e os dois números não
+    // batiam.
+    const [criados, fechados, etapas, deEntrada] = await Promise.all([
+      buscarLeads(range, "created_at"),
+      buscarLeads(range, "closed_at"),
       buscarEtapas(),
       contarLeadsDeEntrada(),
     ]);
 
-    const ganhos = leads.filter((l) => l.status_id === GANHO);
+    const leads = criados;
+    const ganhos = fechados.filter((l) => l.status_id === GANHO);
     const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
-    const emAberto = leads.filter((l) => l.status_id !== GANHO && l.status_id !== PERDIDO);
+    const emAberto = criados.filter((l) => l.status_id !== GANHO && l.status_id !== PERDIDO);
+    // Cortada entre os criados, não entre os fechados: é a fatia daquela safra
+    // que já virou venda. Misturar "fechados no mês" com "criados no mês"
+    // produziria uma taxa que pode passar de 100%.
+    const ganhosDaSafra = criados.filter((l) => l.status_id === GANHO).length;
 
     // Ciclo médio só considera quem fechou e tem as duas pontas: sem
     // `closed_at`, incluir o negócio arrastaria a média para baixo.
@@ -299,23 +339,22 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const cicloMedio = ciclos.length === 0 ? 0 : ciclos.reduce((a, b) => a + b, 0) / ciclos.length;
 
     const porDia = new Map<string, { vendas: number; receita: number; leads: number }>();
-    for (const lead of leads) {
-      const criado = paraDia(lead.created_at);
-      if (criado) {
-        const atual = porDia.get(criado) ?? { vendas: 0, receita: 0, leads: 0 };
-        atual.leads += 1;
-        porDia.set(criado, atual);
-      }
-      // A venda conta no dia em que fechou, não no dia em que o lead nasceu —
-      // é a diferença entre "quanto entrou" e "quanto vendemos" no dia.
-      if (lead.status_id === GANHO) {
-        const fechado = paraDia(lead.closed_at) ?? criado;
-        if (!fechado) continue;
-        const atual = porDia.get(fechado) ?? { vendas: 0, receita: 0, leads: 0 };
-        atual.vendas += 1;
-        atual.receita += lead.price ?? 0;
-        porDia.set(fechado, atual);
-      }
+    for (const lead of criados) {
+      const dia = paraDia(lead.created_at);
+      if (!dia) continue;
+      const atual = porDia.get(dia) ?? { vendas: 0, receita: 0, leads: 0 };
+      atual.leads += 1;
+      porDia.set(dia, atual);
+    }
+    // A venda conta no dia em que fechou — mesma base do indicador acima, para
+    // a soma das barras bater com o total.
+    for (const lead of ganhos) {
+      const dia = paraDia(lead.closed_at);
+      if (!dia) continue;
+      const atual = porDia.get(dia) ?? { vendas: 0, receita: 0, leads: 0 };
+      atual.vendas += 1;
+      atual.receita += lead.price ?? 0;
+      porDia.set(dia, atual);
     }
 
     const series: SeriesPoint[] = eachDay(range).map((date) => {
@@ -377,9 +416,9 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         {
           key: "conversao",
           label: "Lead vira venda",
-          value: leads.length === 0 ? 0 : ganhos.length / leads.length,
+          value: criados.length === 0 ? 0 : ganhosDaSafra / criados.length,
           format: "percent",
-          hint: "Negócios ganhos sobre todos os negócios criados no período.",
+          hint: "Dos negócios criados no período, quantos já viraram venda. Conta a mesma safra dos dois lados, então não se compara com as vendas fechadas acima.",
         },
         {
           key: "ciclo",
@@ -396,7 +435,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
-      tables: [montarFunil(leads, etapas, deEntrada), montarOrigens(leads)],
+      tables: [montarFunil(criados, etapas, deEntrada), montarOrigens(criados, ganhos)],
       notices: avisos,
     };
   } catch (erro) {
