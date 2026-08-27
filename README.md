@@ -108,6 +108,7 @@ contrato de contribuição — para pessoas e para agentes:
 | [`docs/utm.md`](docs/utm.md) | Padrão de UTM dos links publicados |
 | [`docs/qualidade.md`](docs/qualidade.md) | Esteira, observabilidade, performance |
 | [`docs/deploy.md`](docs/deploy.md) | Vercel, ambientes, domínio |
+| [`docs/historico.md`](docs/historico.md) | Por que o painel é assim, e como retomar numa máquina nova |
 | [`docs/seguranca.md`](docs/seguranca.md) | Modelo de ameaça, achados abertos e parâmetros de acesso |
 | [`docs/legal/`](docs/legal/) | Termos e privacidade (minuta, pendente de jurídico) |
 

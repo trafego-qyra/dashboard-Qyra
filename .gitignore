@@ -36,3 +36,7 @@ yarn-error.log*
 /reports
 /.stryker-tmp
 /.lighthouseci
+tests/e2e/.auth/
+
+# Ferramenta baixada sob demanda para varredura local de segredo.
+gitleaks

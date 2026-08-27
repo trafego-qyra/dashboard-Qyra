@@ -1,6 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.E2E_PORT ?? 3210);
+
+/**
+ * O painel é protegido por senha, e o e2e roda contra o build de produção —
+ * onde a proteção está ligada. Em vez de furar o porteiro para os testes, cada
+ * suíte parte de uma sessão obtida pelo próprio formulário: o caminho de
+ * entrada é exercitado de verdade, uma vez, e o resto herda o estado.
+ */
+const SENHA_DE_TESTE = "senha-de-teste-do-e2e";
+const ESTADO_AUTENTICADO = "tests/e2e/.auth/estado.json";
+
+export { ESTADO_AUTENTICADO, SENHA_DE_TESTE };
+
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
 /**
@@ -27,17 +39,33 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", use: { ...devices["Pixel 7"] } },
+    { name: "entrada", testMatch: /login\.setup\.ts/ },
+    // `porta` e o setup rodam com regras próprias de sessão: repeti-los aqui
+    // dentro de uma sessão válida testaria o contrário do que eles afirmam.
+    {
+      name: "desktop",
+      testIgnore: [/porta\.spec\.ts/, /login\.setup\.ts/],
+      use: { ...devices["Desktop Chrome"], storageState: ESTADO_AUTENTICADO },
+      dependencies: ["entrada"],
+    },
+    {
+      name: "mobile",
+      testIgnore: [/porta\.spec\.ts/, /login\.setup\.ts/],
+      use: { ...devices["Pixel 7"], storageState: ESTADO_AUTENTICADO },
+      dependencies: ["entrada"],
+    },
+    // Sem sessão: o que a porta faz com quem não entrou.
+    { name: "porta", testMatch: /porta\.spec\.ts/ },
   ],
 
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
         command: `npx next start -p ${PORT}`,
-        url: BASE_URL,
+        // `/` redireciona para o login sem sessão; a espera precisa de um 200.
+        url: `${BASE_URL}/login`,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
-        env: { QYRA_FORCE_MOCK: "true" },
+        env: { QYRA_FORCE_MOCK: "true", QYRA_SENHA: SENHA_DE_TESTE },
       },
 });

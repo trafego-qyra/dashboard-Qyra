@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Poppins } from "next/font/google";
-import { Suspense } from "react";
 
-import { AppShell } from "@/components/layout/app-shell";
 import { Providers } from "@/components/layout/providers";
 
 import "./globals.css";
@@ -60,14 +58,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Pular para o conteúdo
         </a>
-        <Providers>
-          {/* Sidebar e filtro leem searchParams: Suspense evita CSR bailout. */}
-          <Suspense fallback={null}>
-            <AppShell>
-              <div id="conteudo">{children}</div>
-            </AppShell>
-          </Suspense>
-        </Providers>
+        {/* A casca com navegação vive em `(painel)/layout.tsx`: a tela de
+            login não tem para onde navegar e não deve mostrar a barra. */}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
