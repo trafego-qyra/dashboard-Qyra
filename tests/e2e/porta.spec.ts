@@ -74,6 +74,16 @@ test("um cookie forjado não abre a porta", async ({ page, context }) => {
   await expect(page).toHaveURL(/\/login/);
 });
 
+test("com senha configurada, o diagnóstico de saúde também fica atrás da porta", async ({
+  request,
+}) => {
+  // A exceção do `/api/health` vale só enquanto não há senha. Com senha — que
+  // é o caso desta suíte — ele volta para trás da porta como todo o resto.
+  const resposta = await request.get("/api/health", { maxRedirects: 0 });
+
+  expect(resposta.status()).toBe(307);
+});
+
 test("a tela de login não precisa de sessão para carregar", async ({ page }) => {
   const resposta = await page.goto("/login");
 

@@ -42,6 +42,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Sem senha configurada, `/api/health` responde mesmo assim.
+  //
+  // É a única situação em que o painel tranca tudo, e trancar junto o
+  // diagnóstico que explica o porquê deixa quem opera sem saída: a tela de
+  // login diz "falta configurar" e não há como descobrir o que falta. Aqui
+  // nenhum dado de negócio está acessível — os relatórios seguem barrados —,
+  // e a resposta lista apenas nomes de variável, nunca valores. Assim que a
+  // senha existir, esta porta se fecha junto com as outras.
+  if (!senhaConfigurada() && pathname === "/api/health") {
+    return NextResponse.next();
+  }
+
   if (await tokenValido(request.cookies.get(COOKIE_DA_SESSAO)?.value)) {
     return NextResponse.next();
   }
