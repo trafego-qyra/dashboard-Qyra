@@ -96,6 +96,13 @@ const schema = z.object({
   KOMMO_SUBDOMAIN: optionalString,
   /** Chave de longa duração da integração privada. */
   KOMMO_ACCESS_TOKEN: optionalString,
+  /**
+   * Funil de vendas, quando a conta tem mais de um.
+   *
+   * `142` é etapa de ganho em todo funil do Kommo: sem restringir, um pipeline
+   * de suporte ou de pós-venda entra no faturamento junto.
+   */
+  KOMMO_PIPELINE_ID: optionalString,
 
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
