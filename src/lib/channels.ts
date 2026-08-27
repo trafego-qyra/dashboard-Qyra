@@ -48,7 +48,7 @@ export const CHANNELS: readonly ChannelMeta[] = [
  * conversão de mídia, e receita não pertence àquela soma. Mas é um relatório
  * completo, com as mesmas peças das telas de canal.
  */
-export const VENDAS: ChannelMeta = {
+const VENDAS: ChannelMeta = {
   id: "vendas",
   label: "Vendas",
   href: "/vendas",

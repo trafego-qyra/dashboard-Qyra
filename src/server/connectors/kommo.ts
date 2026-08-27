@@ -2,7 +2,7 @@ import "server-only";
 
 import { avisoOperacao } from "@/lib/avisos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, SeriesPoint, TableBlock } from "@/lib/types";
+import type { ChannelReport, DateRange, Notice, SeriesPoint, TableBlock } from "@/lib/types";
 import { mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
@@ -135,6 +135,30 @@ async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
   return todos;
 }
 
+/**
+ * Quantos negócios estão na área de "leads de entrada".
+ *
+ * O Kommo trata o que ainda não foi organizado como uma coisa à parte: esses
+ * registros **não aparecem em `/leads`**, e sem contá-los o funil começa
+ * mentindo — some justamente o topo, que é por onde tudo entra.
+ *
+ * Aqui só o número interessa. O formato desses registros difere do de um
+ * negócio comum, e adivinhar a forma para extrair valor renderia um total
+ * inventado.
+ */
+async function contarLeadsDeEntrada(): Promise<number> {
+  try {
+    const resposta = await httpJson<{ _embedded?: { unsorted?: unknown[] } }>(
+      `${baseDaApi()}/leads/unsorted?limit=${POR_PAGINA}`,
+      { headers: autorizacao() },
+    );
+    return resposta._embedded?.unsorted?.length ?? 0;
+  } catch {
+    // A área pode estar vazia (204) ou o escopo não cobrir: some da tabela.
+    return 0;
+  }
+}
+
 /** Nome de cada etapa, por id. Sem isso o funil sairia como números. */
 async function buscarEtapas(): Promise<Map<number, string>> {
   const nomes = new Map<number, string>();
@@ -153,7 +177,11 @@ async function buscarEtapas(): Promise<Map<number, string>> {
   return nomes;
 }
 
-function montarFunil(leads: LeadDoKommo[], nomes: Map<number, string>): TableBlock {
+function montarFunil(
+  leads: LeadDoKommo[],
+  nomes: Map<number, string>,
+  deEntrada: number,
+): TableBlock {
   const porEtapa = new Map<number, { negocios: number; valor: number }>();
   for (const lead of leads) {
     const id = lead.status_id ?? 0;
@@ -179,6 +207,13 @@ function montarFunil(leads: LeadDoKommo[], nomes: Map<number, string>): TableBlo
         negocios: dados.negocios,
         valor: Math.round(dados.valor * 100) / 100,
       }))
+      .concat(
+        // No topo da lista e fora da ordenação: é a porta de entrada, não uma
+        // etapa concorrendo por volume.
+        deEntrada > 0
+          ? [{ etapa: "Leads de entrada (a organizar)", negocios: deEntrada, valor: 0 }]
+          : [],
+      )
       .sort((a, b) => b.negocios - a.negocios),
   };
 }
@@ -246,7 +281,11 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
   }
 
   try {
-    const [leads, etapas] = await Promise.all([buscarLeads(range), buscarEtapas()]);
+    const [leads, etapas, deEntrada] = await Promise.all([
+      buscarLeads(range),
+      buscarEtapas(),
+      contarLeadsDeEntrada(),
+    ]);
 
     const ganhos = leads.filter((l) => l.status_id === GANHO);
     const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
@@ -291,6 +330,27 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
 
     const semUtm = leads.every((l) => campo(l, ["utm_source", "utm source", "origem"]) === null);
 
+    // Negócio ganho sem valor preenchido é o caso mais traiçoeiro deste
+    // conector: receita e ticket saem R$ 0,00 sem estar errados, e quem olha
+    // lê "não vendemos nada" quando o certo é "ninguém preencheu o valor".
+    const semValor = ganhos.length > 0 && receita === 0;
+
+    const avisos: Notice[] = [];
+    if (semValor) {
+      avisos.push(
+        avisoOperacao(
+          `${ganhos.length} negócio(s) ganho(s) no período estão sem valor preenchido no Kommo. Receita e ticket médio ficam em zero até o campo de valor ser preenchido ao fechar a venda.`,
+        ),
+      );
+    }
+    if (semUtm && leads.length > 0) {
+      avisos.push(
+        avisoOperacao(
+          "Nenhum negócio do Kommo traz UTM. Sem isso não dá para ligar venda a campanha — é preciso o formulário ou a automação gravar utm_source e utm_campaign no negócio.",
+        ),
+      );
+    }
+
     return {
       channel: "vendas",
       label: "Vendas",
@@ -304,6 +364,9 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           label: "Receita",
           value: Math.round(receita * 100) / 100,
           format: "currency",
+          hint: semValor
+            ? "Zero porque os negócios ganhos estão sem valor preenchido no Kommo, não porque não houve venda."
+            : undefined,
         },
         {
           key: "ticket",
@@ -333,15 +396,8 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
-      tables: [montarFunil(leads, etapas), montarOrigens(leads)],
-      notices:
-        semUtm && leads.length > 0
-          ? [
-              avisoOperacao(
-                "Nenhum negócio do Kommo traz UTM. Sem isso não dá para ligar venda a campanha — é preciso o formulário gravar utm_source e utm_campaign no negócio.",
-              ),
-            ]
-          : [],
+      tables: [montarFunil(leads, etapas, deEntrada), montarOrigens(leads)],
+      notices: avisos,
     };
   } catch (erro) {
     const report = mockVendas(range, new Date().toISOString());

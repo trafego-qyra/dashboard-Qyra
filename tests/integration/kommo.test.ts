@@ -184,6 +184,66 @@ describe("vendas pelo Kommo", () => {
     expect(report.notices.every((n) => n.audience === "operacao")).toBe(true);
   });
 
+  it("venda ganha sem valor avisa em vez de deixar o zero sozinho", async () => {
+    const { report } = await relatorio([
+      // É o estado real da conta: negócio movido para ganho, campo de valor
+      // nunca preenchido.
+      { id: 1, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      { id: 2, status_id: GANHO, created_at: emSegundos("2026-02-04T10:00:00Z") },
+    ]);
+
+    expect(kpi(report, "vendas")).toBe(2);
+    expect(kpi(report, "receita")).toBe(0);
+    // Zero sem explicação lê como "não vendemos nada", que é o oposto do fato.
+    expect(report.kpis.find((k) => k.key === "receita")?.hint).toMatch(/sem valor preenchido/i);
+    expect(report.notices.some((n) => /valor preenchido/i.test(n.text))).toBe(true);
+  });
+
+  it("não inventa aviso de valor quando a receita existe", async () => {
+    const { report } = await relatorio([
+      { id: 1, price: 500, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+    ]);
+
+    expect(report.kpis.find((k) => k.key === "receita")?.hint).toBeUndefined();
+    expect(report.notices.some((n) => /valor preenchido/i.test(n.text))).toBe(false);
+  });
+
+  it("conta os leads de entrada, que não vêm em /leads", async () => {
+    const chamadas = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/leads/unsorted")) {
+        return new Response(JSON.stringify({ _embedded: { unsorted: [{}, {}, {}] } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/leads/pipelines")) {
+        return new Response(JSON.stringify({ _embedded: { pipelines: [] } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          _embedded: {
+            leads: [{ id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", chamadas);
+
+    const { fetchVendasReport } = await import("@/server/connectors/kommo");
+    const report = await fetchVendasReport(RANGE);
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // Sem essa linha o funil perde o topo — é por ali que tudo entra.
+    expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
+      3,
+    );
+  });
+
   it("usa o nome real da etapa, e não o número", async () => {
     const { report } = await relatorio(
       [{ id: 1, status_id: 77, created_at: emSegundos("2026-02-03T10:00:00Z") }],

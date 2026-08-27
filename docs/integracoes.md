@@ -169,10 +169,10 @@ Kommo diz quanto daquilo virou dinheiro.
 
 ### O que cadastrar
 
-| Variável | Onde encontrar |
+| Variável | Valor |
 |---|---|
-| `KOMMO_SUBDOMAIN` | O nome na URL da conta: `https://SUBDOMINIO.kommo.com` |
-| `KOMMO_ACCESS_TOKEN` | Chave de longa duração da integração privada |
+| `KOMMO_SUBDOMAIN` | `marketingqyracombr` — o nome na URL da conta. Não é segredo |
+| `KOMMO_ACCESS_TOKEN` | Chave de longa duração da integração privada. **É segredo** |
 
 ### Passo a passo
 
@@ -214,6 +214,29 @@ português funciona. Quando nenhum negócio traz UTM, a tela avisa quem opera �
 não o cliente.
 
 O padrão de UTM dos links publicados está em [`utm.md`](./utm.md).
+
+### Duas coisas que o painel não resolve sozinho
+
+**Valor do negócio.** O funil da conta hoje mostra `R$ 0` em todas as etapas: o
+campo de valor não vem preenchido. Enquanto for assim, receita e ticket médio
+aparecem zerados — corretamente, porque não há valor registrado. A tela avisa
+quem opera, com o número de negócios ganhos sem valor, para o zero não ser lido
+como "não vendemos nada".
+
+**UTM em lead de WhatsApp e Instagram.** Boa parte dos negócios entra por DM,
+que não passa por URL com parâmetro e portanto não carrega UTM naturalmente.
+Ligar venda a campanha nesses casos exige uma automação capturando a origem da
+conversa e gravando no negócio — é o ponto em que uma ferramenta como o n8n
+tem função de verdade.
+
+### Leads de entrada
+
+A área de **leads de entrada** (não organizados) vive num endpoint separado e
+**não aparece em `/leads`**. O conector conta esses registros e os mostra como
+uma linha do funil; sem isso o topo do funil simplesmente sumiria.
+
+Só a contagem: o formato desses registros difere do de um negócio comum, e
+adivinhar a forma para extrair valor renderia um total inventado.
 
 ### Limites
 
