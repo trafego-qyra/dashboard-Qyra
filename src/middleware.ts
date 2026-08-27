@@ -24,6 +24,9 @@ import { COOKIE_DA_SESSAO, senhaConfigurada, tokenValido } from "@/server/auth/s
 function ehPublico(pathname: string): boolean {
   return (
     pathname === "/login" ||
+    // Onde o formulário de login posta. Sem isso o porteiro barraria a própria
+    // entrada, e o login viraria um laço.
+    pathname === "/api/sessao" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||

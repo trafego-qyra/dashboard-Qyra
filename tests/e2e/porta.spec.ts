@@ -84,6 +84,38 @@ test("com senha configurada, o diagnóstico de saúde também fica atrás da por
   expect(resposta.status()).toBe(307);
 });
 
+test("o formulário é nativo, para o gerenciador de senha reconhecê-lo", async ({ page }) => {
+  await page.goto("/login");
+
+  const formulario = page.locator("form").filter({ has: page.locator("#senha") });
+
+  // Server Action envia por JavaScript, sem navegação, e o navegador não
+  // oferece guardar a senha. Envio nativo com POST devolve esse sinal.
+  await expect(formulario).toHaveAttribute("method", /post/i);
+  await expect(formulario).toHaveAttribute("action", "/api/sessao");
+
+  // O Chrome só guarda a senha quando há um usuário para associar a ela.
+  await expect(page.locator('input[autocomplete="username"]')).toHaveCount(1);
+  await expect(page.locator('input[autocomplete="current-password"]')).toHaveCount(1);
+});
+
+test("formulário postado de outro site não entra", async ({ request }) => {
+  const resposta = await request.post("/api/sessao", {
+    headers: {
+      origin: "https://site-de-fora.example",
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    form: { senha: SENHA_DE_TESTE },
+    maxRedirects: 0,
+  });
+
+  // A Server Action conferia a origem sozinha; a rota precisa conferir na mão.
+  // Sem isso, outra página postaria senhas em nome de quem tem a aba aberta.
+  expect(resposta.status()).toBe(303);
+  expect(resposta.headers().location).toMatch(/erro=origem/);
+  expect(resposta.headers()["set-cookie"]).toBeUndefined();
+});
+
 test("a tela de login não precisa de sessão para carregar", async ({ page }) => {
   const resposta = await page.goto("/login");
 
