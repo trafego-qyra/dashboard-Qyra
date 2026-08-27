@@ -2,6 +2,7 @@
 
 import {
   ChartLine,
+  HandCoins,
   Heart,
   LayoutGrid,
   type LucideIcon,
@@ -13,7 +14,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { QyraLogo } from "@/components/brand/logo";
-import { CHANNELS } from "@/lib/channels";
+import { RELATORIOS } from "@/lib/channels";
 import { cn } from "@/lib/cn";
 
 /**
@@ -32,6 +33,7 @@ const ICONE: Record<string, LucideIcon> = {
   "google-ads": Search,
   ga4: ChartLine,
   organico: Heart,
+  vendas: HandCoins,
 };
 
 /**
@@ -42,7 +44,7 @@ const ICONE: Record<string, LucideIcon> = {
  */
 const NAV = [
   { href: "/", label: "Visão geral", icon: LayoutGrid },
-  ...CHANNELS.map((c) => ({ href: c.href, label: c.label, icon: ICONE[c.id] })),
+  ...RELATORIOS.map((c) => ({ href: c.href, label: c.label, icon: ICONE[c.id] })),
   // Fora de CHANNELS de propósito: não é canal de aquisição e não produz
   // relatório de período — é o que acontece depois que a pessoa chega.
   { href: "/comportamento", label: "Comportamento", icon: MousePointerClick },

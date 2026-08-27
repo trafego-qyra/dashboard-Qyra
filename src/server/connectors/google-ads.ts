@@ -6,7 +6,7 @@ import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
-import { HttpError, httpJson, redactSecrets } from "@/server/lib/http";
+import { descreverFalha, HttpError, httpJson } from "@/server/lib/http";
 import { buildGoogleAdsSnapshotReport } from "./google-ads-snapshot";
 
 /**
@@ -123,17 +123,6 @@ async function runQuery(query: string): Promise<GoogleAdsRow[]> {
 function ehTokenAguardandoAprovacao(erro: unknown): boolean {
   const texto = erro instanceof Error ? erro.message + (erro as HttpError).body : "";
   return /DEVELOPER_TOKEN_NOT_APPROVED|DEVELOPER_TOKEN_PROHIBITED/i.test(texto);
-}
-
-/**
- * Resumo curto do erro para o aviso na tela. Passa pelo `redactSecrets` porque
- * a resposta da Google costuma ecoar a requisição, e a requisição leva token.
- */
-function descreverFalha(erro: unknown): string {
-  const bruto = erro instanceof Error ? erro.message : String(erro);
-  const corpo = (erro as HttpError)?.body;
-  const texto = redactSecrets(typeof corpo === "string" && corpo ? `${bruto} — ${corpo}` : bruto);
-  return texto.length > 240 ? `${texto.slice(0, 240)}…` : texto;
 }
 
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {

@@ -41,7 +41,25 @@ export const CHANNELS: readonly ChannelMeta[] = [
   },
 ] as const;
 
-const BY_ID = new Map(CHANNELS.map((c) => [c.id, c]));
+/**
+ * Vendas: o que acontece depois do lead.
+ *
+ * Fora de `CHANNELS` de propósito — a visão geral consolida investimento e
+ * conversão de mídia, e receita não pertence àquela soma. Mas é um relatório
+ * completo, com as mesmas peças das telas de canal.
+ */
+export const VENDAS: ChannelMeta = {
+  id: "vendas",
+  label: "Vendas",
+  href: "/vendas",
+  slot: 5,
+  description: "Negócios fechados, receita e conversão de lead em venda, pelo Kommo",
+};
+
+/** Tudo que tem tela de relatório, canal de aquisição ou não. */
+export const RELATORIOS: readonly ChannelMeta[] = [...CHANNELS, VENDAS];
+
+const BY_ID = new Map(RELATORIOS.map((c) => [c.id, c]));
 
 export function getChannel(id: ChannelId): ChannelMeta {
   const meta = BY_ID.get(id);

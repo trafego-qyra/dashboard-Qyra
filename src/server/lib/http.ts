@@ -52,6 +52,21 @@ export function redactSecrets(text: string): string {
   );
 }
 
+/**
+ * Resumo curto de um erro, para virar aviso na tela.
+ *
+ * Passa pelo `redactSecrets` porque a resposta das plataformas costuma ecoar a
+ * requisição, e a requisição leva token. Mora aqui, e não no conector, porque
+ * todo conector precisa da mesma coisa — e duplicar significaria um deles
+ * esquecer a redação um dia.
+ */
+export function descreverFalha(erro: unknown): string {
+  const bruto = erro instanceof Error ? erro.message : String(erro);
+  const corpo = (erro as HttpError)?.body;
+  const texto = redactSecrets(typeof corpo === "string" && corpo ? `${bruto} — ${corpo}` : bruto);
+  return texto.length > 240 ? `${texto.slice(0, 240)}…` : texto;
+}
+
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 function backoffMs(attempt: number): number {

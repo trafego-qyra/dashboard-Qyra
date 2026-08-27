@@ -159,3 +159,64 @@ atalho para ver o mapa lá.
 | GA4 devolve zero em tudo | ID de medição no lugar do ID da propriedade |
 | Tabela de publicações vazia | Falta `instagram_manage_insights` |
 | Meta com `spend` mas sem leads | O tipo de ação do pixel não está em `LEAD_ACTIONS` (`src/server/connectors/meta-ads.ts`) |
+
+---
+
+## Kommo (vendas)
+
+O CRM é o que fecha o ciclo do painel: os outros canais param no lead, e o
+Kommo diz quanto daquilo virou dinheiro.
+
+### O que cadastrar
+
+| Variável | Onde encontrar |
+|---|---|
+| `KOMMO_SUBDOMAIN` | O nome na URL da conta: `https://SUBDOMINIO.kommo.com` |
+| `KOMMO_ACCESS_TOKEN` | Chave de longa duração da integração privada |
+
+### Passo a passo
+
+1. No Kommo, **Configurações → Integrações → Criar integração** (a aba fica ao
+   lado de "Instaladas"). Marque que é uma **integração privada** — ela vale só
+   para esta conta e não passa por revisão do Kommo.
+2. Preencha nome e descrição. O campo de **redirect URI** é obrigatório mesmo
+   sem usar OAuth; pode ser `https://dashboard.qyra.com.br/api/kommo/callback`.
+3. Nos **escopos**, marque leitura de negócios (leads), contatos e funis. O
+   painel **nunca escreve** no Kommo — se houver opção de somente leitura, é
+   ela que deve ficar marcada.
+4. Salve. Abra a integração e vá em **Chaves e escopos**: ali fica a **chave de
+   longa duração**. É esse valor que vai em `KOMMO_ACCESS_TOKEN`.
+5. Cadastre as duas variáveis na Vercel e faça um novo deploy.
+
+### O que o painel lê
+
+Só leitura, e só o necessário:
+
+- **negócios** (`/api/v4/leads`) criados no período, com valor, etapa e datas de
+  criação e fechamento;
+- **funis e etapas** (`/api/v4/leads/pipelines`), para o funil sair com o nome
+  das etapas em vez de números.
+
+O Kommo herdou do amoCRM dois identificadores fixos, iguais em toda conta:
+**142 é venda ganha, 143 é perdido**. As demais etapas são as que a clínica
+criou.
+
+### A UTM é o que liga venda a campanha
+
+Sem `utm_source` e `utm_campaign` gravados **no negócio**, o painel mostra
+receita e ticket médio, mas não consegue dizer **qual campanha gerou a venda** —
+que é a pergunta que justifica o painel inteiro.
+
+Isso depende de o formulário (ou a integração de WhatsApp) passar as UTMs para
+campos personalizados do negócio no Kommo. O conector procura pelos nomes
+`utm_source`, `utm_campaign` e também por `origem` e `campanha`, então campo em
+português funciona. Quando nenhum negócio traz UTM, a tela avisa quem opera —
+não o cliente.
+
+O padrão de UTM dos links publicados está em [`utm.md`](./utm.md).
+
+### Limites
+
+A API do Kommo limita a cerca de **7 requisições por segundo** e devolve no
+máximo **250 negócios por página**. O conector pagina até 20 páginas — 5.000
+negócios num período —, o que cobre com folga o volume de uma clínica.
