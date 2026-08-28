@@ -6,7 +6,7 @@ import { previousRange } from "@/lib/date-range";
 import type {
   ChannelId,
   ChannelReport,
-  ClarityResumo,
+  ClarityEstado,
   DataSource,
   DateRange,
   Kpi,
@@ -38,7 +38,7 @@ import { fetchOrganicoReport } from "./connectors/organico";
  */
 const TTL_CLARITY_SEGUNDOS = 1_800;
 
-export function getClarityResumo(): Promise<ClarityResumo | null> {
+export function getClarityResumo(): Promise<ClarityEstado> {
   return cached("clarity:resumo", fetchClarityResumo, TTL_CLARITY_SEGUNDOS);
 }
 

@@ -12,6 +12,11 @@ export interface HttpOptions extends Omit<RequestInit, "signal"> {
   timeoutMs?: number;
   /** Tentativas extras em 429/5xx/rede. */
   retries?: number;
+  /**
+   * Guarda a resposta no Data Cache do Next por N segundos, compartilhado entre
+   * instâncias. Só para API com cota diária baixa — ver o comentário no `fetch`.
+   */
+  revalidateSeconds?: number;
 }
 
 export class HttpError extends Error {
@@ -76,7 +81,7 @@ function backoffMs(attempt: number): number {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function httpJson<T>(url: string, options: HttpOptions = {}): Promise<T> {
-  const { timeoutMs = 15_000, retries = 2, headers, ...init } = options;
+  const { timeoutMs = 15_000, retries = 2, headers, revalidateSeconds, ...init } = options;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -88,7 +93,17 @@ export async function httpJson<T>(url: string, options: HttpOptions = {}): Promi
         ...init,
         headers: { accept: "application/json", ...headers },
         signal: controller.signal,
-        cache: "no-store",
+        // `no-store` por padrão: relatório servido de cache silencioso é a
+        // forma mais fácil de mostrar número velho numa reunião.
+        //
+        // A exceção é API de cota diária baixa. O cache em memória do painel é
+        // **por instância**, e a Vercel sobe várias — cada partida a frio
+        // recomeça com o cache vazio e gasta mais uma chamada da cota. O Data
+        // Cache do Next é compartilhado entre instâncias, e é o único que
+        // segura uma cota de poucas chamadas por dia.
+        ...(revalidateSeconds === undefined
+          ? { cache: "no-store" as const }
+          : { next: { revalidate: revalidateSeconds } }),
       });
 
       if (!response.ok) {
