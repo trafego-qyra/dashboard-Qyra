@@ -73,7 +73,7 @@ function attachComparison(report: ChannelReport, previous: ChannelReport): Kpi[]
   const anteriores = new Map(previous.kpis.map((kpi) => [kpi.key, kpi.value]));
 
   return report.kpis.map((kpi) => {
-    if (kpi.previousValue !== undefined) return kpi;
+    if (kpi.previousValue !== undefined || kpi.semComparacao) return kpi;
 
     const anterior = anteriores.get(kpi.key);
     // KPI sem correspondente fica sem comparação, em vez de comparar contra

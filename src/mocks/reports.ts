@@ -814,23 +814,26 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
     tables: [
       {
         title: "Negócios por etapa",
-        description: "Onde os negócios do período estão parados, e quanto há em cada etapa.",
+        description:
+          "Onde os negócios do período estão parados. Na ordem do funil, com as etapas vazias à vista — etapa sem ninguém é o gargalo.",
         columns: [
           { key: "etapa", label: "Etapa", align: "left" },
           { key: "negocios", label: "Negócios", format: "integer", align: "right" },
           { key: "valor", label: "Valor", format: "currency", align: "right" },
         ],
-        // As etapas saem dos mesmos totais dos indicadores. Inventar fatias
-        // soltas produzia um funil que contradizia o topo da tela — e num
-        // painel de demonstração isso lê como erro de cálculo, não como dado
-        // fictício.
+        // As etapas saem dos mesmos totais dos indicadores, e na ordem do
+        // funil — não por volume. Inventar fatias soltas produzia um funil que
+        // contradizia o topo da tela, e num painel de demonstração isso lê
+        // como erro de cálculo, não como dado fictício.
         rows: (() => {
           const perdidos = Math.round((leads - vendas) * 0.34);
           const abertos = leads - vendas - perdidos;
+          const primeiro = Math.round(abertos * 0.52);
+          const avaliacao = Math.round(abertos * 0.31);
           return [
-            ["Primeiro contato", Math.round(abertos * 0.52)],
-            ["Avaliação agendada", Math.round(abertos * 0.31)],
-            ["Proposta enviada", abertos - Math.round(abertos * 0.52) - Math.round(abertos * 0.31)],
+            ["Primeiro contato", primeiro],
+            ["Avaliação agendada", avaliacao],
+            ["Proposta enviada", abertos - primeiro - avaliacao],
             ["Venda ganha", vendas],
             ["Perdido", perdidos],
           ].map(([etapa, negocios]) => ({

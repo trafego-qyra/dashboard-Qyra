@@ -35,7 +35,10 @@ interface LeadFalso {
  * devolver o mesmo conjunto para as duas esconderia justamente o que separa
  * "quantos entraram" de "quanto vendemos".
  */
-function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> = []) {
+function kommo(
+  leads: LeadFalso[],
+  etapas: Array<{ id: number; name: string; sort?: number }> = [],
+) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
 
@@ -65,7 +68,10 @@ function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> =
   });
 }
 
-async function relatorio(leads: LeadFalso[], etapas?: Array<{ id: number; name: string }>) {
+async function relatorio(
+  leads: LeadFalso[],
+  etapas?: Array<{ id: number; name: string; sort?: number }>,
+) {
   const chamadas = kommo(leads, etapas);
   vi.stubGlobal("fetch", chamadas);
   const { fetchVendasReport } = await import("@/server/connectors/kommo");
@@ -330,10 +336,21 @@ describe("vendas pelo Kommo", () => {
     const chamadas = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/leads/unsorted")) {
-        return new Response(JSON.stringify({ _embedded: { unsorted: [{}, {}, {}] } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            _embedded: {
+              unsorted: [
+                { created_at: emSegundos("2026-02-05T10:00:00Z") },
+                { created_at: emSegundos("2026-02-06T10:00:00Z") },
+                { created_at: emSegundos("2026-02-07T10:00:00Z") },
+              ],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       }
       if (url.includes("/leads/pipelines")) {
         return new Response(JSON.stringify({ _embedded: { pipelines: [] } }), {
@@ -360,6 +377,137 @@ describe("vendas pelo Kommo", () => {
     expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
       3,
     );
+  });
+
+  it("sem venda no período, métrica derivada não vira -100%", async () => {
+    const { report } = await relatorio([
+      { id: 1, status_id: 20, created_at: emSegundos("2026-02-10T10:00:00Z") },
+    ]);
+
+    const marca = (chave: string) => report.kpis.find((k) => k.key === chave)?.semComparacao;
+
+    // Ticket e ciclo em zero não querem dizer "caiu para zero", e sim "não
+    // houve o que medir". No ciclo, a seta de queda sairia verde — como se
+    // fechar nada fosse melhora.
+    expect(marca("ticket")).toBe(true);
+    expect(marca("ciclo")).toBe(true);
+    // Vendas e receita continuam comparáveis: zero ali é um fato, não ausência.
+    expect(marca("vendas")).toBeFalsy();
+    expect(marca("receita")).toBeFalsy();
+  });
+
+  it("com venda no período, a comparação volta", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        price: 900,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
+      },
+    ]);
+
+    expect(report.kpis.find((k) => k.key === "ticket")?.semComparacao).toBeFalsy();
+    expect(report.kpis.find((k) => k.key === "ciclo")?.semComparacao).toBeFalsy();
+  });
+
+  it("os leads de entrada respeitam o período da tela", async () => {
+    const chamadas = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/leads/unsorted")) {
+        return new Response(
+          JSON.stringify({
+            _embedded: {
+              unsorted: [
+                { created_at: emSegundos("2026-02-10T10:00:00Z") },
+                { created_at: emSegundos("2026-02-11T10:00:00Z") },
+                // Fora da janela: a fila é acumulada, a tabela é do período.
+                { created_at: emSegundos("2025-11-01T10:00:00Z") },
+              ],
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/leads/pipelines")) {
+        return new Response(JSON.stringify({ _embedded: { pipelines: [] } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ _embedded: { leads: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", chamadas);
+
+    const { fetchVendasReport } = await import("@/server/connectors/kommo");
+    const report = await fetchVendasReport(RANGE);
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // A tabela promete "os negócios do período"; a fila inteira ali dentro
+    // fazia o total não fechar com nada.
+    expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
+      2,
+    );
+  });
+
+  it("mostra todas as etapas do funil, na ordem, inclusive as vazias", async () => {
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: 40, name: "Negociação", sort: 30 },
+      ],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // Etapa vazia sumindo esconde o gargalo: "ninguém chega em Negociação" é a
+    // informação mais útil que um funil dá.
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Qualificação", "Negociação"]);
+    expect(funil?.rows.map((r) => r.negocios)).toEqual([1, 0, 0]);
+  });
+
+  it("não reordena o funil por volume", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-04T10:00:00Z") },
+        { id: 3, status_id: 20, created_at: emSegundos("2026-02-05T10:00:00Z") },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // Ordenado por volume, "Qualificação" viria primeiro — e a tabela deixaria
+    // de ser um funil para virar uma lista de campeões.
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Qualificação"]);
+  });
+
+  it("etapa fora do esqueleto vai para o fim, em vez de sumir", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Ganho não é etapa do funil: vem depois, sem ser descartado.
+        {
+          id: 2,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+      ],
+      [{ id: 20, name: "Novo lead", sort: 10 }],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Venda ganha"]);
   });
 
   it("usa o nome real da etapa, e não o número", async () => {
