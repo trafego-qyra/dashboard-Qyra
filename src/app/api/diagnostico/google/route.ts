@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { rangeFromPreset } from "@/lib/date-range";
 import { VERSOES_CANDIDATAS } from "@/server/connectors/google-ads";
+import { type Etapa, veredictoDoToken } from "@/server/diagnostico/veredicto-ads";
 import { getCredentials, getEnv } from "@/server/env";
 import { guard } from "@/server/lib/api";
 import { redactSecrets } from "@/server/lib/http";
@@ -18,14 +19,6 @@ export const maxDuration = 30;
  * (OAuth + developer token + conta gerente + propriedade), e cada elo falha
  * com uma mensagem diferente.
  */
-
-interface Etapa {
-  etapa: string;
-  descricao: string;
-  status: number | null;
-  ok: boolean;
-  resultado: string;
-}
 
 function mascarar(valor: string): string {
   if (valor.length <= 10) return valor;
@@ -346,6 +339,11 @@ export async function GET(request: Request) {
       conclusao: primeiraFalha
         ? `Quebra na etapa "${primeiraFalha.etapa}": ${primeiraFalha.descricao}`
         : "Cadeia completa funcionando para os canais configurados.",
+      // A pergunta que mais se faz nesta página, respondida em uma linha em vez
+      // de escondida dentro do texto cru de uma etapa. Enquanto o Google não
+      // aprova o acesso básico, o Google Ads fica no snapshot exportado — e é
+      // esta a única coisa que decide se a tela vira tempo real.
+      tokenDeDesenvolvedor: veredictoDoToken(etapas),
       escopos: {
         concedidos: escopos || null,
         // Escopo ausente é a causa mais comum de 403 que parece problema de conta.
