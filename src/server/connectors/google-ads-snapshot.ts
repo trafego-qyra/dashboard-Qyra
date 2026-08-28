@@ -171,6 +171,32 @@ export function buildGoogleAdsSnapshotReport(
         ],
         rows: [...S.locais],
       },
+      // As porcentagens saem como TEXTO, na notação da própria plataforma. O
+      // Google publica faixas em vez de valores quando o volume é baixo — o
+      // "< 10%" que aparece na linha "Você" — e converter isso em número diria
+      // "nenhuma impressão" onde o dado real é "menos de dez por cento".
+      ...(S.leilao.length > 0
+        ? [
+            {
+              title: "Quem disputa as mesmas buscas",
+              description:
+                'Anunciantes que apareceram nos mesmos leilões. A linha "Você" é a conta da QYRA — comparar as duas colunas de parcela mostra quanto do espaço disponível cada um leva.',
+              columns: [
+                { key: "dominio", label: "Anunciante", align: "left" as const },
+                {
+                  key: "parcelaImpressoes",
+                  label: "Parcela de impressões",
+                  align: "right" as const,
+                },
+                { key: "sobreposicao", label: "Sobreposição", align: "right" as const },
+                { key: "posicaoSuperior", label: "Ficou acima", align: "right" as const },
+                { key: "topoDaPagina", label: "Topo da página", align: "right" as const },
+                { key: "parcelaVitorias", label: "Parcela de vitórias", align: "right" as const },
+              ],
+              rows: [...S.leilao],
+            },
+          ]
+        : []),
     ],
 
     // Sem aviso: o cabeçalho da tela já estampa "Período fixo · <intervalo>", e
