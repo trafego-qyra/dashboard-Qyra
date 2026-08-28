@@ -73,6 +73,23 @@ describe("veredictoDoToken", () => {
     expect(veredicto.explicacao).toMatch(/não é o nível de acesso/i);
   });
 
+  it("consulta aceita numa etapa não apaga o acesso de teste declarado em outra", () => {
+    const veredicto = veredictoDoToken([
+      // `listAccessibleCustomers` responde 200 com token de teste. Foi
+      // exatamente essa etapa que, lida sozinha, fez concluir que o token
+      // estava aprovado quando não estava.
+      etapa({ etapa: "ads-acesso", resultado: "1 conta(s) acessível(is): 7062904143." }),
+      etapa({ etapa: "ads-consulta", ok: false, resultado: "USER_PERMISSION_DENIED" }),
+      etapa({
+        etapa: "ads-consulta-sem-gerente",
+        ok: false,
+        resultado: "DEVELOPER_TOKEN_NOT_APPROVED",
+      }),
+    ]);
+
+    expect(veredicto.situacao).toBe("acesso de teste");
+  });
+
   it("sem nenhuma tentativa ao Ads, diz que falta configuração", () => {
     const veredicto = veredictoDoToken([etapa({ etapa: "oauth" }), etapa({ etapa: "ga4" })]);
 
