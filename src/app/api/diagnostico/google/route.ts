@@ -411,6 +411,17 @@ export async function GET(request: Request) {
         propriedadeGa4: env.GA4_PROPERTY_ID ? mascarar(env.GA4_PROPERTY_ID) : null,
         contaAds: env.GOOGLE_ADS_CUSTOMER_ID ? mascarar(env.GOOGLE_ADS_CUSTOMER_ID) : null,
         usaContaGerente: Boolean(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID),
+        // Pontas do token de desenvolvedor, para conferir contra a Central de
+        // API sem o valor sair daqui.
+        //
+        // Existe porque há um caso que nenhuma outra linha desta resposta
+        // distingue: o acesso básico aprovado num token e o painel usando
+        // outro — gerado noutra conta gerente, ou regerado depois. Os dois
+        // cenários produzem exatamente o mesmo `DEVELOPER_TOKEN_NOT_APPROVED`,
+        // e sem comparar as pontas a investigação anda em círculo.
+        tokenDesenvolvedor: env.GOOGLE_ADS_DEVELOPER_TOKEN
+          ? mascarar(env.GOOGLE_ADS_DEVELOPER_TOKEN)
+          : null,
         credenciais: getCredentials(),
       },
       etapas,
