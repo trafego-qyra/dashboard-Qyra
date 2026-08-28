@@ -30,11 +30,11 @@ export interface AnuncioDaMeta {
 }
 
 /** Os quatro que o painel usa. `utm_term` é opcional e não entra na conta. */
-export const UTMS_ESPERADAS = ["utm_source", "utm_medium", "utm_campaign", "utm_content"] as const;
+const UTMS_ESPERADAS = ["utm_source", "utm_medium", "utm_campaign", "utm_content"] as const;
 
-export type Utm = (typeof UTMS_ESPERADAS)[number];
+type Utm = (typeof UTMS_ESPERADAS)[number];
 
-export interface LinhaDaAuditoria {
+interface LinhaDaAuditoria {
   anuncio: string;
   campanha: string;
   conjunto: string;
