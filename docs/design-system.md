@@ -108,6 +108,20 @@ tela de entrada —, então a superfície é fixa em `#2f2535` e a rampa é vali
 uma vez só em vez de duas. Sobre fundo escuro quem tem mais volume precisa de
 mais luz: a ordem vai do passo mais claro para o mais fechado.
 
+**O número mora dentro da faixa.** Com nome e contagem em caixas nas laterais, a
+faixa fica vazia e o meio da peça vira enfeite — foi o que três versões
+anteriores erraram. A faixa é o dado, não a moldura dele. Por isso o texto corre
+escuro sobre faixa clara: é o par que dá contraste alto em todos os passos da
+rampa, enquanto branco falharia justo nos dois primeiros.
+
+**A largura é comprimida, e a peça diz isso.** Um funil real cai forte no começo
+— de 358 para 146 são 59% a menos —, e em escala linear a primeira faixa vira
+prancha e as seguintes viram tocos. A escala em expoente 0,6 preserva a ordem e
+a noção de perda por etapa, devolve as faixas de baixo ao tamanho em que ainda se
+lê o que está escrito nelas, e a ressalva embaixo da figura declara a compressão.
+A precisão fica no número impresso. **Comprimir não pode inverter**: maior é
+sempre mais largo, e há teste travando isso.
+
 **Cone contínuo, com boca e bica arredondadas.** As faixas se encostam — 2px de
 superfície entre elas, o mesmo respiro de qualquer marca colada do painel — e
 formam uma peça só, em vez de blocos empilhados. Recorte poligonal não aceita
