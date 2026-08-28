@@ -120,13 +120,49 @@ describe("Clarity", () => {
     expect(espiao).not.toHaveBeenCalled();
   });
 
-  it("cota estourada não vira 'não configurado'", async () => {
+  it("cota estourada devolve a última leitura boa, marcada como defasada", async () => {
+    for (const [k, v] of Object.entries(CREDENCIAIS)) vi.stubEnv(k, v);
+
+    let quebrar = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (quebrar) return new Response("Exceeded daily limit", { status: 429 });
+        const corpo = String(input).includes("dimension1=URL")
+          ? respostaPorUrl()
+          : respostaDoClarity();
+        return new Response(JSON.stringify(corpo), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const { fetchClarityResumo } = await import("@/server/connectors/clarity");
+    const bom = await fetchClarityResumo();
+    quebrar = true;
+    const depois = await fetchClarityResumo();
+
+    // Dado de ontem, rotulado como de ontem, vale mais que tela de erro: quem
+    // abre o painel quer ver o comportamento do site, e cota estourada é
+    // problema do painel, não da pergunta.
+    expect(depois.estado).toBe("ok");
+    if (depois.estado === "ok" && bom.estado === "ok") {
+      expect(depois.defasado).toBe(true);
+      expect(depois.resumo).toEqual(bom.resumo);
+      expect(depois.atualizadoEm).toBe(bom.atualizadoEm);
+    }
+  });
+
+  it("cota estourada sem leitura anterior não vira 'não configurado'", async () => {
     for (const [k, v] of Object.entries(CREDENCIAIS)) vi.stubEnv(k, v);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("quota exceeded", { status: 429, statusText: "Too Many" })),
     );
 
+    // `resetModules` no `beforeEach` zera o último bom guardado no módulo, que
+    // é o que faz este caso ser mesmo "primeira leitura, e falhou".
     const atual = await estado();
 
     // Com o token cadastrado, "não configurado" manda quem lê procurar o

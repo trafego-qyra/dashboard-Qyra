@@ -203,7 +203,20 @@ export interface ContentCard {
 export type ClarityEstado =
   | { estado: "sem-credencial" }
   | { estado: "falhou"; motivo: string }
-  | { estado: "ok"; resumo: ClarityResumo };
+  | {
+      estado: "ok";
+      resumo: ClarityResumo;
+      /** Quando estes números foram lidos da API. */
+      atualizadoEm: string;
+      /**
+       * A leitura falhou e estes são os últimos números bons que havia.
+       *
+       * Dado de ontem rotulado como tal vale mais que uma tela de erro: quem
+       * abre o painel quer ver o comportamento do site, e a cota estourada é
+       * problema do painel, não da pergunta.
+       */
+      defasado?: true;
+    };
 
 export interface ClarityResumo {
   /** Fração média da página que as pessoas percorreram. Entre 0 e 1. */

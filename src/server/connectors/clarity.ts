@@ -1,9 +1,10 @@
 import "server-only";
 
-import type { ClarityEstado } from "@/lib/types";
+import type { ClarityEstado, ClarityResumo } from "@/lib/types";
 import { mockClarity } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
+import { lembrado, lembrar } from "@/server/lib/memoria";
 
 /**
  * Microsoft Clarity via API de exportação (`project-live-insights`).
@@ -18,9 +19,10 @@ import { descreverFalha, httpJson } from "@/server/lib/http";
  *
  * 1. **A janela é curta** — no máximo os últimos 3 dias. Não existe série
  *    histórica, então esta tela é uma fotografia recente, não uma evolução.
- * 2. **A cota é baixa** — poucas chamadas por dia, não por hora. Uma consulta
- *    por carregamento de página estouraria a cota antes do almoço, então o
- *    resultado é cacheado com folga.
+ * 2. **A cota é de dez requisições por projeto por dia** — por dia, não por
+ *    hora. O conector gasta duas por atualização, então o cache precisa valer
+ *    horas, não minutos: em trinta minutos a cota acabava antes do almoço e a
+ *    tela passava o resto do dia em 429.
  *
  * O mapa de calor em si não sai por API: o Clarity não expõe a imagem. O que
  * dá para trazer é o número por trás dele — profundidade de rolagem por
@@ -29,6 +31,29 @@ import { descreverFalha, httpJson } from "@/server/lib/http";
 
 /** Máximo que a API aceita. Pedir mais devolve erro, não recorte. */
 const MAX_DIAS = 3;
+
+/** Validade do cache. A conta está em `TTL_CLARITY_SEGUNDOS`, em reports.ts. */
+const SEIS_HORAS = 6 * 60 * 60;
+
+/**
+ * Onde a última leitura boa fica guardada.
+ *
+ * Rede de segurança para quando a cota acabar — um deploy a mais, uma instância
+ * nova na hora errada. Dado de ontem, rotulado como de ontem, vale mais que uma
+ * tela de erro: quem abre o painel quer ver o comportamento do site, e cota
+ * estourada é problema do painel, não da pergunta.
+ *
+ * Sete dias de validade. Mais que isso a "última leitura" deixa de descrever o
+ * site e vira arqueologia; menos que isso não cobre um fim de semana prolongado
+ * com a cota estourada na sexta.
+ */
+const CHAVE_ULTIMO_BOM = "clarity:ultimo-bom";
+const SETE_DIAS = 7 * 24 * 60 * 60;
+
+interface LeituraGuardada {
+  resumo: ClarityResumo;
+  em: string;
+}
 
 /** Uma linha da resposta: a dimensão pedida mais os valores da métrica. */
 interface ClarityLinha {
@@ -64,11 +89,15 @@ async function buscarInsights(dias: number, dimensao?: string): Promise<ClarityM
     // A cota é diária: repetir uma chamada que falhou queima o que resta.
     retries: 0,
     timeoutMs: 20_000,
-    // Cache compartilhado entre instâncias. O cache em memória do painel é por
-    // instância, e a Vercel sobe várias: cada partida a frio recomeçava com o
-    // cache vazio e gastava mais duas chamadas da cota — que é de poucas por
-    // dia. Meia hora de validade, a mesma do cache em memória.
-    revalidateSeconds: 1_800,
+    // Cache compartilhado entre instâncias, e é ele que segura a cota.
+    //
+    // O cache em memória do painel é por instância, e a Vercel sobe várias:
+    // cada partida a frio recomeça com o cache vazio. Só o Data Cache do Next
+    // vale para todas.
+    //
+    // Seis horas, pela mesma aritmética de `TTL_CLARITY_SEGUNDOS`: dez chamadas
+    // por dia, duas por atualização, quatro atualizações e duas de folga.
+    revalidateSeconds: SEIS_HORAS,
   });
 }
 
@@ -95,7 +124,9 @@ export async function fetchClarityResumo(): Promise<ClarityEstado> {
   const env = getEnv();
   // Em demonstração a seção aparece com números fictícios, como o resto da
   // tela — sumir dela deixaria a demonstração incompleta.
-  if (isForceMock()) return { estado: "ok", resumo: mockClarity() };
+  if (isForceMock()) {
+    return { estado: "ok", resumo: mockClarity(), atualizadoEm: new Date().toISOString() };
+  }
   if (!getCredentials().clarity) return { estado: "sem-credencial" };
 
   try {
@@ -144,11 +175,27 @@ export async function fetchClarityResumo(): Promise<ClarityEstado> {
       projeto: env.CLARITY_PROJECT_ID ?? null,
     };
 
-    return { estado: "ok", resumo };
+    const em = new Date().toISOString();
+    // Sem `await`: guardar é rede de segurança para a próxima requisição, e
+    // segurar a resposta desta por causa disso troca uma tela lenta por uma
+    // garantia que já está dada.
+    void lembrar(CHAVE_ULTIMO_BOM, { resumo, em } satisfies LeituraGuardada, SETE_DIAS);
+    return { estado: "ok", resumo, atualizadoEm: em };
   } catch (erro) {
-    // Cota estourada, token inválido ou instabilidade. A tela não cai por causa
-    // disso — mas passa a dizer o que aconteceu, em vez de mandar configurar o
-    // que já está configurado.
+    // Cota estourada, token inválido ou instabilidade.
+    //
+    // Havendo leitura anterior, ela é servida com o carimbo de quando foi feita
+    // — a tela mostra o dado e diz que está velho. Sem ela, a tela diz o que
+    // aconteceu, em vez de mandar configurar o que já está configurado.
+    const guardada = await lembrado<LeituraGuardada>(CHAVE_ULTIMO_BOM);
+    if (guardada) {
+      return {
+        estado: "ok",
+        resumo: guardada.resumo,
+        atualizadoEm: guardada.em,
+        defasado: true,
+      };
+    }
     return { estado: "falhou", motivo: descreverFalha(erro) };
   }
 }
