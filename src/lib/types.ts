@@ -47,6 +47,15 @@ export interface Kpi {
   /** `true` quando cair é bom (CPA, CPC, CPL). Inverte a leitura do delta. */
   lowerIsBetter?: boolean;
   hint?: string;
+  /**
+   * Não compare este número com o período anterior.
+   *
+   * Para métrica derivada — ticket médio, ciclo, taxa —, zero não quer dizer
+   * "caiu para zero", quer dizer "não houve o que medir". Comparar produz
+   * "-100%" com seta, e num ciclo de fechamento a seta sai **verde**, como se
+   * fechar nada fosse melhora.
+   */
+  semComparacao?: boolean;
 }
 
 /** Um ponto diário da série. `date` é ISO; o resto são métricas numéricas. */

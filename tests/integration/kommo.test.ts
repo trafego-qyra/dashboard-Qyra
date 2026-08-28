@@ -330,10 +330,21 @@ describe("vendas pelo Kommo", () => {
     const chamadas = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/leads/unsorted")) {
-        return new Response(JSON.stringify({ _embedded: { unsorted: [{}, {}, {}] } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            _embedded: {
+              unsorted: [
+                { created_at: emSegundos("2026-02-05T10:00:00Z") },
+                { created_at: emSegundos("2026-02-06T10:00:00Z") },
+                { created_at: emSegundos("2026-02-07T10:00:00Z") },
+              ],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       }
       if (url.includes("/leads/pipelines")) {
         return new Response(JSON.stringify({ _embedded: { pipelines: [] } }), {
@@ -359,6 +370,80 @@ describe("vendas pelo Kommo", () => {
     // Sem essa linha o funil perde o topo — é por ali que tudo entra.
     expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
       3,
+    );
+  });
+
+  it("sem venda no período, métrica derivada não vira -100%", async () => {
+    const { report } = await relatorio([
+      { id: 1, status_id: 20, created_at: emSegundos("2026-02-10T10:00:00Z") },
+    ]);
+
+    const marca = (chave: string) => report.kpis.find((k) => k.key === chave)?.semComparacao;
+
+    // Ticket e ciclo em zero não querem dizer "caiu para zero", e sim "não
+    // houve o que medir". No ciclo, a seta de queda sairia verde — como se
+    // fechar nada fosse melhora.
+    expect(marca("ticket")).toBe(true);
+    expect(marca("ciclo")).toBe(true);
+    // Vendas e receita continuam comparáveis: zero ali é um fato, não ausência.
+    expect(marca("vendas")).toBeFalsy();
+    expect(marca("receita")).toBeFalsy();
+  });
+
+  it("com venda no período, a comparação volta", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        price: 900,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
+      },
+    ]);
+
+    expect(report.kpis.find((k) => k.key === "ticket")?.semComparacao).toBeFalsy();
+    expect(report.kpis.find((k) => k.key === "ciclo")?.semComparacao).toBeFalsy();
+  });
+
+  it("os leads de entrada respeitam o período da tela", async () => {
+    const chamadas = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/leads/unsorted")) {
+        return new Response(
+          JSON.stringify({
+            _embedded: {
+              unsorted: [
+                { created_at: emSegundos("2026-02-10T10:00:00Z") },
+                { created_at: emSegundos("2026-02-11T10:00:00Z") },
+                // Fora da janela: a fila é acumulada, a tabela é do período.
+                { created_at: emSegundos("2025-11-01T10:00:00Z") },
+              ],
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/leads/pipelines")) {
+        return new Response(JSON.stringify({ _embedded: { pipelines: [] } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ _embedded: { leads: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", chamadas);
+
+    const { fetchVendasReport } = await import("@/server/connectors/kommo");
+    const report = await fetchVendasReport(RANGE);
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // A tabela promete "os negócios do período"; a fila inteira ali dentro
+    // fazia o total não fechar com nada.
+    expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
+      2,
     );
   });
 

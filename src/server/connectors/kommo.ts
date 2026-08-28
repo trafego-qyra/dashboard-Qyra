@@ -167,13 +167,22 @@ async function buscarLeads(range: DateRange, campoDeData: "created_at" | "closed
  * negócio comum, e adivinhar a forma para extrair valor renderia um total
  * inventado.
  */
-async function contarLeadsDeEntrada(): Promise<number> {
+async function contarLeadsDeEntrada(range: DateRange): Promise<number> {
   try {
-    const resposta = await httpJson<{ _embedded?: { unsorted?: unknown[] } }>(
+    const resposta = await httpJson<{ _embedded?: { unsorted?: Array<{ created_at?: number }> } }>(
       `${baseDaApi()}/leads/unsorted?limit=${POR_PAGINA}`,
       { headers: autorizacao() },
     );
-    return resposta._embedded?.unsorted?.length ?? 0;
+
+    // Recortado pelo período, como todas as outras linhas da tabela. Sem isso
+    // a fila inteira entrava numa tabela que promete "os negócios do período",
+    // e o total não fechava com nada.
+    const de = inicioDoDia(range.from);
+    const ate = fimDoDia(range.to);
+    return (resposta._embedded?.unsorted ?? []).filter(
+      (item) =>
+        typeof item.created_at === "number" && item.created_at >= de && item.created_at <= ate,
+    ).length;
   } catch {
     // A área pode estar vazia (204) ou o escopo não cobrir: some da tabela.
     return 0;
@@ -319,7 +328,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       buscarLeads(range, "created_at"),
       buscarLeads(range, "closed_at"),
       buscarEtapas(),
-      contarLeadsDeEntrada(),
+      contarLeadsDeEntrada(range),
     ]);
 
     const leads = criados;
@@ -412,12 +421,14 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           label: "Ticket médio",
           value: ganhos.length === 0 ? 0 : receita / ganhos.length,
           format: "currency",
+          semComparacao: ganhos.length === 0,
         },
         {
           key: "conversao",
           label: "Lead vira venda",
           value: criados.length === 0 ? 0 : ganhosDaSafra / criados.length,
           format: "percent",
+          semComparacao: criados.length === 0,
           hint: "Dos negócios criados no período, quantos já viraram venda. Conta a mesma safra dos dois lados, então não se compara com as vendas fechadas acima.",
         },
         {
@@ -426,6 +437,9 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           value: cicloMedio,
           format: "decimal",
           lowerIsBetter: true,
+          // Sem fechamento no período não há ciclo. Comparar pintaria de verde
+          // um "-100%" que significa "nada fechou".
+          semComparacao: ciclos.length === 0,
           hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
         },
         { key: "emAberto", label: "Em aberto", value: emAberto.length, format: "integer" },
