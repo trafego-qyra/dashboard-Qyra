@@ -1,3 +1,4 @@
+import { FunnelChart } from "@/components/charts/funnel-chart";
 import { TrendSmallMultiples } from "@/components/charts/lazy";
 import { Notices } from "@/components/layout/notices";
 import { PageHeader } from "@/components/layout/page-header";
@@ -51,6 +52,25 @@ export function ChannelView({
           <StatTile key={kpi.key} kpi={kpi} />
         ))}
       </section>
+
+      {/* Antes do gráfico de evolução, e não depois das tabelas: numa tela de
+          vendas a primeira pergunta é onde o processo aperta, não como o mês
+          andou. */}
+      {report.funnel && report.funnel.stages.length > 0 ? (
+        <Card className="qy-rise">
+          <CardHeader>
+            <div>
+              <CardTitle>{report.funnel.title}</CardTitle>
+              {report.funnel.description ? (
+                <CardDescription>{report.funnel.description}</CardDescription>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <FunnelChart block={report.funnel} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="qy-rise">
         <CardHeader>

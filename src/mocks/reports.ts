@@ -810,6 +810,7 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         label: "Perdas recuperáveis",
         value: Math.round((leads - vendas) * 0.34 * 0.58),
         format: "integer",
+        semComparacao: true,
         hint: "Negócios perdidos por preço, tempo ou área de cobertura — os motivos que voltam quando o orçamento, a agenda ou a cobertura mudam. Estão detalhados na tabela de motivos.",
       },
     ],
@@ -818,6 +819,41 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
       { key: "receita", label: "Receita", format: "currency", slot: 5 },
       { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
     ],
+    funnel: (() => {
+      const perdidos = Math.round((leads - vendas) * 0.34);
+      const abertos = leads - vendas - perdidos;
+      const primeiro = Math.round(abertos * 0.52);
+      const avaliacao = Math.round(abertos * 0.31);
+      // Acumulado, como no conector: cada etapa soma quem está nela e quem já
+      // passou. A boca do funil é todo mundo que entrou no período.
+      const negociacao = abertos - primeiro - avaliacao + vendas;
+      return {
+        title: "Do primeiro contato ao pagamento",
+        description:
+          "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
+        caveat:
+          "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+        stages: [
+          { label: "Novo lead", value: leads, amount: Math.round(leads * 1_620 * 100) / 100 },
+          {
+            label: "Qualificação",
+            value: avaliacao + negociacao,
+            amount: Math.round((avaliacao + negociacao) * 1_620 * 100) / 100,
+          },
+          {
+            label: "Negociação",
+            value: negociacao,
+            amount: Math.round(negociacao * 1_620 * 100) / 100,
+          },
+          {
+            label: "Venda ganha",
+            value: vendas,
+            amount: receita,
+            outcome: "ganho" as const,
+          },
+        ],
+      };
+    })(),
     tables: [
       {
         title: "Negócios por etapa",

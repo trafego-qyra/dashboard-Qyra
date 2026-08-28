@@ -2,7 +2,15 @@ import "server-only";
 
 import { avisoOperacao } from "@/lib/avisos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, Notice, SeriesPoint, TableBlock } from "@/lib/types";
+import type {
+  ChannelReport,
+  DateRange,
+  FunnelBlock,
+  FunnelStage,
+  Notice,
+  SeriesPoint,
+  TableBlock,
+} from "@/lib/types";
 import { mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
@@ -444,6 +452,72 @@ function montarPerdas(perdidos: LeadDoKommo[]): TableBlock {
   };
 }
 
+/**
+ * O funil em figura: quantos **chegaram** a cada etapa.
+ *
+ * A tabela ao lado conta ocupação — quantos estão parados em cada etapa agora.
+ * Desenhar aquilo como funil seria errado: um negócio em Negociação já passou
+ * por Qualificação, e a etapa do meio pareceria um gargalo que não existe. Aqui
+ * cada etapa soma quem está nela e quem já foi adiante.
+ *
+ * **O negócio perdido conta só na boca do funil.** O Kommo guarda apenas a
+ * etapa atual, e a etapa atual de um perdido é "perdido" — quem morreu em
+ * Negociação não deixa rastro de onde estava. Creditá-lo à última etapa
+ * conhecida seria inventar; contá-lo só na entrada subestima o meio do funil, e
+ * é o erro que dá para admitir em voz alta. A ressalva vai junto da figura.
+ */
+function montarFunilVisual(
+  leads: LeadDoKommo[],
+  etapas: EtapaDoFunil[],
+  ganhos: number,
+): FunnelBlock | undefined {
+  if (etapas.length === 0) return undefined;
+
+  const posicao = new Map(etapas.map((etapa, i) => [etapa.id, i]));
+
+  // Quantos chegaram a cada etapa, e o valor que veio junto.
+  const chegaram = etapas.map(() => ({ negocios: 0, valor: 0 }));
+  let valorGanho = 0;
+
+  for (const lead of leads) {
+    const valor = lead.price ?? 0;
+    // Ganho passou por tudo. Perdido, e etapa que não está no funil, contam só
+    // na entrada — é o que dá para afirmar sem inventar.
+    const ate =
+      lead.status_id === GANHO ? etapas.length - 1 : (posicao.get(lead.status_id ?? 0) ?? 0);
+    if (lead.status_id === GANHO) valorGanho += valor;
+
+    for (let i = 0; i <= ate; i++) {
+      chegaram[i].negocios += 1;
+      chegaram[i].valor += valor;
+    }
+  }
+
+  const stages: FunnelStage[] = etapas.map((etapa, i) => ({
+    label: etapa.nome,
+    value: chegaram[i].negocios,
+    amount: Math.round(chegaram[i].valor * 100) / 100,
+  }));
+
+  // O desfecho fecha a figura. Sem ele o funil termina numa etapa de passagem,
+  // e a tela de vendas não mostra a venda.
+  stages.push({
+    label: "Venda ganha",
+    value: ganhos,
+    amount: Math.round(valorGanho * 100) / 100,
+    outcome: "ganho",
+  });
+
+  return {
+    title: "Do primeiro contato ao pagamento",
+    description:
+      "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
+    caveat:
+      "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+    stages,
+  };
+}
+
 export async function fetchVendasReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -606,8 +680,11 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           label: "Perdas recuperáveis",
           value: recuperaveis.length,
           format: "integer",
-          // Menos é melhor no total de perdas, mas não aqui: esta é a fatia
-          // das perdas que dá para retomar, e ela crescer não é piora.
+          semComparacao: true,
+          // Sem comparação de propósito: este número não tem lado bom. Subir
+          // pode ser "perdemos mais" ou "perdemos mais gente que volta", e a
+          // seta pintaria de verde ou de vermelho uma das duas sem saber qual.
+          // É uma fila de trabalho do mês, não um placar.
           hint: "Negócios perdidos por preço, tempo ou área de cobertura — os motivos que voltam quando o orçamento, a agenda ou a cobertura mudam. Estão detalhados na tabela de motivos.",
         },
       ],
@@ -616,6 +693,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
+      funnel: montarFunilVisual(criados, etapas, ganhosDaSafra),
       tables: [
         montarFunil(criados, etapas, deEntrada),
         montarPerdas(perdidos),

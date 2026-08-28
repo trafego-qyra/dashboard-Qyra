@@ -127,6 +127,13 @@
   --qy-chart-surface: #ffffff;
   --qy-grid: #ece8f2;
   --qy-axis: #d7d2e1;
+  /* Rampa ordinal do funil: um hue só, escurecendo com o volume. Sobre fundo
+     claro o passo mais escuro fica no topo, que é onde há mais negócio. */
+  --qy-funnel-1: #66417b;
+  --qy-funnel-2: #8248a8;
+  --qy-funnel-3: #9d5cc1;
+  --qy-funnel-4: #b27fd0;
+  --qy-funnel-5: #c9a3de;
 }
 
 /* ---- Tema escuro -------------------------------------------------------
@@ -155,6 +162,14 @@
     --qy-chart-surface: #2f2535;
     --qy-grid: #3d3247;
     --qy-axis: #4d4159;
+    /* Invertida, e não a mesma de cima: sobre fundo escuro quem tem mais
+       volume precisa de mais luz, não de menos. O passo #66417b, que abre o
+       funil no tema claro, quase desaparece contra #2f2535. */
+    --qy-funnel-1: #d9bced;
+    --qy-funnel-2: #c9a3de;
+    --qy-funnel-3: #b27fd0;
+    --qy-funnel-4: #9d5cc1;
+    --qy-funnel-5: #8248a8;
   }
 }
 
@@ -180,6 +195,11 @@
   --qy-chart-surface: #2f2535;
   --qy-grid: #3d3247;
   --qy-axis: #4d4159;
+  --qy-funnel-1: #d9bced;
+  --qy-funnel-2: #c9a3de;
+  --qy-funnel-3: #b27fd0;
+  --qy-funnel-4: #9d5cc1;
+  --qy-funnel-5: #8248a8;
 }
 
 /* ---- Base --------------------------------------------------------------- */

@@ -99,8 +99,17 @@ bolha, small multiples) usam no máximo **3 slots**. Acima disso o gate
 all-pairs reprova. `maxSlotsFor("all-pairs")` devolve esse número, e há teste
 travando a regra.
 
-Rampa ordinal (funil, faixas): lilás em 5 passos, também validada
-(`--ordinal`, monotonia e contraste da ponta clara aprovados).
+Rampa ordinal (funil, faixas): lilás em 5 passos, `--qy-funnel-1..5`.
+
+**Ela não é a mesma nos dois temas.** No claro o passo mais escuro abre o funil,
+onde há mais negócio; no escuro a ordem inverte, porque sobre `#2f2535` quem tem
+mais volume precisa de mais luz, não de menos — `#66417b` quase some contra o
+fundo. É o mesmo princípio dos papéis semânticos: o tema escuro tem passos
+próprios, não é inversão automática.
+
+O funil (`FunnelChart`) usa **largura** como única codificação de grandeza; a cor
+só ordena. O desfecho — "Venda ganha" — sai da rampa e vem com ícone e rótulo,
+porque cor trocada sozinha não avisa que a categoria mudou.
 
 ---
 
