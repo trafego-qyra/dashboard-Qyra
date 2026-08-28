@@ -802,9 +802,16 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         previousValue: 7.1,
         format: "decimal",
         lowerIsBetter: true,
-        hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
+        hint: "Dias entre a criação do negócio e a etapa de venda ganha, que é quando o pagamento entra. Média dos que fecharam no período.",
       },
       { key: "emAberto", label: "Em aberto", value: Math.round(leads * 0.34), format: "integer" },
+      {
+        key: "recuperaveis",
+        label: "Perdas recuperáveis",
+        value: Math.round((leads - vendas) * 0.34 * 0.58),
+        format: "integer",
+        hint: "Negócios perdidos por preço, tempo ou área de cobertura — os motivos que voltam quando o orçamento, a agenda ou a cobertura mudam. Estão detalhados na tabela de motivos.",
+      },
     ],
     series,
     seriesDefs: [
@@ -831,9 +838,9 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
           const primeiro = Math.round(abertos * 0.52);
           const avaliacao = Math.round(abertos * 0.31);
           return [
-            ["Primeiro contato", primeiro],
-            ["Avaliação agendada", avaliacao],
-            ["Proposta enviada", abertos - primeiro - avaliacao],
+            ["Novo lead", primeiro],
+            ["Qualificação", avaliacao],
+            ["Negociação", abertos - primeiro - avaliacao],
             ["Venda ganha", vendas],
             ["Perdido", perdidos],
           ].map(([etapa, negocios]) => ({
@@ -841,6 +848,39 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
             negocios: negocios as number,
             valor: Math.round((negocios as number) * 1_620 * 100) / 100,
           }));
+        })(),
+      },
+      {
+        title: "Motivos de perda",
+        description:
+          "Por que os negócios do período não fecharam. Preço, tempo e área de cobertura entram como recuperáveis — são as perdas que voltam quando o orçamento, a agenda ou a cobertura mudam.",
+        columns: [
+          { key: "motivo", label: "Motivo", align: "left" },
+          { key: "situacao", label: "Situação", align: "left" },
+          { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+          { key: "valor", label: "Valor", format: "currency", align: "right" },
+        ],
+        // As fatias somam 1 sobre os perdidos do funil: a tabela de motivos e a
+        // linha "Perdido" precisam fechar, ou a demonstração ensina a
+        // desconfiar do painel.
+        rows: (() => {
+          const perdidos = Math.round((leads - vendas) * 0.34);
+          return [
+            ["Preço fora do orçamento", "Recuperável", 0.26],
+            ["Vai pensar / precisa de tempo", "Recuperável", 0.19],
+            ["Fora da Área de Cobertura", "Recuperável", 0.13],
+            ["Não respondeu após múltiplos contatos", "Arquivar", 0.22],
+            ["Preferiu concorrente ou outra solução", "Arquivar", 0.12],
+            ["Sem motivo registrado", "Arquivar", 0.08],
+          ].map(([motivo, situacao, fatia]) => {
+            const n = Math.round(perdidos * (fatia as number));
+            return {
+              motivo: motivo as string,
+              situacao: situacao as string,
+              negocios: n,
+              valor: Math.round(n * 1_620 * 100) / 100,
+            };
+          });
         })(),
       },
       {
