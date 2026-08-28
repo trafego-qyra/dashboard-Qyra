@@ -272,7 +272,7 @@ export async function GET(request: Request) {
       etapas.push(
         await requisitar(
           "ads-acesso",
-          "O developer token é aceito e quais contas ele alcança?",
+          "Quais contas este login alcança? (não prova aprovação do token)",
           {
             url: `https://googleads.googleapis.com/${versaoAds}/customers:listAccessibleCustomers`,
             init: { headers: cabecalhos },
@@ -283,14 +283,20 @@ export async function GET(request: Request) {
             const alvo = env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, "");
             const encontrada = alvo ? contas.includes(alvo) : false;
 
-            // Esta chamada ignora `login-customer-id`: ela lista o que o
-            // usuário do OAuth alcança **direto**. Por isso a ausência da conta
-            // gerente aqui é informação, e não detalhe — é a explicação do 403
-            // que aparece na consulta seguinte.
+            // Duas armadilhas nesta chamada, e as duas já custaram uma
+            // conclusão errada.
+            //
+            // Ela **responde 200 com token de acesso de teste**. Passar aqui não
+            // diz nada sobre aprovação — quem prova isso é a consulta a uma
+            // conta de produção, na etapa seguinte.
+            //
+            // E ela **ignora `login-customer-id`**: lista o que o usuário do
+            // OAuth alcança direto. Por isso a ausência da conta gerente aqui é
+            // informação, e não detalhe.
             const gerente = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.replace(/-/g, "");
             const gerenteAlcancavel = gerente ? contas.includes(gerente) : null;
 
-            return `${contas.length} conta(s) acessível(is): ${contas.map(mascarar).join(", ")}.${
+            return `${contas.length} conta(s) acessível(is): ${contas.map(mascarar).join(", ")}. Esta chamada responde mesmo com token de acesso de teste, então passar aqui não prova aprovação.${
               alvo
                 ? encontrada
                   ? " A conta configurada está entre elas."
