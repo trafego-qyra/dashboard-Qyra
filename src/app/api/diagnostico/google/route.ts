@@ -282,12 +282,26 @@ export async function GET(request: Request) {
             const contas = (dados.resourceNames ?? []).map((r) => r.replace("customers/", ""));
             const alvo = env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, "");
             const encontrada = alvo ? contas.includes(alvo) : false;
-            return `${contas.length} conta(s) acessível(is).${
+
+            // Esta chamada ignora `login-customer-id`: ela lista o que o
+            // usuário do OAuth alcança **direto**. Por isso a ausência da conta
+            // gerente aqui é informação, e não detalhe — é a explicação do 403
+            // que aparece na consulta seguinte.
+            const gerente = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.replace(/-/g, "");
+            const gerenteAlcancavel = gerente ? contas.includes(gerente) : null;
+
+            return `${contas.length} conta(s) acessível(is): ${contas.map(mascarar).join(", ")}.${
               alvo
                 ? encontrada
                   ? " A conta configurada está entre elas."
-                  : ` A conta configurada (${mascarar(alvo)}) NÃO está entre elas — verifique GOOGLE_ADS_LOGIN_CUSTOMER_ID.`
+                  : ` A conta configurada (${mascarar(alvo)}) NÃO está entre elas.`
                 : " GOOGLE_ADS_CUSTOMER_ID não configurado."
+            }${
+              gerenteAlcancavel === false
+                ? ` A conta gerente configurada (${mascarar(gerente as string)}) NÃO está entre elas — este login não a alcança, e entrar por ela é o que devolve 403 na consulta.`
+                : gerenteAlcancavel === true
+                  ? " A conta gerente configurada também está entre elas."
+                  : ""
             }`;
           },
         ),
@@ -296,6 +310,17 @@ export async function GET(request: Request) {
       // 4. Google Ads — a consulta real funciona?
       if (env.GOOGLE_ADS_CUSTOMER_ID) {
         const range = rangeFromPreset("7d");
+        const consulta = `SELECT segments.date, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${range.from}' AND '${range.to}'`;
+        const enderecoDaConsulta = `https://googleads.googleapis.com/${versaoAds}/customers/${env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, "")}/googleAds:searchStream`;
+
+        const resumirConsulta = (d: unknown) => {
+          const blocos = d as Array<{ results?: unknown[] }>;
+          const linhas = blocos.flatMap((b) => b.results ?? []);
+          return linhas.length === 0
+            ? "Consulta aceita, mas sem linhas — nenhuma entrega no período."
+            : `${linhas.length} dia(s) com dado.`;
+        };
+
         etapas.push(
           await requisitar(
             "ads-consulta",
@@ -305,20 +330,45 @@ export async function GET(request: Request) {
               init: {
                 method: "POST",
                 headers: { ...cabecalhos, "content-type": "application/json" },
-                body: JSON.stringify({
-                  query: `SELECT segments.date, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${range.from}' AND '${range.to}'`,
-                }),
+                body: JSON.stringify({ query: consulta }),
               },
             },
-            (d) => {
-              const blocos = d as Array<{ results?: unknown[] }>;
-              const linhas = blocos.flatMap((b) => b.results ?? []);
-              return linhas.length === 0
-                ? "Consulta aceita, mas sem linhas — nenhuma entrega no período."
-                : `${linhas.length} dia(s) com dado.`;
-            },
+            resumirConsulta,
           ),
         );
+
+        // 4b. A mesma consulta, sem entrar pela conta gerente.
+        //
+        // Só roda quando a de cima falhou e existe gerente configurado, e é o
+        // que transforma um palpite em resposta: se esta passa, o problema é o
+        // cabeçalho `login-customer-id`, não a credencial nem a conta. Sem
+        // isso, descobrir a causa exige apagar uma variável em produção e
+        // torcer — que é exatamente o que ninguém deveria precisar fazer para
+        // ler um diagnóstico.
+        const consultaFalhou = etapas.at(-1)?.ok === false;
+        if (consultaFalhou && env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) {
+          const semGerente: Record<string, string> = {
+            ...cabecalhos,
+            "content-type": "application/json",
+          };
+          delete semGerente["login-customer-id"];
+
+          etapas.push(
+            await requisitar(
+              "ads-consulta-sem-gerente",
+              "E sem entrar pela conta gerente, a mesma consulta responde?",
+              {
+                url: enderecoDaConsulta,
+                init: {
+                  method: "POST",
+                  headers: semGerente,
+                  body: JSON.stringify({ query: consulta }),
+                },
+              },
+              resumirConsulta,
+            ),
+          );
+        }
       }
     } else {
       etapas.push({
