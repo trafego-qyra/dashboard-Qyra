@@ -189,29 +189,45 @@ async function contarLeadsDeEntrada(range: DateRange): Promise<number> {
   }
 }
 
-/** Nome de cada etapa, por id. Sem isso o funil sairia como números. */
-async function buscarEtapas(): Promise<Map<number, string>> {
-  const nomes = new Map<number, string>();
+interface EtapaDoFunil {
+  id: number;
+  nome: string;
+}
+
+/**
+ * As etapas do funil, **na ordem do funil e todas elas**.
+ *
+ * Não é só para trocar número por nome. É o esqueleto da tabela: sem ele, só
+ * apareciam as etapas que tinham negócio no período, e etapa vazia sumia da
+ * tela. Só que "ninguém chega em Negociação" é exatamente o que um funil
+ * precisa mostrar — some a etapa, some o gargalo.
+ *
+ * A ordem vem do `sort` do Kommo, a mesma das colunas lá. Ordenar por volume
+ * transformaria o funil numa lista de campeões, que não é o que ele é.
+ */
+async function buscarEtapas(): Promise<EtapaDoFunil[]> {
   try {
     const resposta = await httpJson<RespostaDeFunis>(`${baseDaApi()}/leads/pipelines`, {
       headers: autorizacao(),
     });
-    for (const funil of resposta._embedded?.pipelines ?? []) {
-      for (const etapa of funil._embedded?.statuses ?? []) {
-        if (etapa.name) nomes.set(etapa.id, etapa.name);
-      }
-    }
+
+    const escolhido = getEnv().KOMMO_PIPELINE_ID;
+    const funis = (resposta._embedded?.pipelines ?? []).filter(
+      (funil) => !escolhido || String(funil.id) === escolhido,
+    );
+
+    return funis
+      .flatMap((funil) => funil._embedded?.statuses ?? [])
+      .filter((etapa) => Boolean(etapa.name))
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+      .map((etapa) => ({ id: etapa.id, nome: etapa.name as string }));
   } catch {
-    // Enfeite: sem os nomes o funil ainda soma, só fica menos legível.
+    // Sem o esqueleto o funil ainda soma o que veio, só perde as etapas vazias.
+    return [];
   }
-  return nomes;
 }
 
-function montarFunil(
-  leads: LeadDoKommo[],
-  nomes: Map<number, string>,
-  deEntrada: number,
-): TableBlock {
+function montarFunil(leads: LeadDoKommo[], etapas: EtapaDoFunil[], deEntrada: number): TableBlock {
   const porEtapa = new Map<number, { negocios: number; valor: number }>();
   for (const lead of leads) {
     const id = lead.status_id ?? 0;
@@ -221,30 +237,40 @@ function montarFunil(
     porEtapa.set(id, atual);
   }
 
+  const linha = (etapa: string, id: number) => {
+    const dados = porEtapa.get(id) ?? { negocios: 0, valor: 0 };
+    return { etapa, negocios: dados.negocios, valor: Math.round(dados.valor * 100) / 100 };
+  };
+
+  // A fila de entrada abre a tabela: é a porta, não uma etapa do funil.
+  const rows =
+    deEntrada > 0
+      ? [{ etapa: "Leads de entrada (a organizar)", negocios: deEntrada, valor: 0 }]
+      : [];
+
+  // Todas as etapas, na ordem do funil, inclusive as zeradas.
+  for (const etapa of etapas) rows.push(linha(etapa.nome, etapa.id));
+
+  // O que apareceu nos negócios mas não está no esqueleto — outro funil, ou
+  // etapa apagada depois de o negócio passar por ela. Vai ao fim em vez de
+  // sumir da conta.
+  const conhecidas = new Set(etapas.map((e) => e.id));
+  for (const [id] of porEtapa) {
+    if (conhecidas.has(id)) continue;
+    const nome = id === GANHO ? "Venda ganha" : id === PERDIDO ? "Perdido" : `Etapa ${id}`;
+    rows.push(linha(nome, id));
+  }
+
   return {
     title: "Negócios por etapa",
-    description: "Onde os negócios do período estão parados, e quanto há em cada etapa.",
+    description:
+      "Onde os negócios do período estão parados. Na ordem do funil, com as etapas vazias à vista — etapa sem ninguém é o gargalo.",
     columns: [
       { key: "etapa", label: "Etapa", align: "left" },
       { key: "negocios", label: "Negócios", format: "integer", align: "right" },
       { key: "valor", label: "Valor", format: "currency", align: "right" },
     ],
-    rows: [...porEtapa.entries()]
-      .map(([id, dados]) => ({
-        etapa:
-          nomes.get(id) ??
-          (id === GANHO ? "Venda ganha" : id === PERDIDO ? "Perdido" : `Etapa ${id}`),
-        negocios: dados.negocios,
-        valor: Math.round(dados.valor * 100) / 100,
-      }))
-      .concat(
-        // No topo da lista e fora da ordenação: é a porta de entrada, não uma
-        // etapa concorrendo por volume.
-        deEntrada > 0
-          ? [{ etapa: "Leads de entrada (a organizar)", negocios: deEntrada, valor: 0 }]
-          : [],
-      )
-      .sort((a, b) => b.negocios - a.negocios),
+    rows,
   };
 }
 

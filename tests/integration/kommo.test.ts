@@ -35,7 +35,10 @@ interface LeadFalso {
  * devolver o mesmo conjunto para as duas esconderia justamente o que separa
  * "quantos entraram" de "quanto vendemos".
  */
-function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> = []) {
+function kommo(
+  leads: LeadFalso[],
+  etapas: Array<{ id: number; name: string; sort?: number }> = [],
+) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
 
@@ -65,7 +68,10 @@ function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> =
   });
 }
 
-async function relatorio(leads: LeadFalso[], etapas?: Array<{ id: number; name: string }>) {
+async function relatorio(
+  leads: LeadFalso[],
+  etapas?: Array<{ id: number; name: string; sort?: number }>,
+) {
   const chamadas = kommo(leads, etapas);
   vi.stubGlobal("fetch", chamadas);
   const { fetchVendasReport } = await import("@/server/connectors/kommo");
@@ -445,6 +451,63 @@ describe("vendas pelo Kommo", () => {
     expect(funil?.rows.find((r) => String(r.etapa).startsWith("Leads de entrada"))?.negocios).toBe(
       2,
     );
+  });
+
+  it("mostra todas as etapas do funil, na ordem, inclusive as vazias", async () => {
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: 40, name: "Negociação", sort: 30 },
+      ],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // Etapa vazia sumindo esconde o gargalo: "ninguém chega em Negociação" é a
+    // informação mais útil que um funil dá.
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Qualificação", "Negociação"]);
+    expect(funil?.rows.map((r) => r.negocios)).toEqual([1, 0, 0]);
+  });
+
+  it("não reordena o funil por volume", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-04T10:00:00Z") },
+        { id: 3, status_id: 20, created_at: emSegundos("2026-02-05T10:00:00Z") },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+
+    // Ordenado por volume, "Qualificação" viria primeiro — e a tabela deixaria
+    // de ser um funil para virar uma lista de campeões.
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Qualificação"]);
+  });
+
+  it("etapa fora do esqueleto vai para o fim, em vez de sumir", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Ganho não é etapa do funil: vem depois, sem ser descartado.
+        {
+          id: 2,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+      ],
+      [{ id: 20, name: "Novo lead", sort: 10 }],
+    );
+
+    const funil = report.tables.find((t) => t.title === "Negócios por etapa");
+    expect(funil?.rows.map((r) => r.etapa)).toEqual(["Novo lead", "Venda ganha"]);
   });
 
   it("usa o nome real da etapa, e não o número", async () => {
