@@ -25,7 +25,7 @@ export const maxDuration = 30;
  * lugar que ninguém rola até.
  */
 export default async function Page() {
-  const resumo = await getClarityResumo();
+  const clarity = await getClarityResumo();
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -34,14 +34,25 @@ export default async function Page() {
         description="Até onde as pessoas leem e onde a página não responde — pelo Microsoft Clarity"
       />
 
-      {resumo ? (
-        <ClarityPanel resumo={resumo} />
-      ) : (
+      {clarity.estado === "ok" ? <ClarityPanel resumo={clarity.resumo} /> : null}
+
+      {clarity.estado === "sem-credencial" ? (
         <EmptyState
           title="Clarity não configurado"
           description="Cadastre CLARITY_API_TOKEN e CLARITY_PROJECT_ID para esta tela ler os dados de rolagem e atrito. Sem eles não há o que mostrar."
         />
-      )}
+      ) : null}
+
+      {/* Estado próprio, e não o mesmo "não configurado" de antes. Mandar
+          cadastrar uma variável que já está cadastrada faz quem lê procurar o
+          problema no lugar errado — e o motivo mais provável aqui é a cota
+          diária da API, que é de poucas chamadas e não avisa antes de acabar. */}
+      {clarity.estado === "falhou" ? (
+        <EmptyState
+          title="O Clarity está configurado, mas não respondeu"
+          description={`A credencial está cadastrada — o que falhou foi a consulta. A causa mais comum é a cota diária da API do Clarity, que é de poucas chamadas por dia e se recompõe sozinha no dia seguinte. Detalhe técnico: ${clarity.motivo}`}
+        />
+      ) : null}
     </div>
   );
 }

@@ -192,6 +192,19 @@ export interface ContentCard {
  * Mora aqui, e não no conector, porque `components/` não pode importar de
  * `server/` — é o contrato de arquitetura cravado na CI.
  */
+/**
+ * O que a tela de Comportamento recebe.
+ *
+ * Três estados, e não "resumo ou nada". A primeira versão devolvia `null` tanto
+ * para "falta credencial" quanto para "a chamada falhou", e a tela imprimia
+ * "Clarity não configurado" nos dois casos — com o token cadastrado e presente
+ * no diagnóstico. Quem lia era mandado configurar o que já estava configurado.
+ */
+export type ClarityEstado =
+  | { estado: "sem-credencial" }
+  | { estado: "falhou"; motivo: string }
+  | { estado: "ok"; resumo: ClarityResumo };
+
 export interface ClarityResumo {
   /** Fração média da página que as pessoas percorreram. Entre 0 e 1. */
   rolagemMedia: number;

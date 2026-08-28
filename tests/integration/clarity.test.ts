@@ -43,9 +43,16 @@ function respostaPorUrl() {
   ];
 }
 
-async function resumo() {
+async function estado() {
   const { fetchClarityResumo } = await import("@/server/connectors/clarity");
   return fetchClarityResumo();
+}
+
+/** O resumo, quando há um. Falha o teste se o estado não for `ok`. */
+async function resumo() {
+  const atual = await estado();
+  if (atual.estado !== "ok") throw new Error(`esperava resumo, veio ${atual.estado}`);
+  return atual.resumo;
 }
 
 beforeEach(() => {
@@ -80,8 +87,8 @@ describe("Clarity", () => {
 
     // A API devolve 57.4; a tela formata percentual a partir de fração. Sem a
     // divisão, "57,4%" viraria "5740%".
-    expect(r?.rolagemMedia).toBeCloseTo(0.574, 4);
-    expect(r?.porPagina.find((p) => p.pagina === "/planos")?.rolagem).toBeCloseTo(0.382, 4);
+    expect(r.rolagemMedia).toBeCloseTo(0.574, 4);
+    expect(r.porPagina.find((p) => p.pagina === "/planos")?.rolagem).toBeCloseTo(0.382, 4);
   });
 
   it("ordena as páginas por sessões, não pela ordem da API", async () => {
@@ -102,27 +109,54 @@ describe("Clarity", () => {
 
     // A página com mais gente é a que interessa primeiro; a API devolve
     // /planos antes só porque sim.
-    expect(r?.porPagina.map((p) => p.pagina)).toEqual(["/", "/planos"]);
+    expect(r.porPagina.map((p) => p.pagina)).toEqual(["/", "/planos"]);
   });
 
-  it("sem token, devolve nulo em vez de tentar a chamada", async () => {
+  it("sem token, diz que falta credencial em vez de tentar a chamada", async () => {
     const espiao = vi.fn();
     vi.stubGlobal("fetch", espiao);
 
-    expect(await resumo()).toBeNull();
+    expect(await estado()).toEqual({ estado: "sem-credencial" });
     expect(espiao).not.toHaveBeenCalled();
   });
 
-  it("falha da API não derruba a tela — devolve nulo", async () => {
+  it("cota estourada não vira 'não configurado'", async () => {
     for (const [k, v] of Object.entries(CREDENCIAIS)) vi.stubEnv(k, v);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("quota exceeded", { status: 429, statusText: "Too Many" })),
     );
 
-    // A seção é complemento do Analytics. Estourar a cota não pode custar a
-    // tela inteira.
-    expect(await resumo()).toBeNull();
+    const atual = await estado();
+
+    // Com o token cadastrado, "não configurado" manda quem lê procurar o
+    // problema no lugar errado — e a cota é justamente a causa mais provável
+    // aqui, porque a API dá poucas chamadas por dia e não avisa antes de acabar.
+    expect(atual.estado).toBe("falhou");
+    if (atual.estado === "falhou") expect(atual.motivo).toMatch(/429/);
+  });
+
+  it("guarda a resposta no cache compartilhado, por causa da cota diária", async () => {
+    for (const [k, v] of Object.entries(CREDENCIAIS)) vi.stubEnv(k, v);
+    const espiao = vi.fn(
+      async () =>
+        new Response(JSON.stringify(respostaDoClarity()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", espiao);
+
+    await estado();
+
+    // O cache em memória do painel é por instância, e a Vercel sobe várias:
+    // cada partida a frio gastava mais duas chamadas de uma cota que é de
+    // poucas por dia. `next.revalidate` é compartilhado entre instâncias.
+    for (const chamada of espiao.mock.calls as unknown as Array<[string, RequestInit]>) {
+      const init = chamada[1] as RequestInit & { next?: { revalidate?: number } };
+      expect(init.next?.revalidate).toBeGreaterThan(0);
+      expect(init.cache).toBeUndefined();
+    }
   });
 
   it("não repete chamada que falhou — a cota é diária", async () => {
@@ -132,7 +166,7 @@ describe("Clarity", () => {
     );
     vi.stubGlobal("fetch", espiao);
 
-    await resumo();
+    await estado();
 
     // Duas chamadas (geral e por URL), nenhuma retentativa. Com retry, um erro
     // transitório queimaria o que resta da cota do dia.
@@ -150,7 +184,7 @@ describe("Clarity", () => {
     );
     vi.stubGlobal("fetch", espiao);
 
-    await resumo();
+    await estado();
 
     for (const chamada of espiao.mock.calls as unknown as Array<[RequestInfo | URL]>) {
       expect(String(chamada[0])).not.toContain("tok");

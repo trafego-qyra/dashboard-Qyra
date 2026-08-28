@@ -1,9 +1,9 @@
 import "server-only";
 
-import type { ClarityResumo } from "@/lib/types";
+import type { ClarityEstado } from "@/lib/types";
 import { mockClarity } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
-import { httpJson } from "@/server/lib/http";
+import { descreverFalha, httpJson } from "@/server/lib/http";
 
 /**
  * Microsoft Clarity via API de exportação (`project-live-insights`).
@@ -64,6 +64,11 @@ async function buscarInsights(dias: number, dimensao?: string): Promise<ClarityM
     // A cota é diária: repetir uma chamada que falhou queima o que resta.
     retries: 0,
     timeoutMs: 20_000,
+    // Cache compartilhado entre instâncias. O cache em memória do painel é por
+    // instância, e a Vercel sobe várias: cada partida a frio recomeçava com o
+    // cache vazio e gastava mais duas chamadas da cota — que é de poucas por
+    // dia. Meia hora de validade, a mesma do cache em memória.
+    revalidateSeconds: 1_800,
   });
 }
 
@@ -81,15 +86,17 @@ function somar(linhas: ClarityLinha[], campo: string): number {
 /**
  * Fotografia recente do comportamento no site.
  *
- * Devolve `null` quando não há credencial ou a chamada falha: esta seção é
- * complemento, e a tela do Analytics continua inteira sem ela.
+ * **Distingue "não configurado" de "falhou".** Antes os dois voltavam `null`, e
+ * a tela imprimia "Clarity não configurado" mesmo com o token cadastrado — o
+ * caso mais provável aqui, porque a cota da API é de poucas chamadas por dia e
+ * estourar a cota é uma falha como qualquer outra.
  */
-export async function fetchClarityResumo(): Promise<ClarityResumo | null> {
+export async function fetchClarityResumo(): Promise<ClarityEstado> {
   const env = getEnv();
   // Em demonstração a seção aparece com números fictícios, como o resto da
   // tela — sumir dela deixaria a demonstração incompleta.
-  if (isForceMock()) return mockClarity();
-  if (!getCredentials().clarity) return null;
+  if (isForceMock()) return { estado: "ok", resumo: mockClarity() };
+  if (!getCredentials().clarity) return { estado: "sem-credencial" };
 
   try {
     const [geral, porUrl] = await Promise.all([
@@ -110,7 +117,7 @@ export async function fetchClarityResumo(): Promise<ClarityResumo | null> {
     const atritoPorPagina = (nome: string) =>
       new Map(metrica(porUrl, nome).map((l) => [String(l.URL ?? ""), num(l.subTotal)]));
 
-    return {
+    const resumo = {
       // A API devolve a profundidade em porcentagem (0-100); a tela trabalha
       // em fração, como todo percentual do painel.
       rolagemMedia: rolagem.length === 0 ? 0 : num(rolagem[0]?.averageScrollDepth) / 100,
@@ -136,9 +143,12 @@ export async function fetchClarityResumo(): Promise<ClarityResumo | null> {
       dias: MAX_DIAS,
       projeto: env.CLARITY_PROJECT_ID ?? null,
     };
-  } catch {
-    // Cota estourada, token inválido ou instabilidade: a tela do Analytics não
-    // pode cair por causa de uma seção complementar.
-    return null;
+
+    return { estado: "ok", resumo };
+  } catch (erro) {
+    // Cota estourada, token inválido ou instabilidade. A tela não cai por causa
+    // disso — mas passa a dizer o que aconteceu, em vez de mandar configurar o
+    // que já está configurado.
+    return { estado: "falhou", motivo: descreverFalha(erro) };
   }
 }
