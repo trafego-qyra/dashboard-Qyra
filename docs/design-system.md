@@ -108,11 +108,16 @@ tela de entrada —, então a superfície é fixa em `#2f2535` e a rampa é vali
 uma vez só em vez de duas. Sobre fundo escuro quem tem mais volume precisa de
 mais luz: a ordem vai do passo mais claro para o mais fechado.
 
-**A lâmina é uma pílula, não um trapézio.** A marca é arredondada em tudo — slab
-de 28px na navegação, pílula nos filtros e nos botões —, e um trapézio de quina
-viva no meio da tela briga com o que está em volta. A lâmina tem 60px de altura
-e raio total, o que dá justamente os 30px do slab. A silhueta de funil vem das
-larguras decrescentes, não do chanfro.
+**Cone contínuo, com boca e bica arredondadas.** As faixas se encostam — 2px de
+superfície entre elas, o mesmo respiro de qualquer marca colada do painel — e
+formam uma peça só, em vez de blocos empilhados. Recorte poligonal não aceita
+raio, então a boca e a bica ganham uma tampa própria: retângulo de raio total na
+mesma largura da aresta, encaixado sem costura. É o que tira a quina viva de uma
+interface arredondada em todo o resto.
+
+O degradê de cada faixa é **horizontal**. Tampa e corpo são elementos separados,
+e qualquer componente vertical mudaria de tom entre os dois, deixando emenda
+visível justo na aresta que deveria ser lisa.
 
 Três regras que o componente cumpre:
 

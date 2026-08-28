@@ -25,11 +25,17 @@ const BLOCO: FunnelBlock = {
   ],
 };
 
-/** A largura declarada de cada lâmina, em ordem, em pontos percentuais. */
+/** As quatro arestas de um `polygon(...)`, em ordem. */
+function arestas(estilo: string): number[] {
+  return [...estilo.matchAll(/([\d.]+)%\s+(?:0%|100%)/g)].map((m) => Number(m[1]));
+}
+
+/** A largura da aresta de cima de cada faixa, em ordem, em pontos percentuais. */
 function larguras(container: HTMLElement): number[] {
-  return [...container.querySelectorAll<HTMLElement>("[style*='width']")].map((el) =>
-    Number.parseFloat(el.style.width),
-  );
+  return [...container.querySelectorAll<HTMLElement>("[style*='polygon']")].map((el) => {
+    const [a, b] = arestas(el.style.clipPath);
+    return b - a;
+  });
 }
 
 describe("FunnelChart", () => {
