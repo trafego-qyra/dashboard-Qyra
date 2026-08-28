@@ -1,41 +1,39 @@
 import { Trophy } from "lucide-react";
 
 import { LightBlock } from "@/components/brand/light-block";
-import { cn } from "@/lib/cn";
 import { formatMetric } from "@/lib/format";
 import type { FunnelBlock, FunnelStage } from "@/lib/types";
 
 /**
  * O funil comercial, em figura.
  *
- * Faixas separadas, cada uma um trapézio: a aresta de cima é o número da etapa,
- * a de baixo é o da próxima, e o quanto ela estreita é a perda entre as duas.
- * Onde a forma aperta é onde o processo trava — que é a única coisa que um
- * funil desenhado faz melhor que a tabela ao lado.
+ * Lâminas empilhadas, no formato de diagrama de apresentação: cada etapa é uma
+ * lâmina própria, com folga entre elas, e a diferença de largura de uma para a
+ * outra é a perda. Caixa de rótulo à esquerda, caixa de números à direita, fio
+ * ligando as duas à lâmina — o desenho que o comercial reconhece de slide, com
+ * a paleta da casa no lugar do arco-íris de banco de imagem.
+ *
+ * **A aresta de cima de cada lâmina é o número da etapa.** É a única codificação
+ * de grandeza. Cada lâmina ainda estreita um pouco sozinha, de um valor fixo e
+ * igual para todas — isso é desenho, não dado, e é o que dá o empilhamento em
+ * vez de um cone contínuo. O que informa é o degrau **entre** lâminas.
  *
  * **Mora no slab escuro da marca, nos dois temas.** Não é escolha de gosto: uma
- * rampa de um hue só precisa de uma superfície fixa para ter contraste
- * garantido, e alternar a superfície obrigaria a manter duas rampas validadas
- * em vez de uma. O slab é o mesmo da navegação e da tela de entrada, então a
- * peça mais chamativa do painel continua sendo a marca, e não uma exceção.
+ * rampa de um hue só precisa de superfície fixa para ter contraste garantido, e
+ * alternar a superfície obrigaria a manter duas rampas validadas em vez de uma.
+ * O slab é o mesmo da navegação e da tela de entrada.
  *
- * **Sem tooltip, de propósito.** A regra da casa é que gráfico em HTML tem
- * camada de hover; a exceção aqui é que não há nada escondido para revelar —
- * etapa, contagem, porcentagem e queda estão todas escritas ao lado da forma.
- * Um tooltip repetiria o visível e ainda esconderia o dado de quem navega por
- * teclado.
- *
- * A largura é a única codificação de grandeza. A cor apenas ordena — e o
- * desfecho, que não é etapa de passagem, sai da rampa e vem com ícone e
- * rótulo, nunca só com a cor trocada.
+ * **Sem tooltip, de propósito.** Etapa, contagem, porcentagem e queda estão
+ * todas escritas ao lado da forma; um tooltip repetiria o visível e esconderia
+ * o dado de quem navega por teclado.
  */
 
 /**
  * A rampa, do topo do funil para a base.
  *
  * Validada contra `#2f2535`, que é a superfície onde ela sempre aparece. Sobre
- * fundo escuro quem tem mais volume precisa de mais luz, não de menos: a
- * ordem é do passo mais claro para o mais fechado.
+ * fundo escuro quem tem mais volume precisa de mais luz, então a ordem vai do
+ * passo mais claro para o mais fechado.
  */
 const RAMPA = [
   "var(--qy-funnel-1)",
@@ -59,29 +57,43 @@ function corDaEtapa(indice: number, total: number): string {
 }
 
 /**
- * A boca do funil não encosta na borda do slab.
+ * O passo escuro da rampa não tem contraste para virar texto.
  *
- * Sem folga a primeira faixa termina rente ao corte da superfície e passa a ler
- * como forma cortada, e não como forma larga — o desenho parece um erro de
- * layout justamente na etapa mais importante.
+ * Clarear o mesmo hue mantém a caixa visivelmente da cor da lâmina — que é o
+ * que amarra rótulo e forma — sem depender de um passo que, em corpo pequeno,
+ * ninguém lê.
  */
-const BOCA = 94;
+function paraTexto(cor: string): string {
+  return `color-mix(in oklab, ${cor} 62%, white)`;
+}
+
+/** A boca do funil não encosta na borda do slab. */
+const BOCA = 96;
 
 /**
  * Piso de largura da aresta.
  *
- * Etapa zerada continua sendo uma faixa visível em vez de sumir: "ninguém chega
- * aqui" é informação, e largura zero levaria o rótulo junto. O número ao lado
- * continua dizendo zero — a figura nunca é a fonte do valor.
+ * Etapa zerada continua sendo uma lâmina visível em vez de sumir: "ninguém
+ * chega aqui" é informação, e largura zero levaria o rótulo junto. O número ao
+ * lado continua dizendo zero — a figura nunca é a fonte do valor.
  */
-const PISO = 6;
+const PISO = 7;
+
+/**
+ * O quanto cada lâmina estreita sozinha, de cima para baixo.
+ *
+ * Constante e igual para todas: é o que faz a peça parecer empilhada em vez de
+ * um cone liso, e por ser a mesma em todas não mexe na proporção entre etapas.
+ */
+const CHANFRO = 0.84;
 
 function largura(valor: number, topo: number): number {
   if (topo <= 0) return PISO;
   return Math.max(PISO, (valor / topo) * BOCA);
 }
 
-function trapezio(cima: number, baixo: number): string {
+function lamina(cima: number): string {
+  const baixo = cima * CHANFRO;
   const a = (100 - cima) / 2;
   const b = (100 + cima) / 2;
   const c = (100 + baixo) / 2;
@@ -94,40 +106,28 @@ function porcento(fracao: number): string {
   return `${Math.round(fracao * 100)}%`;
 }
 
-function Faixa({
-  etapa,
-  cima,
-  baixo,
-  cor,
-}: {
-  etapa: FunnelStage;
-  cima: number;
-  baixo: number;
-  cor: string;
-}) {
-  const recorte = trapezio(cima, baixo);
+function Lamina({ etapa, cima, cor }: { etapa: FunnelStage; cima: number; cor: string }) {
+  const recorte = lamina(cima);
 
   return (
     <div
       aria-hidden="true"
-      className="relative h-full w-full transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-soft)] group-hover:scale-[1.02]"
+      className="relative h-full w-full transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-soft)] group-hover:scale-[1.03]"
     >
       <div
         className="absolute inset-0"
         style={{
           clipPath: recorte,
-          // Um degradê dentro do mesmo passo: dá volume à faixa sem introduzir
-          // uma segunda cor, que quebraria a leitura de rampa.
-          background: `linear-gradient(115deg, ${cor} 0%, color-mix(in oklab, ${cor} 74%, #17111b) 100%)`,
+          // Degradê dentro do mesmo passo, na diagonal: dá volume à lâmina sem
+          // introduzir uma segunda cor, que quebraria a leitura de rampa.
+          background: `linear-gradient(105deg, color-mix(in oklab, ${cor} 82%, white) 0%, ${cor} 46%, color-mix(in oklab, ${cor} 68%, #17111b) 100%)`,
         }}
       />
-      {/* Fio de luz na aresta de cima — o mesmo brilho do slab da marca, que é
-          o que dá a impressão de peça empilhada. */}
       <div
-        className="absolute inset-0 opacity-45"
+        className="absolute inset-0 opacity-60"
         style={{
           clipPath: recorte,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, transparent 34%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 30%)",
         }}
       />
       {etapa.outcome === "ganho" ? (
@@ -139,21 +139,6 @@ function Faixa({
   );
 }
 
-/** Fio que liga a caixa de texto à faixa, como num diagrama de apresentação. */
-function Fio({ lado }: { lado: "esquerda" | "direita" }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "hidden h-px w-4 shrink-0 sm:block",
-        lado === "esquerda"
-          ? "bg-gradient-to-r from-transparent to-white/25"
-          : "bg-gradient-to-l from-transparent to-white/25",
-      )}
-    />
-  );
-}
-
 export function FunnelChart({ block }: { block: FunnelBlock }) {
   const etapas = block.stages;
   if (etapas.length === 0) return null;
@@ -161,7 +146,7 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
   const topo = etapas[0]?.value ?? 0;
 
   return (
-    <figure className="qy-fade relative overflow-hidden rounded-[var(--radius-slab)] bg-plum-800 px-4 py-6 text-white sm:px-6 sm:py-8">
+    <figure className="qy-fade relative overflow-hidden rounded-[var(--radius-slab)] bg-plum-800 px-4 py-6 text-white sm:px-7 sm:py-9">
       <LightBlock className="opacity-70" />
 
       <figcaption className="sr-only">
@@ -169,61 +154,85 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
         {block.description ? `. ${block.description}` : ""}
       </figcaption>
 
-      <ol className="relative space-y-2">
+      <ol className="relative space-y-2.5">
         {etapas.map((etapa, i) => {
-          const proxima = etapas[i + 1];
           const cima = largura(etapa.value, topo);
-          const baixo = largura(proxima?.value ?? etapa.value, topo);
           const doTopo = topo === 0 ? 0 : etapa.value / topo;
           const anterior = etapas[i - 1]?.value;
           const queda =
             anterior === undefined || anterior === 0 ? null : 1 - etapa.value / anterior;
           const cor =
             etapa.outcome === "ganho" ? "var(--qy-funnel-ganho)" : corDaEtapa(i, etapas.length);
+          const tinta = paraTexto(cor);
 
           return (
             <li
               key={etapa.label}
-              className="group grid grid-cols-2 items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] sm:gap-x-4"
+              className="group grid grid-cols-2 items-center gap-x-2 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1fr)] sm:gap-x-0"
             >
-              {/* Caixa de rótulo com filete da cor da faixa: é o que amarra o
-                  texto à forma sem escrever nada por cima do trapézio, onde
-                  nome comprido não cabe e o contraste muda a cada passo. */}
+              {/* Caixa de rótulo na cor da lâmina, com o fio ligando à forma —
+                  o texto fica fora do trapézio, onde nome comprido não cabe e o
+                  contraste mudaria a cada passo da rampa. */}
               <div className="flex items-center">
                 <div
-                  className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 py-2 pr-3 pl-3"
-                  style={{ borderLeft: `3px solid ${cor}` }}
+                  className="min-w-0 flex-1 rounded-lg border px-3 py-2.5"
+                  style={{
+                    borderColor: `color-mix(in oklab, ${cor} 55%, transparent)`,
+                    background: `color-mix(in oklab, ${cor} 9%, transparent)`,
+                  }}
                 >
                   <div className="flex items-center gap-1.5">
                     {etapa.outcome === "ganho" ? (
-                      <Trophy aria-hidden="true" className="size-3.5 shrink-0 text-white" />
+                      <Trophy
+                        aria-hidden="true"
+                        className="size-4 shrink-0"
+                        style={{ color: tinta }}
+                      />
                     ) : null}
-                    {/* Sem truncar: "Venda ganha" já cortava no telefone, e
-                        nome de etapa cortado é etapa que ninguém identifica. */}
-                    <span className="font-semibold text-[13px] text-white uppercase leading-tight tracking-wide">
+                    {/* Sem truncar: "Venda gan…" é etapa que ninguém identifica. */}
+                    <span
+                      className="font-bold text-[13px] uppercase leading-tight tracking-wider"
+                      style={{ color: tinta }}
+                    >
                       {etapa.label}
                     </span>
                   </div>
                 </div>
-                <Fio lado="esquerda" />
+                <span
+                  aria-hidden="true"
+                  className="hidden h-px w-5 shrink-0 sm:block"
+                  style={{ background: `color-mix(in oklab, ${cor} 55%, transparent)` }}
+                />
               </div>
 
-              {/* A forma. Some no telefone: com a tela estreita o trapézio fica
-                  raso demais para dizer alguma coisa, e o que sobra — nome,
+              {/* A forma. Some no telefone: com a tela estreita a lâmina fica
+                  rasa demais para dizer alguma coisa, e o que sobra — nome,
                   contagem e queda — já é o funil em texto. */}
-              <div className="col-span-2 hidden h-16 sm:col-span-1 sm:block">
-                <Faixa etapa={etapa} cima={cima} baixo={baixo} cor={cor} />
+              <div className="col-span-2 hidden h-[4.5rem] sm:col-span-1 sm:block">
+                <Lamina etapa={etapa} cima={cima} cor={cor} />
               </div>
 
-              <div className="flex items-center justify-end">
-                <Fio lado="direita" />
-                <div className="flex flex-1 items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2">
-                  <span className="font-semibold text-lg text-white tabular-nums">
+              <div className="flex items-center">
+                <span
+                  aria-hidden="true"
+                  className="hidden h-px w-5 shrink-0 sm:block"
+                  style={{ background: `color-mix(in oklab, ${cor} 55%, transparent)` }}
+                />
+                <div
+                  className="flex flex-1 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                  style={{
+                    borderColor: `color-mix(in oklab, ${cor} 55%, transparent)`,
+                    background: `color-mix(in oklab, ${cor} 9%, transparent)`,
+                  }}
+                >
+                  <span
+                    className="font-bold text-xl leading-none tabular-nums"
+                    style={{ color: tinta }}
+                  >
                     {formatMetric(etapa.value, "integer")}
                   </span>
-                  {/* Duas linhas curtas, e não três informações numa só: na
-                      largura desta coluna "da etapa anterior" quebra no meio e
-                      o número perde o rótulo. */}
+                  {/* Duas linhas curtas, e não tudo numa: nesta largura "da
+                      etapa anterior" quebra no meio e o número perde o rótulo. */}
                   <span className="text-right text-[11px] text-plum-200 leading-tight tabular-nums">
                     <span className="block whitespace-nowrap">{porcento(doTopo)} do topo</span>
                     {queda !== null && queda > 0 ? (
