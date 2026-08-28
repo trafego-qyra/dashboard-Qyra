@@ -67,8 +67,14 @@ function paraTexto(cor: string): string {
   return `color-mix(in oklab, ${cor} 62%, white)`;
 }
 
-/** A boca do funil não encosta na borda do slab. */
-const BOCA = 96;
+/**
+ * Largura da boca, em porcentagem da coluna da figura.
+ *
+ * Baixa de propósito. Com a boca ocupando a coluna inteira, a primeira lâmina
+ * vira uma prancha e as seguintes viram blocos soltos — some a silhueta de
+ * funil, que é a única razão de existir um desenho aqui em vez de só a tabela.
+ */
+const BOCA = 88;
 
 /**
  * Piso de largura da aresta.
@@ -79,26 +85,9 @@ const BOCA = 96;
  */
 const PISO = 7;
 
-/**
- * O quanto cada lâmina estreita sozinha, de cima para baixo.
- *
- * Constante e igual para todas: é o que faz a peça parecer empilhada em vez de
- * um cone liso, e por ser a mesma em todas não mexe na proporção entre etapas.
- */
-const CHANFRO = 0.84;
-
 function largura(valor: number, topo: number): number {
   if (topo <= 0) return PISO;
   return Math.max(PISO, (valor / topo) * BOCA);
-}
-
-function lamina(cima: number): string {
-  const baixo = cima * CHANFRO;
-  const a = (100 - cima) / 2;
-  const b = (100 + cima) / 2;
-  const c = (100 + baixo) / 2;
-  const d = (100 - baixo) / 2;
-  return `polygon(${a}% 0%, ${b}% 0%, ${c}% 100%, ${d}% 100%)`;
 }
 
 /** Porcentagem em número inteiro: a figura não tem duas casas de precisão. */
@@ -107,34 +96,30 @@ function porcento(fracao: number): string {
 }
 
 function Lamina({ etapa, cima, cor }: { etapa: FunnelStage; cima: number; cor: string }) {
-  const recorte = lamina(cima);
-
   return (
-    <div
-      aria-hidden="true"
-      className="relative h-full w-full transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-soft)] group-hover:scale-[1.03]"
-    >
+    <div className="flex h-full items-center justify-center">
+      {/* Raio total, e não canto vivo: a marca é arredondada em tudo — slab de
+          28px na navegação, pílula nos filtros — e um trapézio de quina viva no
+          meio da tela briga com o que está em volta. Aqui a altura da lâmina é
+          56px, então o raio cheio dá justamente os 28px do slab. */}
       <div
-        className="absolute inset-0"
+        aria-hidden="true"
+        className="relative h-full rounded-full ring-1 ring-white/10 ring-inset transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-soft)] group-hover:scale-[1.03]"
         style={{
-          clipPath: recorte,
-          // Degradê dentro do mesmo passo, na diagonal: dá volume à lâmina sem
-          // introduzir uma segunda cor, que quebraria a leitura de rampa.
-          background: `linear-gradient(105deg, color-mix(in oklab, ${cor} 82%, white) 0%, ${cor} 46%, color-mix(in oklab, ${cor} 68%, #17111b) 100%)`,
+          width: `${cima}%`,
+          background: `linear-gradient(108deg, color-mix(in oklab, ${cor} 90%, white) 0%, ${cor} 55%, color-mix(in oklab, ${cor} 70%, #17111b) 100%)`,
         }}
-      />
-      <div
-        className="absolute inset-0 opacity-60"
-        style={{
-          clipPath: recorte,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 30%)",
-        }}
-      />
-      {etapa.outcome === "ganho" ? (
-        <div className="absolute inset-0 grid place-items-center" style={{ clipPath: recorte }}>
-          <Trophy className="size-5 text-plum-900" />
-        </div>
-      ) : null}
+      >
+        {/* Fio de luz na aresta de cima, discreto. Halo e brilho descendo pela
+            lâmina davam ar de botão lustroso, e ainda lavavam a cor — a rampa
+            perdia a diferença entre um passo e o seguinte. */}
+        <div className="absolute inset-x-4 top-0 h-1/4 rounded-full bg-gradient-to-b from-white/20 to-transparent" />
+        {etapa.outcome === "ganho" ? (
+          <div className="absolute inset-0 grid place-items-center">
+            <Trophy className="size-5 text-plum-900" />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -154,7 +139,7 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
         {block.description ? `. ${block.description}` : ""}
       </figcaption>
 
-      <ol className="relative space-y-2.5">
+      <ol className="relative space-y-0.5">
         {etapas.map((etapa, i) => {
           const cima = largura(etapa.value, topo);
           const doTopo = topo === 0 ? 0 : etapa.value / topo;
@@ -168,14 +153,14 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
           return (
             <li
               key={etapa.label}
-              className="group grid grid-cols-2 items-center gap-x-2 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1fr)] sm:gap-x-0"
+              className="group grid grid-cols-2 items-center gap-x-2 gap-y-1 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,2.2fr)_minmax(0,0.9fr)] sm:gap-x-0"
             >
               {/* Caixa de rótulo na cor da lâmina, com o fio ligando à forma —
                   o texto fica fora do trapézio, onde nome comprido não cabe e o
                   contraste mudaria a cada passo da rampa. */}
               <div className="flex items-center">
                 <div
-                  className="min-w-0 flex-1 rounded-lg border px-3 py-2.5"
+                  className="min-w-0 flex-1 rounded-full border px-4 py-2.5"
                   style={{
                     borderColor: `color-mix(in oklab, ${cor} 55%, transparent)`,
                     background: `color-mix(in oklab, ${cor} 9%, transparent)`,
@@ -208,7 +193,7 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
               {/* A forma. Some no telefone: com a tela estreita a lâmina fica
                   rasa demais para dizer alguma coisa, e o que sobra — nome,
                   contagem e queda — já é o funil em texto. */}
-              <div className="col-span-2 hidden h-[4.5rem] sm:col-span-1 sm:block">
+              <div className="col-span-2 hidden h-[3.75rem] py-px sm:col-span-1 sm:block">
                 <Lamina etapa={etapa} cima={cima} cor={cor} />
               </div>
 
@@ -219,7 +204,7 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
                   style={{ background: `color-mix(in oklab, ${cor} 55%, transparent)` }}
                 />
                 <div
-                  className="flex flex-1 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                  className="flex flex-1 items-center justify-between gap-3 rounded-full border px-4 py-2"
                   style={{
                     borderColor: `color-mix(in oklab, ${cor} 55%, transparent)`,
                     background: `color-mix(in oklab, ${cor} 9%, transparent)`,

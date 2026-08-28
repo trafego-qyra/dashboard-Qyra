@@ -108,6 +108,12 @@ tela de entrada —, então a superfície é fixa em `#2f2535` e a rampa é vali
 uma vez só em vez de duas. Sobre fundo escuro quem tem mais volume precisa de
 mais luz: a ordem vai do passo mais claro para o mais fechado.
 
+**A lâmina é uma pílula, não um trapézio.** A marca é arredondada em tudo — slab
+de 28px na navegação, pílula nos filtros e nos botões —, e um trapézio de quina
+viva no meio da tela briga com o que está em volta. A lâmina tem 60px de altura
+e raio total, o que dá justamente os 30px do slab. A silhueta de funil vem das
+larguras decrescentes, não do chanfro.
+
 Três regras que o componente cumpre:
 
 - **Largura é a única codificação de grandeza.** A cor apenas ordena.

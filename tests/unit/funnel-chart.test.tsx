@@ -25,9 +25,11 @@ const BLOCO: FunnelBlock = {
   ],
 };
 
-/** As quatro arestas de um `polygon(...)`, em ordem. */
-function arestas(estilo: string): number[] {
-  return [...estilo.matchAll(/([\d.]+)%\s+(?:0%|100%)/g)].map((m) => Number(m[1]));
+/** A largura declarada de cada lâmina, em ordem, em pontos percentuais. */
+function larguras(container: HTMLElement): number[] {
+  return [...container.querySelectorAll<HTMLElement>("[style*='width']")].map((el) =>
+    Number.parseFloat(el.style.width),
+  );
 }
 
 describe("FunnelChart", () => {
@@ -73,29 +75,21 @@ describe("FunnelChart", () => {
   it("etapa zerada continua visível em vez de sumir", () => {
     const { container } = render(<FunnelChart block={BLOCO} />);
 
-    const formas = [...container.querySelectorAll<HTMLElement>("[style*='polygon']")];
-    const zerada = formas.at(-2);
+    const zerada = larguras(container).at(-1);
 
-    // Largura zero levaria a linha inteira junto, e com ela o rótulo — quando
+    // Largura zero levaria a lâmina inteira junto, e com ela o rótulo — quando
     // "ninguém chega aqui" é justamente o que o funil precisa mostrar.
-    const pontos = arestas(zerada?.style.clipPath ?? "");
-    expect(pontos.length).toBe(4);
-    expect(pontos[1] - pontos[0]).toBeGreaterThan(0);
+    expect(zerada).toBeGreaterThan(0);
   });
 
   it("a largura acompanha o valor, e nunca alarga para baixo", () => {
     const { container } = render(<FunnelChart block={BLOCO} />);
 
-    const formas = [...container.querySelectorAll<HTMLElement>("[style*='polygon']")];
-    // Cada faixa tem duas camadas com o mesmo recorte (a cor e o brilho).
-    const primeira = arestas(formas[0].style.clipPath);
-    const segunda = arestas(formas[2].style.clipPath);
-
-    const larguraDe = (p: number[]) => p[1] - p[0];
+    const [primeira, segunda] = larguras(container);
 
     // Metade do valor, metade da largura: a codificação é linear.
-    expect(larguraDe(segunda)).toBeCloseTo(larguraDe(primeira) / 2, 1);
-    expect(larguraDe(segunda)).toBeLessThan(larguraDe(primeira));
+    expect(segunda).toBeCloseTo(primeira / 2, 1);
+    expect(segunda).toBeLessThan(primeira);
   });
 
   it("diz o que a figura não consegue mostrar", () => {
