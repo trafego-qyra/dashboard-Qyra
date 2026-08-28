@@ -4,6 +4,7 @@ import type { ClarityEstado, ClarityResumo } from "@/lib/types";
 import { mockClarity } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
+import { lembrado, lembrar } from "@/server/lib/memoria";
 
 /**
  * Microsoft Clarity via API de exportação (`project-live-insights`).
@@ -35,19 +36,24 @@ const MAX_DIAS = 3;
 const SEIS_HORAS = 6 * 60 * 60;
 
 /**
- * A última leitura que deu certo.
+ * Onde a última leitura boa fica guardada.
  *
- * Rede de segurança para o dia em que a cota acabar mesmo assim — um deploy a
- * mais, uma instância nova na hora errada. Dado de ontem, rotulado como de
- * ontem, vale mais que uma tela de erro: quem abre o painel quer ver o
- * comportamento do site, e cota estourada é problema do painel, não da
- * pergunta.
+ * Rede de segurança para quando a cota acabar — um deploy a mais, uma instância
+ * nova na hora errada. Dado de ontem, rotulado como de ontem, vale mais que uma
+ * tela de erro: quem abre o painel quer ver o comportamento do site, e cota
+ * estourada é problema do painel, não da pergunta.
  *
- * Vive na memória da instância, então não sobrevive a uma partida a frio. É o
- * que dá para ter sem banco, e cobre o caso comum: a instância que já serviu a
- * tela hoje continua servindo.
+ * Sete dias de validade. Mais que isso a "última leitura" deixa de descrever o
+ * site e vira arqueologia; menos que isso não cobre um fim de semana prolongado
+ * com a cota estourada na sexta.
  */
-let ultimoBom: { resumo: ClarityResumo; em: string } | null = null;
+const CHAVE_ULTIMO_BOM = "clarity:ultimo-bom";
+const SETE_DIAS = 7 * 24 * 60 * 60;
+
+interface LeituraGuardada {
+  resumo: ClarityResumo;
+  em: string;
+}
 
 /** Uma linha da resposta: a dimensão pedida mais os valores da métrica. */
 interface ClarityLinha {
@@ -170,7 +176,10 @@ export async function fetchClarityResumo(): Promise<ClarityEstado> {
     };
 
     const em = new Date().toISOString();
-    ultimoBom = { resumo, em };
+    // Sem `await`: guardar é rede de segurança para a próxima requisição, e
+    // segurar a resposta desta por causa disso troca uma tela lenta por uma
+    // garantia que já está dada.
+    void lembrar(CHAVE_ULTIMO_BOM, { resumo, em } satisfies LeituraGuardada, SETE_DIAS);
     return { estado: "ok", resumo, atualizadoEm: em };
   } catch (erro) {
     // Cota estourada, token inválido ou instabilidade.
@@ -178,11 +187,12 @@ export async function fetchClarityResumo(): Promise<ClarityEstado> {
     // Havendo leitura anterior, ela é servida com o carimbo de quando foi feita
     // — a tela mostra o dado e diz que está velho. Sem ela, a tela diz o que
     // aconteceu, em vez de mandar configurar o que já está configurado.
-    if (ultimoBom) {
+    const guardada = await lembrado<LeituraGuardada>(CHAVE_ULTIMO_BOM);
+    if (guardada) {
       return {
         estado: "ok",
-        resumo: ultimoBom.resumo,
-        atualizadoEm: ultimoBom.em,
+        resumo: guardada.resumo,
+        atualizadoEm: guardada.em,
         defasado: true,
       };
     }

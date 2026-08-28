@@ -223,6 +223,27 @@ certo, com o carimbo de quando foi feita, em vez de uma tela de erro. Dado de
 ontem rotulado como de ontem vale mais que nada — quem abre o painel quer ver o
 comportamento do site, e cota estourada é problema do painel, não da pergunta.
 
+#### Para essa lembrança sobreviver a uma partida a frio
+
+Sem Redis, a última leitura vive na memória da instância — e a Vercel sobe
+instâncias novas o tempo todo. A instância nova nasce sem lembrança nenhuma, e
+é justamente quando alguém abre o painel para mostrar a alguém.
+
+Com um Redis cadastrado, a lembrança passa a valer para todas as instâncias, por
+sete dias. É **opcional**: sem ele o painel funciona igual, só perde a memória
+entre instâncias.
+
+Na Vercel: **Storage → Create Database → Upstash for Redis**, e conectar ao
+projeto. Ela injeta as variáveis sozinha, com um dos dois conjuntos de nomes:
+
+```env
+KV_REST_API_URL=...            # ou UPSTASH_REDIS_REST_URL
+KV_REST_API_TOKEN=...          # ou UPSTASH_REDIS_REST_TOKEN
+```
+
+O painel aceita os dois — quem cadastra não escolhe qual a Vercel usa. Confira
+em `/api/health` que apareceram.
+
 O limite não é ajustável pelo próprio painel do Clarity; aumentar exige pedir
 ao suporte da Microsoft.
 [Documentação](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api)
