@@ -206,7 +206,26 @@ Sem o token, a seção some da tela do Analytics e o resto continua igual.
 | Restrição | Consequência |
 |---|---|
 | Janela máxima de 3 dias | A seção é uma fotografia recente, não série histórica. Não acompanha o filtro de datas. |
-| Cota diária baixa | O resultado é cacheado por 30 minutos e a chamada nunca é repetida em erro. |
+| **10 requisições por projeto por dia** | O conector gasta 2 por atualização — uma geral, uma por URL. O cache vale **6 horas**, o que dá 4 atualizações e 8 chamadas, com 2 de folga para um deploy. A chamada nunca é repetida em erro. |
+
+**A conta do cache não é opcional.** A primeira versão usava 30 minutos, o que
+daria até 48 atualizações e 96 chamadas por dia contra um teto de 10: a cota
+acabava antes do almoço e a tela passava o resto do dia em `429 Exceeded daily
+limit`. Ao mexer nesse intervalo, refaça a conta.
+
+E o cache precisa ser o **compartilhado**, não o de memória. O de memória é por
+instância, e a Vercel sobe várias — cada partida a frio recomeçava com o cache
+vazio e gastava mais duas chamadas. É o que faz o `httpJson` aceitar
+`revalidateSeconds`, usado só aqui.
+
+**Quando a cota acabar mesmo assim**, a tela mostra a última leitura que deu
+certo, com o carimbo de quando foi feita, em vez de uma tela de erro. Dado de
+ontem rotulado como de ontem vale mais que nada — quem abre o painel quer ver o
+comportamento do site, e cota estourada é problema do painel, não da pergunta.
+
+O limite não é ajustável pelo próprio painel do Clarity; aumentar exige pedir
+ao suporte da Microsoft.
+[Documentação](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api)
 
 **O mapa de calor em si não sai por API** — o Clarity não expõe a imagem. O que
 o painel traz é o número por trás dele (profundidade de rolagem por página) e o

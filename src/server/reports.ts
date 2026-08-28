@@ -36,7 +36,21 @@ import { fetchOrganicoReport } from "./connectors/organico";
  * pelo resto do dia. Como a janela do Clarity é de dias, meia hora de cache
  * não perde nada de útil.
  */
-const TTL_CLARITY_SEGUNDOS = 1_800;
+/**
+ * Seis horas, e a conta é obrigatória.
+ *
+ * A API do Clarity dá **10 requisições por projeto por dia**, e o conector gasta
+ * duas por atualização — uma geral, uma por URL. Seis horas dão quatro
+ * atualizações, oito chamadas, e sobram duas de folga para um deploy que
+ * invalide o cache.
+ *
+ * A primeira versão usava trinta minutos, o que daria até 48 atualizações e 96
+ * chamadas. A cota acabava antes do almoço e a tela passava o resto do dia em
+ * 429 — que foi exatamente o que aconteceu.
+ *
+ * https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api
+ */
+const TTL_CLARITY_SEGUNDOS = 6 * 60 * 60;
 
 export function getClarityResumo(): Promise<ClarityEstado> {
   return cached("clarity:resumo", fetchClarityResumo, TTL_CLARITY_SEGUNDOS);
