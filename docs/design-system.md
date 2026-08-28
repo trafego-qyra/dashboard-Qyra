@@ -99,17 +99,23 @@ bolha, small multiples) usam no máximo **3 slots**. Acima disso o gate
 all-pairs reprova. `maxSlotsFor("all-pairs")` devolve esse número, e há teste
 travando a regra.
 
-Rampa ordinal (funil, faixas): lilás em 5 passos, `--qy-funnel-1..5`.
+Rampa ordinal (funil): lilás em 5 passos, `--qy-funnel-1..5`, mais
+`--qy-funnel-ganho` para o desfecho.
 
-**Ela não é a mesma nos dois temas.** No claro o passo mais escuro abre o funil,
-onde há mais negócio; no escuro a ordem inverte, porque sobre `#2f2535` quem tem
-mais volume precisa de mais luz, não de menos — `#66417b` quase some contra o
-fundo. É o mesmo princípio dos papéis semânticos: o tema escuro tem passos
-próprios, não é inversão automática.
+**Ela é a mesma nos dois temas, e fica fora dos blocos de tema.** O funil
+(`FunnelChart`) mora sempre no slab escuro da marca — o mesmo da navegação e da
+tela de entrada —, então a superfície é fixa em `#2f2535` e a rampa é validada
+uma vez só em vez de duas. Sobre fundo escuro quem tem mais volume precisa de
+mais luz: a ordem vai do passo mais claro para o mais fechado.
 
-O funil (`FunnelChart`) usa **largura** como única codificação de grandeza; a cor
-só ordena. O desfecho — "Venda ganha" — sai da rampa e vem com ícone e rótulo,
-porque cor trocada sozinha não avisa que a categoria mudou.
+Três regras que o componente cumpre:
+
+- **Largura é a única codificação de grandeza.** A cor apenas ordena.
+- **O desfecho sai da rampa.** "Venda ganha" não é etapa de passagem: vem em
+  verde, com troféu e rótulo — cor trocada sozinha não avisa que a categoria
+  mudou.
+- **Etapa zerada mantém um traço visível.** "Ninguém chega aqui" é a informação
+  mais útil que um funil dá; largura zero levaria o rótulo junto.
 
 ---
 

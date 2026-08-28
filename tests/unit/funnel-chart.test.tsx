@@ -47,8 +47,8 @@ describe("FunnelChart", () => {
   it("mostra a queda em relação à etapa anterior", () => {
     render(<FunnelChart block={BLOCO} />);
 
-    expect(screen.getByText("−50% da etapa anterior")).toBeInTheDocument();
-    expect(screen.getByText("−100% da etapa anterior")).toBeInTheDocument();
+    expect(screen.getByText("−50% da anterior")).toBeInTheDocument();
+    expect(screen.getByText("−100% da anterior")).toBeInTheDocument();
   });
 
   it("a porcentagem do topo sai em número inteiro", () => {
