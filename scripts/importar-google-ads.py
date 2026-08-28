@@ -51,6 +51,12 @@ def ler(caminho: str):
     return titulo, periodo, dados
 
 
+def tem(diretorio: str, fragmento: str) -> bool:
+    """O relatório de leilão é opcional: ele só existe quando a conta tem
+    concorrência suficiente para o Google divulgar a comparação."""
+    return any(fragmento in os.path.basename(p) for p in glob.glob(os.path.join(diretorio, "*.csv")))
+
+
 def achar(diretorio: str, fragmento: str) -> str:
     encontrados = [p for p in glob.glob(os.path.join(diretorio, "*.csv")) if fragmento in os.path.basename(p)]
     if not encontrados:
@@ -68,6 +74,7 @@ def main() -> None:
     _, _, horarios = ler(achar(d, "programac"))
     _, _, termos = ler(achar(d, "termos_de_pesquisa"))
     _, _, palavras = ler(achar(d, "palavraschave"))
+    leilao = ler(achar(d, "leila"))[2] if tem(d, "leila") else []
 
     # ---- Totais: somados das campanhas, não copiados da linha "Total" ----
     total_cliques = sum(int(numero(c["Cliques"])) for c in campanhas)
@@ -256,6 +263,24 @@ def main() -> None:
         })
     linhas_palavras.sort(key=lambda x: -x["custo"])
 
+    # ---- Leilão: quem disputa as mesmas buscas ----
+    #
+    # As porcentagens ficam como TEXTO, e não como número. O Google publica
+    # faixas em vez de valores quando o volume é baixo — "< 10%" —, e converter
+    # isso para 0 diria "nenhuma impressão" onde o dado real é "menos de dez por
+    # cento". A tabela mostra a notação da própria plataforma.
+    linhas_leilao = [
+        {
+            "dominio": linha["Domínio do URL de visualização"].strip(),
+            "parcelaImpressoes": linha["Parcela de impressões"].strip(),
+            "sobreposicao": linha["Taxa de sobreposição"].strip(),
+            "posicaoSuperior": linha["Taxa de posição superior"].strip(),
+            "topoDaPagina": linha["Taxa da parte superior da página"].strip(),
+            "parcelaVitorias": linha["Parcela de vitórias"].strip(),
+        }
+        for linha in leilao
+    ]
+
     saida = {
         "periodoRotulo": periodo,
         "totais": {
@@ -277,6 +302,7 @@ def main() -> None:
         "termos": linhas_termos,
         "termosRestantes": termos_restantes,
         "palavras": linhas_palavras,
+        "leilao": linhas_leilao,
     }
 
     print("// GERADO POR scripts/importar-google-ads.py — não editar à mão.")
