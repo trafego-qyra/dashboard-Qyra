@@ -96,6 +96,47 @@ export interface TableBlock {
 }
 
 /**
+ * Uma etapa do funil comercial, já com o acumulado calculado.
+ *
+ * `value` é **quantos chegaram até aqui**, não quantos estão parados aqui. São
+ * perguntas diferentes: um negócio em Negociação já passou por Qualificação, e
+ * desenhar a ocupação como se fosse fluxo faria a etapa do meio parecer um
+ * gargalo que não existe.
+ */
+export interface FunnelStage {
+  label: string;
+  /** Negócios que chegaram a esta etapa ou passaram dela. */
+  value: number;
+  /** Soma do valor dos negócios contados, quando o CRM tem esse campo. */
+  amount?: number;
+  /**
+   * Etapa de desfecho, e não de passagem.
+   *
+   * O ganho encerra o funil e por isso não usa a rampa das demais: é outra
+   * categoria de coisa, e a cor sozinha não diz isso — vem com ícone e rótulo.
+   */
+  outcome?: "ganho";
+}
+
+/**
+ * O funil comercial em forma de figura.
+ *
+ * Vive ao lado da tabela, não no lugar dela: a figura mostra o estrangulamento
+ * de relance, a tabela é a versão em texto que sobrevive a leitor de tela, a
+ * impressão em preto e branco e ao "me manda esse número".
+ */
+export interface FunnelBlock {
+  title: string;
+  description?: string;
+  stages: FunnelStage[];
+  /**
+   * O que a figura não consegue mostrar, dito antes de alguém tirar a conclusão
+   * errada — por exemplo, que o CRM só guarda a etapa atual do negócio.
+   */
+  caveat?: string;
+}
+
+/**
  * Uma peça de conteúdo com a arte e alguns números — anúncio ou publicação.
  *
  * É modelo de tela, não de domínio: cada conector calcula as métricas que
@@ -206,6 +247,8 @@ export interface ChannelReport {
   /** Período real dos dados, quando difere do intervalo pedido. */
   periodLabel?: string;
   tables: TableBlock[];
+  /** O funil comercial em figura, quando o canal tem etapas ordenadas. */
+  funnel?: FunnelBlock;
   /** Peças com a arte, quando a origem fornece: anúncios ou publicações. */
   creatives?: ContentCard[];
   /**

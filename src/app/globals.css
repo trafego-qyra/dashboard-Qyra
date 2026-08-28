@@ -129,6 +129,22 @@
   --qy-axis: #d7d2e1;
 }
 
+/* ---- Rampa ordinal do funil ---------------------------------------------
+   Fora dos blocos de tema de propósito: o funil mora sempre no slab escuro da
+   marca, nos dois temas, e superfície fixa é o que permite validar a rampa uma
+   vez só em vez de manter duas. Sobre #2f2535 quem tem mais volume precisa de
+   mais luz, então a ordem vai do passo mais claro para o mais fechado. */
+:root {
+  --qy-funnel-1: #e0cbee;
+  --qy-funnel-2: #c9a3de;
+  --qy-funnel-3: #b27fd0;
+  --qy-funnel-4: #9d5cc1;
+  --qy-funnel-5: #8a4fb0;
+  /* O desfecho sai da rampa: é outra categoria de coisa, e vem com ícone e
+     rótulo junto — a cor sozinha nunca diz isso. */
+  --qy-funnel-ganho: #4bb37c;
+}
+
 /* ---- Tema escuro -------------------------------------------------------
    Passos próprios, escolhidos e validados contra a superfície #2f2535.
    Não é inversão automática do tema claro. */

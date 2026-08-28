@@ -26,6 +26,8 @@ interface LeadFalso {
   created_at?: number;
   closed_at?: number;
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
+  /** O motivo de perda nativo do Kommo, como ele volta com `with=loss_reason`. */
+  _embedded?: { loss_reason?: { name?: string } | Array<{ name?: string }> };
 }
 
 /**
@@ -518,6 +520,243 @@ describe("vendas pelo Kommo", () => {
 
     const funil = report.tables.find((t) => t.title === "Negócios por etapa");
     expect(funil?.rows[0]?.etapa).toBe("Avaliação agendada");
+  });
+
+  it("agrupa as perdas por motivo e separa o que dá para retomar", async () => {
+    const perdido = (id: number, motivo: string, price: number): LeadFalso => ({
+      id,
+      price,
+      status_id: PERDIDO,
+      created_at: emSegundos("2026-02-02T10:00:00Z"),
+      closed_at: emSegundos("2026-02-10T10:00:00Z"),
+      _embedded: { loss_reason: { name: motivo } },
+    });
+
+    const { report } = await relatorio([
+      perdido(1, "Preço fora do orçamento", 1000),
+      perdido(2, "Preço fora do orçamento", 2000),
+      perdido(3, "Não respondeu após múltiplos contatos", 500),
+    ]);
+
+    const perdas = report.tables.find((t) => t.title === "Motivos de perda");
+
+    // Ordenado por volume: o motivo que mais derruba negócio abre a tabela.
+    expect(perdas?.rows).toEqual([
+      { motivo: "Preço fora do orçamento", situacao: "Recuperável", negocios: 2, valor: 3000 },
+      {
+        motivo: "Não respondeu após múltiplos contatos",
+        situacao: "Arquivar",
+        negocios: 1,
+        valor: 500,
+      },
+    ]);
+  });
+
+  it("reconhece as três perdas que o comercial considera recuperáveis", async () => {
+    const perdido = (id: number, motivo: string): LeadFalso => ({
+      id,
+      status_id: PERDIDO,
+      created_at: emSegundos("2026-02-02T10:00:00Z"),
+      closed_at: emSegundos("2026-02-10T10:00:00Z"),
+      _embedded: { loss_reason: { name: motivo } },
+    });
+
+    const { report } = await relatorio([
+      perdido(1, "Achou caro sem ver valor"),
+      perdido(2, "Sem tempo no momento"),
+      perdido(3, "Vai pensar / precisa de tempo"),
+      perdido(4, "Fora da Área de Cobertura"),
+      // Estas não voltam, e contá-las na fila de retomada faria o comercial
+      // gastar ligação com quem já decidiu.
+      perdido(5, "Preferiu concorrente ou outra solução"),
+      perdido(6, "Não elegível ao programa"),
+    ]);
+
+    expect(kpi(report, "recuperaveis")).toBe(4);
+  });
+
+  it("motivo novo, que ninguém classificou ainda, entra como arquivar", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        status_id: PERDIDO,
+        created_at: emSegundos("2026-02-02T10:00:00Z"),
+        closed_at: emSegundos("2026-02-10T10:00:00Z"),
+        _embedded: { loss_reason: { name: "Mudou de cidade" } },
+      },
+    ]);
+
+    const perdas = report.tables.find((t) => t.title === "Motivos de perda");
+
+    // O lado conservador: prometer recuperação de quem não volta custa mais
+    // que deixar uma opção nova esperando classificação.
+    expect(perdas?.rows[0]?.situacao).toBe("Arquivar");
+    expect(kpi(report, "recuperaveis")).toBe(0);
+  });
+
+  it("lê o motivo também quando ele é campo do negócio, e não o nativo", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        status_id: PERDIDO,
+        created_at: emSegundos("2026-02-02T10:00:00Z"),
+        closed_at: emSegundos("2026-02-10T10:00:00Z"),
+        // Grafia livre de propósito: quem opera o CRM renomeia a etiqueta, e
+        // exigir o nome exato faria a tabela esvaziar sem nenhum erro.
+        custom_fields_values: [
+          { field_name: "MOTIVO DA PERDA", values: [{ value: "Sem tempo no momento" }] },
+        ],
+      },
+    ]);
+
+    const perdas = report.tables.find((t) => t.title === "Motivos de perda");
+    expect(perdas?.rows[0]).toMatchObject({
+      motivo: "Sem tempo no momento",
+      situacao: "Recuperável",
+    });
+  });
+
+  it("perda sem motivo aparece na tabela e vira aviso", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        status_id: PERDIDO,
+        created_at: emSegundos("2026-02-02T10:00:00Z"),
+        closed_at: emSegundos("2026-02-10T10:00:00Z"),
+      },
+    ]);
+
+    const perdas = report.tables.find((t) => t.title === "Motivos de perda");
+
+    // Perda sem motivo não vira aprendizado: o negócio some do funil e ninguém
+    // sabe se dava para recuperar. Some da tabela, some o problema.
+    expect(perdas?.rows[0]?.motivo).toBe("Sem motivo registrado");
+    expect(kpi(report, "recuperaveis")).toBe(0);
+    expect(report.notices.some((n) => /sem motivo registrado/i.test(n.text))).toBe(true);
+  });
+
+  it("pede o motivo de perda na consulta", async () => {
+    const { chamadas } = await relatorio([]);
+
+    const enderecos = chamadas.mock.calls.map(([entrada]) => String(entrada));
+
+    // Sem `with=loss_reason` o Kommo não devolve o motivo, e a tabela nasceria
+    // vazia sem nenhum sinal de que faltou pedir.
+    expect(enderecos.some((url) => url.includes("with=loss_reason"))).toBe(true);
+  });
+
+  it("o funil da figura conta quem chegou, e não quem está parado", async () => {
+    const { report } = await relatorio(
+      [
+        // Parado na primeira etapa.
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        // Parado na terceira: já passou pelas duas anteriores.
+        { id: 2, status_id: 40, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Ganho: passou por todas.
+        {
+          id: 3,
+          price: 900,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+          closed_at: emSegundos("2026-02-06T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: 40, name: "Negociação", sort: 30 },
+      ],
+    );
+
+    // Ocupação diria 1 / 0 / 1: "ninguém em Qualificação", e a etapa do meio
+    // pareceria um gargalo que não existe — os dois de baixo passaram por lá.
+    expect(report.funnel?.stages.map((e) => [e.label, e.value])).toEqual([
+      ["Novo lead", 3],
+      ["Qualificação", 2],
+      ["Negociação", 2],
+      ["Venda ganha", 1],
+    ]);
+  });
+
+  it("o funil nunca alarga para baixo", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        {
+          id: 3,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    const valores = report.funnel?.stages.map((e) => e.value) ?? [];
+
+    // Acumulado é monótono por definição. Uma etapa maior que a anterior seria
+    // erro de contagem — e desenharia uma figura que não é funil.
+    for (let i = 1; i < valores.length; i++) {
+      expect(valores[i]).toBeLessThanOrEqual(valores[i - 1]);
+    }
+  });
+
+  it("negócio perdido conta só na boca do funil, e a figura avisa", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        {
+          id: 2,
+          status_id: PERDIDO,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+          closed_at: emSegundos("2026-02-04T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    // O Kommo guarda só a etapa atual: um perdido em Qualificação não deixa
+    // rastro de onde estava. Creditá-lo à etapa seria inventar.
+    expect(report.funnel?.stages.map((e) => e.value)).toEqual([2, 1, 0]);
+    expect(report.funnel?.caveat).toMatch(/etapa atual/i);
+  });
+
+  it("a última faixa é o desfecho, e vem marcada como tal", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          price: 500,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-02T10:00:00Z"),
+          closed_at: emSegundos("2026-02-04T10:00:00Z"),
+        },
+      ],
+      [{ id: 20, name: "Novo lead", sort: 10 }],
+    );
+
+    const ultima = report.funnel?.stages.at(-1);
+
+    // O ganho não é etapa de passagem: sai da rampa e ganha ícone e rótulo,
+    // porque cor trocada sozinha não diz que a categoria mudou.
+    expect(ultima).toMatchObject({ label: "Venda ganha", value: 1, outcome: "ganho", amount: 500 });
+  });
+
+  it("sem esqueleto de etapas não desenha funil nenhum", async () => {
+    const { report } = await relatorio([
+      { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+    ]);
+
+    // Sem a definição do funil no Kommo não há ordem — e funil fora de ordem
+    // não é funil. Melhor não desenhar do que desenhar errado.
+    expect(report.funnel).toBeUndefined();
   });
 
   it("sem credencial, cai em demonstração em vez de quebrar", async () => {
