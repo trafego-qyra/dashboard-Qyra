@@ -130,32 +130,29 @@ GOOGLE_ADS_API_VERSION=                      # opcional, ver abaixo
 
 Os hífens são removidos pelo conector — pode colar como aparece na interface.
 
-### Enquanto o token não é aprovado: o snapshot
+### O token de desenvolvedor
 
-O painel não fica sem Google Ads. `src/data/google-ads-snapshot.ts` guarda os
-relatórios exportados da própria plataforma — dado real da conta, congelado no
-período do export.
+O token nasce com acesso *Test* e só lê contas de teste. Para ler a conta de
+produção é preciso solicitar o **acesso básico** na Central de API da conta
+gerente — o token não muda, só o nível de acesso, e a tela vira tempo real
+sozinha no carregamento seguinte.
 
-Para trocar os dados, exporte da interface do Google Ads, em CSV, os relatórios
-de **campanha**, **grupo de anúncios**, **termos de pesquisa**, **palavras-chave
-da rede de pesquisa**, **dispositivos**, **locais correspondentes** e
-**programação de anúncios diário e por hora**. O de **informações do leilão** é
-opcional — só existe quando a conta tem concorrência suficiente para o Google
-divulgar a comparação. Todos no mesmo período, ou os totais não fecham entre si.
+O pedido é analisado por gente, leva dias, e costuma voltar com pergunta por
+e-mail antes de ser aprovado. **A pergunta chega no e-mail de contato cadastrado
+na Central de API**, e o caso fica parado até alguém responder — sem prazo e sem
+cobrança. Vale usar um endereço de função, não o pessoal de quem configurou.
 
-```bash
-python3 scripts/importar-google-ads.py <diretório-dos-csv> > src/data/google-ads-snapshot.ts
-```
+O painel não tem plano B: falha da API sobe como em qualquer canal, a visão
+geral registra o erro e a tela do canal diz o que aconteceu. Houve um piso —
+os relatórios em CSV exportados da plataforma, congelados num período fixo —
+que serviu enquanto o token aguardava aprovação; ele saiu junto com a aprovação,
+porque número congelado servido no lugar de dado atual, sem nada na tela dizendo
+qual dos dois se está lendo, é pior que uma tela de erro.
 
-**O filtro de datas não move o snapshot, e não tem como mover.** Nenhum desses
-relatórios traz coluna de data: cada linha é um total do período. Recortar sete
-dias exigiria uma divisão que o dado não autoriza, então a tela declara o
-período do export em vez de fingir que filtra. A série é por hora do dia — o
-único recorte temporal que o export sustenta.
-
-Para tornar o filtro real seria preciso exportar com o segmento **Dia** ligado
-(Segmento → Tempo → Dia), o que dá uma linha por dia. Aí sim a série vira
-diária e o intervalo recorta de verdade.
+Para diagnosticar: `/api/diagnostico/google` traz `tokenDeDesenvolvedor`, que
+diz em uma linha se o acesso básico já saiu — e, quando a consulta falha havendo
+conta gerente configurada, refaz a mesma consulta sem o cabeçalho, o que separa
+"problema de credencial" de "problema de por onde estamos entrando".
 
 **Sobre a versão da API.** Deixe `GOOGLE_ADS_API_VERSION` vazio: o conector
 desce uma lista de candidatas e usa a primeira que responder.

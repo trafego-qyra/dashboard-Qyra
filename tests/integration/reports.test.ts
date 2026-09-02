@@ -164,27 +164,12 @@ describe("origem do dado na visão geral", () => {
     }
   });
 
-  /**
-   * Regressão: `snapshot` é dado REAL da conta, congelado no período do export.
-   * A regra era "todo canal ao vivo, senão demonstração", e com o Google Ads
-   * congelado a visão geral carimbava "Dados de demonstração" sobre
-   * investimento, sessões e conversões reais — desacreditando o próprio número
-   * certo, que é o pior erro que um painel pode cometer.
-   */
-  it("dado congelado é real: não vira demonstração", async () => {
-    const { origemDoConsolidado } = await import("@/server/reports");
-
-    expect(origemDoConsolidado(["live", "snapshot"])).toBe("snapshot");
-    expect(origemDoConsolidado(["snapshot"])).toBe("snapshot");
-    expect(origemDoConsolidado(["live", "live"])).toBe("live");
-  });
-
-  it("um canal fictício ainda contamina o total inteiro", async () => {
+  it("um canal fictício contamina o total inteiro", async () => {
     const { origemDoConsolidado } = await import("@/server/reports");
 
     // Número inventado somado a número real produz um total que não existe.
     expect(origemDoConsolidado(["live", "mock"])).toBe("mock");
-    expect(origemDoConsolidado(["snapshot", "mock"])).toBe("mock");
+    expect(origemDoConsolidado(["live", "live"])).toBe("live");
     // Sem canal nenhum não há o que declarar real.
     expect(origemDoConsolidado([])).toBe("mock");
   });

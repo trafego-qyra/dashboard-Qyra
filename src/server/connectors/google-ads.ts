@@ -6,8 +6,7 @@ import type { ChannelReport, DateRange, SeriesPoint } from "@/lib/types";
 import { mockGoogleAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { getGoogleAccessToken } from "@/server/lib/google-auth";
-import { descreverFalha, HttpError, httpJson } from "@/server/lib/http";
-import { buildGoogleAdsSnapshotReport } from "./google-ads-snapshot";
+import { HttpError, httpJson } from "@/server/lib/http";
 
 /**
  * Google Ads via REST (`searchStream` do GAQL).
@@ -114,68 +113,42 @@ async function runQuery(query: string): Promise<GoogleAdsRow[]> {
   throw ultimoErro;
 }
 
-/**
- * O token de desenvolvedor nasce com acesso de teste e só lê contas de teste.
- * Enquanto o Google não aprova o acesso básico, toda consulta à conta real
- * volta com este erro. É um estado esperado e temporário — não uma falha de
- * configuração — então a tela cai em demonstração com aviso, em vez de quebrar.
- */
-function ehTokenAguardandoAprovacao(erro: unknown): boolean {
-  const texto = erro instanceof Error ? erro.message + (erro as HttpError).body : "";
-  return /DEVELOPER_TOKEN_NOT_APPROVED|DEVELOPER_TOKEN_PROHIBITED/i.test(texto);
-}
-
 export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
-  // Sem credencial, o canal cai no snapshot exportado da plataforma: dado real
-  // da conta, preferível a número inventado. `QYRA_FORCE_MOCK` continua
-  // devolvendo a fixture, que é o que os testes e o ambiente de preview usam.
-  if (forceMock) {
+  // Mesmo caminho dos demais canais. Houve um desvio aqui — sem credencial, o
+  // Google Ads caía num export em CSV da plataforma, dado real congelado num
+  // período fixo, enquanto o token da API aguardava aprovação. O token saiu, e
+  // com ele a razão de o canal ser exceção.
+  if (forceMock || !getCredentials().googleAds) {
     const report = mockGoogleAds(range, new Date().toISOString());
-    report.notices = [avisoOperacao("Modo mock forçado por QYRA_FORCE_MOCK.")];
+    report.notices = [
+      avisoOperacao(
+        forceMock
+          ? "Modo mock forçado por QYRA_FORCE_MOCK."
+          : "Sem credencial do Google Ads — exibindo dados de demonstração.",
+      ),
+    ];
     return report;
-  }
-
-  if (!getCredentials().googleAds) {
-    return buildGoogleAdsSnapshotReport(range);
   }
 
   const where = `segments.date BETWEEN '${range.from}' AND '${range.to}'`;
 
-  let daily: GoogleAdsRow[];
-  let byCampaign: GoogleAdsRow[];
-
-  try {
-    [daily, byCampaign] = await Promise.all([
-      runQuery(
-        `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions
+  // Falha da API sobe, como em todo canal: `getAllReports` registra o erro, a
+  // visão geral segue sem este canal e a tela dele mostra o que aconteceu.
+  // Engolir o erro para servir outra coisa foi o que produziu meses de número
+  // congelado passando por atual.
+  const [daily, byCampaign] = await Promise.all([
+    runQuery(
+      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions
        FROM customer WHERE ${where}`,
-      ),
-      runQuery(
-        `SELECT campaign.name, campaign.advertising_channel_type, metrics.cost_micros,
+    ),
+    runQuery(
+      `SELECT campaign.name, campaign.advertising_channel_type, metrics.cost_micros,
               metrics.impressions, metrics.clicks, metrics.conversions
        FROM campaign WHERE ${where}`,
-      ),
-    ]);
-  } catch (erro) {
-    // Este canal tem o export da plataforma como piso: dado real da conta, já
-    // conferido. Derrubar a tela por erro de API seria trocar dado bom por
-    // nenhum dado — e é numa reunião que a tela costuma ser aberta.
-    const report = buildGoogleAdsSnapshotReport(range);
-    report.notices = [
-      // Operação: instrução de token e detalhe de erro não são assunto de quem
-      // lê o relatório. O que interessa ao cliente — que os números vêm do
-      // export, e de que período — já está no aviso do próprio snapshot.
-      avisoOperacao(
-        ehTokenAguardandoAprovacao(erro)
-          ? "O token de desenvolvedor do Google Ads ainda está com acesso de teste, que não lê contas de produção. Solicite o acesso básico na Central de API da conta gerente — o token não muda, só o nível de acesso."
-          : `A API do Google Ads não respondeu, então os números abaixo vêm do export da plataforma. Detalhe técnico: ${descreverFalha(erro)}`,
-      ),
-      ...report.notices,
-    ];
-    return report;
-  }
+    ),
+  ]);
 
   const byDate = new Map<
     string,

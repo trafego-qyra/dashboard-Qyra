@@ -439,54 +439,15 @@ describe("Orgânico", () => {
   });
 });
 
-describe("Google Ads — token aguardando aprovação", () => {
-  it("cai em demonstração com aviso, em vez de quebrar a tela", async () => {
-    await withCredentials({
-      ...GOOGLE_OAUTH,
-      GOOGLE_ADS_DEVELOPER_TOKEN: "token-de-teste",
-      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
-    });
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("oauth2.googleapis.com")) {
-          return new Response(JSON.stringify(TOKEN_RESPONSE), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        // Resposta real do Google quando o token ainda é de teste.
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: 403,
-              status: "PERMISSION_DENIED",
-              details: [
-                { errors: [{ errorCode: { authorizationError: "DEVELOPER_TOKEN_NOT_APPROVED" } }] },
-              ],
-            },
-          }),
-          { status: 403, statusText: "Forbidden", headers: { "content-type": "application/json" } },
-        );
-      }),
-    );
-
-    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
-
-    // Cai no snapshot exportado da plataforma — dado real da conta, preferível
-    // a número inventado enquanto a API não responde.
-    expect(report.source).toBe("snapshot");
-    expect(report.notices[0].text).toMatch(/acesso de teste/i);
-    expect(report.periodLabel).toBeTruthy();
-    // O relatório continua completo: a tela renderiza normalmente, com aviso.
-    expect(report.kpis.length).toBeGreaterThan(0);
-    expect(report.series.length).toBeGreaterThan(0);
-  });
-
-  it("falha genérica da API também cai no snapshot, mas o aviso diz o que houve", async () => {
+describe("Google Ads — quando a API recusa", () => {
+  /**
+   * Este canal teve, por meses, um export em CSV como piso: erro de API caía
+   * nele em vez de derrubar a tela. Era certo enquanto o token da API aguardava
+   * aprovação. Com o token liberado, o piso virou risco — número congelado
+   * servido no lugar de dado atual, sem nada na tela dizendo qual dos dois se
+   * está lendo.
+   */
+  it("propaga a falha em vez de servir outro número no lugar", async () => {
     await withCredentials({
       ...GOOGLE_OAUTH,
       GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
@@ -512,22 +473,23 @@ describe("Google Ads — token aguardando aprovação", () => {
     );
 
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
 
-    // Este canal tem export conferido da plataforma como piso. Derrubar a tela
-    // por erro de API trocaria dado real por nenhum dado — e foi exatamente o
-    // que aconteceu em produção: `/google-ads` virou "não foi possível
-    // carregar" com o snapshot pronto e sem uso.
-    expect(report.source).toBe("snapshot");
-    expect(report.kpis.length).toBeGreaterThan(0);
-
-    // O piso não pode virar disfarce: a falha precisa aparecer na tela.
-    expect(report.notices[0].text).toMatch(/não respondeu/i);
-    expect(report.notices[0].text).toMatch(/Customer not found/);
-    expect(report.notices[0].text).not.toMatch(/acesso de teste/i);
+    // A visão geral registra o erro e segue sem o canal; a tela do canal mostra
+    // o que aconteceu. Nenhuma das duas mostra um número que não é o pedido.
+    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow(/404/);
   });
 
-  it("não vaza segredo no aviso de falha", async () => {
+  it("sem credencial, cai em demonstração — como todo canal", async () => {
+    await withCredentials({});
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    expect(report.source).toBe("mock");
+    expect(report.notices[0].text).toMatch(/demonstração/i);
+  });
+
+  it("não vaza segredo no erro que chega ao consolidado", async () => {
     await withCredentials({
       ...GOOGLE_OAUTH,
       GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
@@ -558,12 +520,14 @@ describe("Google Ads — token aguardando aprovação", () => {
       }),
     );
 
-    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
+    const { getAllReports } = await import("@/server/reports");
+    const falha = (await getAllReports(RANGE)).find((r) => r.channel === "google-ads");
 
-    expect(report.source).toBe("snapshot");
-    expect(report.notices[0].text).not.toMatch(/segredo-do-cliente/);
-    expect(report.notices[0].text).toMatch(/oculto/);
+    // O erro do canal vira aviso de operação na visão geral. Sem redação nesse
+    // caminho, o segredo apareceria numa tela.
+    expect(falha?.error).toBeTruthy();
+    expect(falha?.error).not.toMatch(/segredo-do-cliente/);
+    expect(falha?.error).toMatch(/oculto/);
   });
 });
 

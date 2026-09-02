@@ -114,25 +114,26 @@ describe("versão da API do Google Ads", () => {
     );
 
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
+    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow(/403/);
 
-    // Cai no snapshot, como qualquer falha — mas sem varrer a lista: insistir
-    // em outra versão transformaria "sem permissão" em confusão.
-    expect(report.source).toBe("snapshot");
+    // Sem varrer a lista: insistir em outra versão transformaria "sem
+    // permissão" em confusão, e gastaria três requisições para chegar ao mesmo
+    // erro.
     const versoesTocadas = new Set(
       urls.map((u) => u.match(/googleapis\.com\/(v\d+)\//)?.[1]).filter(Boolean),
     );
     expect(versoesTocadas.size).toBe(1);
   });
 
-  it("nenhuma versão viva cai no snapshot com aviso, não derruba a tela", async () => {
+  it("nenhuma versão viva também propaga, em vez de servir outro número", async () => {
     await configurar(CREDENCIAIS);
     vi.stubGlobal("fetch", googleComVersao("v99", []));
 
     const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
 
-    expect(report.source).toBe("snapshot");
-    expect(report.kpis.length).toBeGreaterThan(0);
+    // Versão aposentada responde 404 com página HTML, não erro de API. A tela
+    // precisa dizer que falhou — servir número de outra fonte esconderia
+    // justamente o sintoma que aponta para a lista de versões envelhecida.
+    await expect(fetchGoogleAdsReport(RANGE)).rejects.toThrow();
   });
 });
