@@ -320,8 +320,63 @@ describe("Google Ads", () => {
     expect(report.kpis.find((k) => k.key === "cost")?.value).toBe(2);
     expect(report.kpis.find((k) => k.key === "conversions")?.value).toBe(3);
     // As duas linhas da mesma campanha viram uma só na tabela.
-    expect(report.tables[0].rows).toHaveLength(1);
-    expect(report.tables[0].rows[0].cost).toBe(2);
+    const campanhas = report.tables.find((t) => t.title === "Campanhas");
+    expect(campanhas?.rows).toHaveLength(1);
+    expect(campanhas?.rows[0].custo).toBe(2);
+    // Derivadas saem dos totais, nunca da média das médias que a API devolve.
+    expect(campanhas?.rows[0].ctr).toBeCloseTo(15 / 150, 6);
+  });
+
+  it("traz o relatório inteiro, não só campanhas", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+    mockFetch((url) => {
+      if (url.includes("oauth2.googleapis.com")) return TOKEN_RESPONSE;
+      if (url.includes("searchStream")) return [{ results: [] }];
+      return {};
+    });
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    // O canal foi servido por um export em CSV com oito tabelas enquanto o
+    // token da API aguardava aprovação. Ao vivo ele precisa entregar as mesmas
+    // perguntas — do contrário a aprovação teria piorado o painel.
+    expect(report.tables.map((t) => t.title)).toEqual([
+      "Campanhas",
+      "Grupos de anúncios",
+      "Termos de pesquisa",
+      "Palavras-chave",
+      "Dispositivos",
+      "Desempenho por dia da semana",
+      "Locais",
+    ]);
+  });
+
+  it("diz que o leilão não vem por API, em vez de omitir em silêncio", async () => {
+    await withCredentials({
+      ...GOOGLE_OAUTH,
+      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
+      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
+    });
+    mockFetch((url) => {
+      if (url.includes("oauth2.googleapis.com")) return TOKEN_RESPONSE;
+      if (url.includes("searchStream")) return [{ results: [] }];
+      return {};
+    });
+
+    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
+    const report = await fetchGoogleAdsReport(RANGE);
+
+    // A oitava tabela do export não tem equivalente na API — é dado exclusivo
+    // da interface. Omitir sem dizer deixaria quem procura achando que o painel
+    // esqueceu.
+    const aviso = report.notices.find((n) => /leilão/i.test(n.text));
+    expect(aviso).toBeTruthy();
+    expect(aviso?.audience).toBe("cliente");
   });
 
   it("envia developer-token e login-customer-id sem hífen", async () => {
