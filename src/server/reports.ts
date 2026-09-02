@@ -15,6 +15,7 @@ import type {
   SeriesPoint,
 } from "@/lib/types";
 import { cached } from "@/server/lib/cache";
+import { descreverFalha } from "@/server/lib/http";
 import { fetchClarityResumo } from "./connectors/clarity";
 import { fetchGa4Report } from "./connectors/ga4";
 import { fetchGoogleAdsReport } from "./connectors/google-ads";
@@ -106,12 +107,6 @@ export async function getChannelReport(
   const report = await cached(cacheKey(channel, range), () => FETCHERS[channel](range));
   if (!compare) return report;
 
-  // Relatório de período fixo não tem janela anterior: comparar o export com
-  // ele mesmo devolve 0% e a tela exibe "estável", que sugere uma medição de
-  // estabilidade que não existe. Sem comparação, o indicador diz "sem base" —
-  // que é a verdade.
-  if (report.source === "snapshot") return report;
-
   try {
     const prevRange = previousRange(range);
     const previous = await cached(cacheKey(channel, prevRange), () => FETCHERS[channel](prevRange));
@@ -138,7 +133,11 @@ export async function getAllReports(range: DateRange): Promise<ChannelResult[]> 
         return {
           channel: id,
           report: null,
-          error: error instanceof Error ? error.message : "Falha desconhecida",
+          // `descreverFalha` e não `error.message`: o corpo da resposta explica
+          // o que houve, e as plataformas ecoam a requisição no erro — a
+          // requisição leva credencial. A redação mora ali para que nenhum
+          // caminho de erro precise lembrar dela.
+          error: descreverFalha(error),
         };
       }
     }),
@@ -149,22 +148,19 @@ export async function getAllReports(range: DateRange): Promise<ChannelResult[]> 
 /**
  * De onde vem o consolidado, dadas as origens de cada canal.
  *
- * As três origens não têm o mesmo peso. `mock` é número inventado, e somar isso
- * a dado real produz um total que não existe — basta um canal assim para a tela
- * inteira precisar avisar. `snapshot` é dado REAL da conta, só que congelado no
- * período do export: some com honestidade num total, desde que o rótulo diga
- * que parte do período é fixa.
+ * `mock` é número inventado, e somar isso a dado real produz um total que não
+ * existe — basta um canal assim para a tela inteira precisar avisar.
  *
- * A regra anterior era "todo canal ao vivo, senão demonstração", e tratava
- * snapshot como se fosse invenção. Resultado: com o Google Ads congelado, a
- * visão geral carimbava "Dados de demonstração" sobre investimento, sessões e
- * conversões reais — o pior erro que um painel pode cometer, que é desacreditar
- * o próprio número certo.
+ * Houve uma terceira origem aqui, `snapshot`, e ela custou um erro caro: a
+ * regra era "todo canal ao vivo, senão demonstração", e o snapshot caía no
+ * "senão". Com o Google Ads congelado, a visão geral carimbava "Dados de
+ * demonstração" sobre investimento e conversões reais — o pior erro que um
+ * painel pode cometer, que é desacreditar o próprio número certo. A origem saiu
+ * junto com o export; a lição fica.
  */
 export function origemDoConsolidado(origens: DataSource[]): DataSource {
   if (origens.length === 0) return "mock";
-  if (origens.includes("mock")) return "mock";
-  return origens.includes("snapshot") ? "snapshot" : "live";
+  return origens.includes("mock") ? "mock" : "live";
 }
 
 function pickTotal(report: ChannelReport, keys: string[]): number {
@@ -182,10 +178,7 @@ async function collectTotals(range: DateRange) {
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label:
-        r.report.source === "snapshot"
-          ? `${getChannel(r.channel).label} · período fixo`
-          : getChannel(r.channel).label,
+      label: getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
       source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
@@ -231,10 +224,7 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
     .filter((r): r is ChannelResult & { report: ChannelReport } => r.report !== null)
     .map((r) => ({
       channel: r.channel,
-      label:
-        r.report.source === "snapshot"
-          ? `${getChannel(r.channel).label} · período fixo`
-          : getChannel(r.channel).label,
+      label: getChannel(r.channel).label,
       slot: getChannel(r.channel).slot,
       source: r.report.source,
       investment: pickTotal(r.report, ["spend", "cost"]),
@@ -244,13 +234,12 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
       sessions: pickTotal(r.report, ["sessions", "reach"]),
     }));
 
-  // Canal em período fixo não entra no consolidado: somar 14 dias de um export
-  // com 28 dias de outro canal produz um total que não corresponde a intervalo
-  // nenhum. Ele continua visível em `byChannel`, com a origem declarada.
-  const noPeriodo = byChannel.filter((c) => c.source !== "snapshot");
-
-  const investment = noPeriodo.reduce((a, c) => a + c.investment, 0);
-  const paidConversions = noPeriodo
+  // Todos os canais entram no consolidado. Antes o Google Ads ficava de fora,
+  // porque somar 14 dias de um export com 28 dias de outro canal produz um
+  // total que não corresponde a intervalo nenhum — com a API ao vivo, todos
+  // respondem ao mesmo filtro e a soma volta a fazer sentido.
+  const investment = byChannel.reduce((a, c) => a + c.investment, 0);
+  const paidConversions = byChannel
     .filter((c) => c.channel === "meta-ads" || c.channel === "google-ads")
     .reduce((a, c) => a + c.conversions, 0);
 
@@ -282,9 +271,6 @@ export async function getOverviewReport(range: DateRange): Promise<OverviewRepor
   const dateIndex = new Map<string, SeriesPoint>();
   for (const result of results) {
     if (!result.report) continue;
-
-    // Período fixo fica fora da série pelo mesmo motivo do KPI.
-    if (result.report.source === "snapshot") continue;
 
     const ehPago = result.channel === "meta-ads" || result.channel === "google-ads";
 

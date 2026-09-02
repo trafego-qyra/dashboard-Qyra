@@ -20,12 +20,15 @@ export type ChannelId = (typeof CHANNEL_IDS)[number];
 /**
  * De onde veio o número.
  *
- * `snapshot` é dado REAL exportado da plataforma, congelado num período fixo —
- * usado quando a API ainda não está liberada. Precisa ser distinto de `mock`
- * (número inventado) e de `live` (período acompanha o filtro), porque as três
- * situações pedem leituras diferentes de quem olha a tela.
+ * `live` acompanha o filtro de datas; `mock` é número inventado, para quando
+ * falta credencial.
+ *
+ * Houve uma terceira, `snapshot`: dado real exportado da plataforma e congelado
+ * num período fixo, que serviu o Google Ads enquanto o token da API aguardava
+ * aprovação. Saiu quando a API foi liberada — origem que nenhum canal produz é
+ * peso morto que todo código de consolidação ainda precisa considerar.
  */
-export type DataSource = "live" | "mock" | "snapshot";
+export type DataSource = "live" | "mock";
 
 /** Como um número deve ser renderizado. A UI nunca decide formato sozinha. */
 export type MetricFormat = "currency" | "integer" | "decimal" | "percent" | "ratio" | "duration";
@@ -270,8 +273,6 @@ export interface ChannelReport {
    * origem só fornece agregado por hora do dia, sem quebra por data.
    */
   seriesAxis?: "date" | "hour";
-  /** Período real dos dados, quando difere do intervalo pedido. */
-  periodLabel?: string;
   tables: TableBlock[];
   /** O funil comercial em figura, quando o canal tem etapas ordenadas. */
   funnel?: FunnelBlock;

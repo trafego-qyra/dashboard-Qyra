@@ -34,7 +34,6 @@ export function ChannelView({
         title={report.label}
         description={description}
         source={report.source}
-        periodLabel={report.periodLabel}
         actions={actions}
       />
 
