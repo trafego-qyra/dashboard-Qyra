@@ -2,8 +2,15 @@ import type { Notice } from "./types";
 
 /**
  * Aviso que ajuda a ler o relatório: por que um canal está fora do
- * consolidado, por que o filtro de data não move um período fixo. Vai para a
- * tela.
+ * consolidado, por que um número não pode ser comparado. Vai para a tela.
+ *
+ * **Texto novo aqui precisa de aprovação de quem opera o painel.** A tela é
+ * lida pelo cliente, e o que aparece nela é decisão de quem apresenta — não do
+ * conector. Um aviso explicando limitação de API foi publicado sem passar por
+ * essa porta e teve de ser removido depois de já estar no ar.
+ *
+ * Limitação técnica se registra em comentário e em `docs/integracoes.md`. Só
+ * vira aviso na tela quando alguém pedir.
  */
 export function avisoCliente(text: string): Notice {
   return { text, audience: "cliente" };

@@ -1,4 +1,4 @@
-import { avisoCliente, avisoOperacao } from "@/lib/avisos";
+import { avisoOperacao } from "@/lib/avisos";
 import "server-only";
 
 import { eachDay } from "@/lib/date-range";
@@ -502,14 +502,12 @@ export async function fetchGoogleAdsReport(range: DateRange): Promise<ChannelRep
         rows: locais.visiveis,
       },
     ],
-    // Informações de leilão não entram: o Google não expõe esse relatório na
-    // API, nem por GAQL nem por recurso próprio — é dado exclusivo da
-    // interface. Fingir que existe seria inventar; omitir sem dizer deixaria
-    // quem procura achando que o painel esqueceu.
-    notices: [
-      avisoCliente(
-        "O relatório de informações do leilão — quem mais aparece nas mesmas buscas — não está no painel porque o Google não o disponibiliza por API. Ele existe apenas na interface do Google Ads, em Insights → Relatórios → Informações do leilão.",
-      ),
-    ],
+    // Informações de leilão não entram: o Google não expõe esse relatório na API,
+    // nem por GAQL nem por recurso próprio — é dado exclusivo da interface.
+    //
+    // Houve um aviso na tela explicando isso, e ele saiu a pedido: a tela é do
+    // cliente, e o que aparece nela é decisão de quem opera, não do conector.
+    // A limitação fica registrada aqui e em `docs/integracoes.md`.
+    notices: [],
   };
 }

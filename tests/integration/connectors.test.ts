@@ -356,29 +356,6 @@ describe("Google Ads", () => {
     ]);
   });
 
-  it("diz que o leilão não vem por API, em vez de omitir em silêncio", async () => {
-    await withCredentials({
-      ...GOOGLE_OAUTH,
-      GOOGLE_ADS_DEVELOPER_TOKEN: "dev",
-      GOOGLE_ADS_CUSTOMER_ID: "123-456-7890",
-    });
-    mockFetch((url) => {
-      if (url.includes("oauth2.googleapis.com")) return TOKEN_RESPONSE;
-      if (url.includes("searchStream")) return [{ results: [] }];
-      return {};
-    });
-
-    const { fetchGoogleAdsReport } = await import("@/server/connectors/google-ads");
-    const report = await fetchGoogleAdsReport(RANGE);
-
-    // A oitava tabela do export não tem equivalente na API — é dado exclusivo
-    // da interface. Omitir sem dizer deixaria quem procura achando que o painel
-    // esqueceu.
-    const aviso = report.notices.find((n) => /leilão/i.test(n.text));
-    expect(aviso).toBeTruthy();
-    expect(aviso?.audience).toBe("cliente");
-  });
-
   it("envia developer-token e login-customer-id sem hífen", async () => {
     await withCredentials({
       ...GOOGLE_OAUTH,
