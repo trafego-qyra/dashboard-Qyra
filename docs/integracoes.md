@@ -130,6 +130,17 @@ GOOGLE_ADS_API_VERSION=                      # opcional, ver abaixo
 
 Os hífens são removidos pelo conector — pode colar como aparece na interface.
 
+### O que a API não entrega
+
+**Informações de leilão.** O relatório que mostra quem mais aparece nas mesmas
+buscas não existe na API do Google Ads — nem por GAQL nem por recurso próprio.
+Consultas a `auction_insight_*` respondem `BAD_RESOURCE_TYPE_IN_FROM_CLAUSE`, e
+o programa de acesso por lista está fechado para novas contas. É dado exclusivo
+da interface: Insights → Relatórios → Informações do leilão.
+
+Não há aviso disso na tela, por decisão de quem opera — a limitação fica
+registrada aqui.
+
 ### O token de desenvolvedor
 
 O token nasce com acesso *Test* e só lê contas de teste. Para ler a conta de

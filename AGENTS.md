@@ -145,6 +145,25 @@ recuperação, e funcionamento em tema claro e escuro.
 
 ---
 
+## 5.1 Texto que aparece na tela
+
+**Nenhuma mensagem nova chega à tela do painel sem aprovação de quem opera.**
+Vale para aviso em faixa, estado vazio, rótulo de selo e qualquer texto que o
+cliente leia — não só para os que explicam erro.
+
+A tela é apresentada a clientes e à diretoria. Quem decide o que aparece ali é
+quem apresenta, não quem escreve o conector. Um aviso explicando uma limitação
+da API do Google Ads foi publicado por conta própria e teve de ser removido
+depois de já estar no ar.
+
+Limitação técnica, motivo de um número faltar, detalhe de integração: registre
+em comentário no código e em `docs/integracoes.md`. O diagnóstico
+(`/api/diagnostico/*`, `/api/health`) é o lugar de encanamento — ele já é
+restrito a quem opera. Só vira texto na tela quando alguém pedir.
+
+Em código, isso é a diferença entre `avisoOperacao` (não vai para a tela) e
+`avisoCliente` (vai). Toda chamada nova a `avisoCliente` precisa de aprovação.
+
 ## 6. Segurança e operação
 
 - Segredo só em `src/server/**`, que importa `server-only`. Se um módulo de
