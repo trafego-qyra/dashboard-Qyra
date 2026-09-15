@@ -177,3 +177,18 @@ recuperação, e funcionamento em tema claro e escuro.
 | `docs/legal/` | Termos de uso e política de privacidade (**pendentes de aprovação jurídica**) |
 
 Mudou o comportamento? Atualize a doc no mesmo PR.
+
+---
+
+## 8. Escrita
+
+Nada escrito neste projeto usa traço ou travessão como pontuação. Vale para
+tudo: texto de interface, documentação, mensagem de commit, descrição de PR,
+comentário de código, roteiro de criativo e resposta em conversa.
+
+No lugar deles, use vírgula, dois pontos, parênteses ou ponto final. Uma frase
+que só se sustenta com travessão é uma frase que pede para virar duas.
+
+A regra é sobre pontuação. Continua valendo o traço que faz parte do nome da
+coisa: identificador de código, nome de arquivo, nome de branch, propriedade de
+CSS e hífen de palavra composta da ortografia.
