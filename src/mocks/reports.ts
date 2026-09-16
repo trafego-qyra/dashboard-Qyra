@@ -949,6 +949,41 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
           };
         }),
       },
+      {
+        title: "Leads por cidade",
+        description:
+          "De onde vieram os negócios criados no período, pela cidade registrada no contato. As dez primeiras à vista; as demais, a um clique.",
+        columns: [
+          { key: "cidade", label: "Cidade", align: "left" },
+          { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+        ],
+        initialRows: 11,
+        // Mesma disciplina das outras tabelas: as fatias somam 1 sobre os leads
+        // do período. Demonstração que não fecha com o topo da tela lê como
+        // erro de conta, e não como dado fictício.
+        //
+        // A praça é a real da clínica — Grande São Paulo concentrada, capitais
+        // e interior paulista na cauda. Cidade inventada faria a demonstração
+        // sugerir cobertura que não existe.
+        rows: (
+          [
+            ["Sem cidade registrada", 0.09],
+            ["São Paulo", 0.28],
+            ["Campinas", 0.1],
+            ["Rio de Janeiro", 0.08],
+            ["Belo Horizonte", 0.07],
+            ["Guarulhos", 0.06],
+            ["Santo André", 0.05],
+            ["Osasco", 0.05],
+            ["Curitiba", 0.04],
+            ["São Bernardo do Campo", 0.04],
+            ["Ribeirão Preto", 0.04],
+            ["Santos", 0.04],
+            ["Sorocaba", 0.03],
+            ["Niterói", 0.03],
+          ] as Array<[string, number]>
+        ).map(([cidade, fatia]) => ({ cidade, negocios: Math.round(leads * fatia) })),
+      },
     ],
     notices: [],
   };

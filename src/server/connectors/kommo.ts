@@ -37,7 +37,43 @@ const POR_PAGINA = 250;
 /** Trava de segurança: 20 páginas são 5.000 negócios num período. */
 const MAX_PAGINAS = 20;
 
-interface LeadDoKommo {
+/**
+ * Ids de contato por consulta. Cem cabem numa URL de uns 2 KB — o dobro disso
+ * começa a esbarrar no limite de tamanho de URL dos servidores no caminho.
+ */
+const CONTATOS_POR_LOTE = 100;
+
+/** Trava de segurança: 30 lotes são 3.000 contatos numa leitura. */
+const MAX_LOTES_DE_CONTATO = 30;
+
+/**
+ * Como a cidade pode estar escrita no cadastro do contato.
+ *
+ * Campo criado à mão não tem `field_code`, e o nome é escolha de quem montou a
+ * conta. A conta da clínica usa "Cidade"; as demais grafias estão aqui para o
+ * dia em que alguém renomear ou uma segunda conta entrar no painel.
+ */
+const NOMES_DE_CIDADE = ["cidade", "city", "município", "municipio", "localidade"];
+
+/** A linha que mede o buraco do cadastro, e não um lugar. */
+const SEM_CIDADE = "Sem cidade registrada";
+
+/**
+ * Qualquer registro do Kommo que carregue campo personalizado.
+ *
+ * Negócio e contato guardam os campos na mesma forma, e parte do que o painel
+ * precisa mora de cada lado — a UTM no negócio, a cidade no contato. Sem o tipo
+ * compartilhado, `campo()` só saberia ler metade da conta.
+ */
+interface ComCamposPersonalizados {
+  custom_fields_values?: Array<{
+    field_name?: string;
+    field_code?: string;
+    values?: Array<{ value?: string | number | boolean }>;
+  }> | null;
+}
+
+interface LeadDoKommo extends ComCamposPersonalizados {
   id: number;
   name?: string;
   price?: number;
@@ -47,26 +83,33 @@ interface LeadDoKommo {
   created_at?: number;
   closed_at?: number;
   responsible_user_id?: number;
-  custom_fields_values?: Array<{
-    field_name?: string;
-    field_code?: string;
-    values?: Array<{ value?: string | number | boolean }>;
-  }> | null;
   /**
    * O motivo de perda nativo do Kommo, quando pedido com `with=loss_reason`.
    *
    * A documentação mostra ora um objeto, ora uma lista de um item — e as duas
    * formas aparecem em contas reais. Aceitar as duas custa uma linha; supor a
    * errada faz a tabela de perdas nascer vazia sem erro nenhum.
+   *
+   * Os contatos vêm com `with=contacts`, e **só como id**: campo personalizado
+   * de contato exige uma segunda consulta a `/contacts`.
    */
   _embedded?: {
     loss_reason?: { name?: string } | Array<{ name?: string }> | null;
+    contacts?: Array<{ id: number; is_main?: boolean }> | null;
   } | null;
+}
+
+interface ContatoDoKommo extends ComCamposPersonalizados {
+  id: number;
 }
 
 interface RespostaDeLeads {
   _embedded?: { leads?: LeadDoKommo[] };
   _links?: { next?: { href?: string } };
+}
+
+interface RespostaDeContatos {
+  _embedded?: { contacts?: ContatoDoKommo[] };
 }
 
 interface RespostaDeFunis {
@@ -103,9 +146,9 @@ function paraDia(unix: number | undefined): string | null {
  * clínica criou à mão têm apenas `field_name`. Procurar pelos dois é o que faz
  * a UTM aparecer independentemente de como o campo entrou na conta.
  */
-function campo(lead: LeadDoKommo, nomes: string[]): string | null {
+function campo(registro: ComCamposPersonalizados, nomes: string[]): string | null {
   const procurados = nomes.map((n) => n.toLowerCase());
-  for (const item of lead.custom_fields_values ?? []) {
+  for (const item of registro.custom_fields_values ?? []) {
     const identificadores = [item.field_code, item.field_name]
       .filter((v): v is string => typeof v === "string")
       .map((v) => v.toLowerCase());
@@ -150,8 +193,9 @@ async function buscarLeads(range: DateRange, campoDeData: "created_at" | "closed
   // suporte com etapa de ganho entraria no faturamento sem ninguém notar.
   if (funil) url.searchParams.set("filter[pipeline_id]", funil);
   // Sem `with`, o motivo de perda não vem — e a tabela de perdas nasce vazia
-  // sem nenhum sinal de que faltou pedir.
-  url.searchParams.set("with", "loss_reason");
+  // sem nenhum sinal de que faltou pedir. `contacts` traz os ids que ligam o
+  // negócio ao cadastro onde a cidade mora.
+  url.searchParams.set("with", "loss_reason,contacts");
   url.searchParams.set("limit", String(POR_PAGINA));
 
   const todos: LeadDoKommo[] = [];
@@ -208,6 +252,60 @@ async function contarLeadsDeEntrada(range: DateRange): Promise<number> {
     // A área pode estar vazia (204) ou o escopo não cobrir: some da tabela.
     return 0;
   }
+}
+
+/**
+ * A cidade de cada contato, por id.
+ *
+ * `/leads` devolve apenas o **id** do contato, mesmo com `with=contacts`: campo
+ * personalizado de contato só vem por `/contacts`. Os ids vão filtrados em lote
+ * porque um a um seriam 250 requisições por página de negócios, numa API que
+ * aceita cerca de sete por segundo.
+ *
+ * Devolve `null` quando a consulta falha — e não um mapa vazio. Mapa vazio é
+ * indistinguível de "ninguém preencheu cidade", e faria a tela acusar o
+ * cadastro por um erro de rede.
+ */
+async function buscarCidades(leads: LeadDoKommo[]): Promise<Map<number, string> | null> {
+  const ids = [
+    ...new Set(
+      leads.flatMap((lead) =>
+        (lead._embedded?.contacts ?? [])
+          .map((contato) => contato.id)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ),
+  ];
+
+  const cidades = new Map<number, string>();
+  if (ids.length === 0) return cidades;
+
+  const teto = Math.min(ids.length, CONTATOS_POR_LOTE * MAX_LOTES_DE_CONTATO);
+
+  try {
+    // Em série, de propósito: disparar os lotes juntos estoura o limite de
+    // requisições do Kommo e volta 429 para todos eles de uma vez.
+    for (let inicio = 0; inicio < teto; inicio += CONTATOS_POR_LOTE) {
+      const url = new URL(`${baseDaApi()}/contacts`);
+      for (const id of ids.slice(inicio, inicio + CONTATOS_POR_LOTE)) {
+        url.searchParams.append("filter[id][]", String(id));
+      }
+      url.searchParams.set("limit", String(POR_PAGINA));
+
+      const resposta = await httpJson<RespostaDeContatos>(url.toString(), {
+        headers: autorizacao(),
+      });
+
+      for (const contato of resposta._embedded?.contacts ?? []) {
+        const cidade = campo(contato, NOMES_DE_CIDADE)?.trim();
+        if (cidade) cidades.set(contato.id, cidade);
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return cidades;
 }
 
 interface EtapaDoFunil {
@@ -347,6 +445,56 @@ function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBloc
         receita: Math.round(dados.receita * 100) / 100,
       }))
       .sort((a, b) => b.receita - a.receita || b.vendas - a.vendas),
+  };
+}
+
+/**
+ * De onde vêm os leads, pela cidade do contato.
+ *
+ * Responde a uma pergunta de mídia — onde concentrar verba, e até onde a área
+ * de cobertura precisa crescer. Conta **negócios criados** no período, que é a
+ * safra de entrada: é o ranking dos leads, não o das vendas fechadas.
+ *
+ * Daqui saem apenas cidade e contagem. O mesmo cadastro guarda nome, telefone,
+ * endereço e dado de saúde do paciente, e nada disso tem o que fazer numa tela
+ * de mídia — agregar é o que torna esta tabela publicável.
+ */
+function montarLocalizacoes(criados: LeadDoKommo[], cidades: Map<number, string>): TableBlock {
+  const porCidade = new Map<string, number>();
+
+  for (const lead of criados) {
+    const contatos = lead._embedded?.contacts ?? [];
+    // O contato principal responde pelo negócio; sem marcação, o primeiro da
+    // lista. Somar os dois contatos de um mesmo negócio contaria o lead duas
+    // vezes, e o total da tabela deixaria de bater com o da tela.
+    const principal = contatos.find((contato) => contato.is_main) ?? contatos[0];
+    const cidade = (principal ? cidades.get(principal.id) : undefined) ?? SEM_CIDADE;
+    porCidade.set(cidade, (porCidade.get(cidade) ?? 0) + 1);
+  }
+
+  const linhas = [...porCidade.entries()].map(([cidade, negocios]) => ({ cidade, negocios }));
+  const semCidade = linhas.filter((linha) => linha.cidade === SEM_CIDADE);
+
+  return {
+    title: "Leads por cidade",
+    description:
+      "De onde vieram os negócios criados no período, pela cidade registrada no contato. As dez primeiras à vista; as demais, a um clique.",
+    columns: [
+      { key: "cidade", label: "Cidade", align: "left" },
+      { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+    ],
+    // Dez cidades à vista. A linha de cadastro incompleto não ocupa vaga no
+    // ranking — quem pediu o top 10 quer dez lugares, não nove e um buraco.
+    initialRows: semCidade.length > 0 ? 11 : 10,
+    rows: [
+      // Abre a tabela, como a fila de entrada abre o funil: é a medida do que
+      // falta preencher, e no fim da lista ninguém veria.
+      ...semCidade,
+      ...linhas
+        .filter((linha) => linha.cidade !== SEM_CIDADE)
+        // Desempate por nome para a ordem não variar entre duas leituras iguais.
+        .sort((a, b) => b.negocios - a.negocios || a.cidade.localeCompare(b.cidade, "pt-BR")),
+    ],
   };
 }
 
@@ -546,6 +694,10 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       contarLeadsDeEntrada(range),
     ]);
 
+    // Depois dos negócios, e não junto deles: os ids dos contatos só existem
+    // depois que a primeira consulta volta.
+    const cidades = await buscarCidades(criados);
+
     const leads = criados;
     const ganhos = fechados.filter((l) => l.status_id === GANHO);
     const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
@@ -620,6 +772,19 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       avisos.push(
         avisoOperacao(
           `${semMotivo} de ${perdidos.length} negócio(s) perdido(s) no período estão sem motivo registrado no Kommo. Sem o motivo não dá para separar a perda que volta da que fica arquivada.`,
+        ),
+      );
+    }
+    if (cidades === null) {
+      avisos.push(
+        avisoOperacao(
+          "Não foi possível ler os contatos do Kommo nesta leitura, então a tabela de leads por cidade ficou de fora. O resto do relatório não depende dela.",
+        ),
+      );
+    } else if (cidades.size === 0 && criados.length > 0) {
+      avisos.push(
+        avisoOperacao(
+          "Nenhum contato do Kommo traz cidade preenchida. Sem isso não dá para ranquear os leads por localização — é preciso o formulário ou a automação gravar a cidade no cadastro do contato.",
         ),
       );
     }
@@ -698,6 +863,10 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         montarFunil(criados, etapas, deEntrada),
         montarPerdas(perdidos),
         montarOrigens(criados, ganhos),
+        // Fora da lista quando não há cidade nenhuma: uma tabela de uma linha
+        // dizendo "Sem cidade registrada" ocupa a tela sem informar nada, e o
+        // aviso de operação já diz o que configurar.
+        ...(cidades && cidades.size > 0 ? [montarLocalizacoes(criados, cidades)] : []),
       ],
       notices: avisos,
     };

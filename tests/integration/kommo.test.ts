@@ -26,8 +26,35 @@ interface LeadFalso {
   created_at?: number;
   closed_at?: number;
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
-  /** O motivo de perda nativo do Kommo, como ele volta com `with=loss_reason`. */
-  _embedded?: { loss_reason?: { name?: string } | Array<{ name?: string }> };
+  /**
+   * O motivo de perda nativo do Kommo, como ele volta com `with=loss_reason`,
+   * e os contatos como voltam com `with=contacts`: **só o id**, que é o que
+   * obriga a segunda consulta.
+   */
+  _embedded?: {
+    loss_reason?: { name?: string } | Array<{ name?: string }>;
+    contacts?: Array<{ id: number; is_main?: boolean }>;
+  };
+}
+
+interface ContatoFalso {
+  id: number;
+  custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
+}
+
+/** Um negócio ligado a um contato, que é o formato que o ranking exige. */
+function leadComContato(id: number, contatoId: number, extras: Partial<LeadFalso> = {}): LeadFalso {
+  return {
+    id,
+    created_at: emSegundos("2026-02-10T09:00:00Z"),
+    _embedded: { contacts: [{ id: contatoId, is_main: true }] },
+    ...extras,
+  };
+}
+
+/** Um contato com a cidade preenchida, como a conta da clínica guarda. */
+function contatoEm(id: number, cidade: string): ContatoFalso {
+  return { id, custom_fields_values: [{ field_name: "Cidade", values: [{ value: cidade }] }] };
 }
 
 /**
@@ -40,9 +67,24 @@ interface LeadFalso {
 function kommo(
   leads: LeadFalso[],
   etapas: Array<{ id: number; name: string; sort?: number }> = [],
+  contatos: ContatoFalso[] = [],
+  contatosFalham = false,
 ) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/contacts")) {
+      if (contatosFalham) {
+        return new Response("indisponível", { status: 503 });
+      }
+      // Devolve só os ids pedidos, como a API faz: um dublê que devolvesse
+      // todos esconderia o dia em que o filtro parasse de ser montado.
+      const pedidos = new Set(new URL(url).searchParams.getAll("filter[id][]").map(Number));
+      return new Response(
+        JSON.stringify({ _embedded: { contacts: contatos.filter((c) => pedidos.has(c.id)) } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
 
     if (url.includes("/leads/pipelines")) {
       return new Response(
@@ -73,8 +115,10 @@ function kommo(
 async function relatorio(
   leads: LeadFalso[],
   etapas?: Array<{ id: number; name: string; sort?: number }>,
+  contatos?: ContatoFalso[],
+  contatosFalham?: boolean,
 ) {
-  const chamadas = kommo(leads, etapas);
+  const chamadas = kommo(leads, etapas, contatos, contatosFalham);
   vi.stubGlobal("fetch", chamadas);
   const { fetchVendasReport } = await import("@/server/connectors/kommo");
   return { report: await fetchVendasReport(RANGE), chamadas };
@@ -757,6 +801,167 @@ describe("vendas pelo Kommo", () => {
     // Sem a definição do funil no Kommo não há ordem — e funil fora de ordem
     // não é funil. Melhor não desenhar do que desenhar errado.
     expect(report.funnel).toBeUndefined();
+  });
+
+  it("agrupa os leads pela cidade do contato", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10), leadComContato(2, 11), leadComContato(3, 12)],
+      undefined,
+      [contatoEm(10, "São Paulo"), contatoEm(11, "Campinas"), contatoEm(12, "São Paulo")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // A cidade mora no contato, não no negócio: se o conector parasse de fazer
+    // a segunda consulta, esta tabela nasceria só com "Sem cidade registrada".
+    expect(cidades?.rows).toEqual([
+      { cidade: "São Paulo", negocios: 2 },
+      { cidade: "Campinas", negocios: 1 },
+    ]);
+  });
+
+  it("negócio sem cidade no contato entra na conta em vez de sumir", async () => {
+    const { report } = await relatorio(
+      [
+        leadComContato(1, 10),
+        leadComContato(2, 11),
+        { id: 3, created_at: emSegundos("2026-02-10T09:00:00Z") },
+      ],
+      undefined,
+      [contatoEm(10, "São Paulo")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Descartar o que não tem cidade faria a soma da tabela ficar menor que os
+    // negócios da tela, e ninguém saberia o tamanho do buraco no cadastro.
+    expect(cidades?.rows).toEqual([
+      { cidade: "Sem cidade registrada", negocios: 2 },
+      { cidade: "São Paulo", negocios: 1 },
+    ]);
+  });
+
+  it("não conta o mesmo negócio duas vezes quando ele tem dois contatos", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          created_at: emSegundos("2026-02-10T09:00:00Z"),
+          _embedded: {
+            contacts: [{ id: 10, is_main: true }, { id: 11 }],
+          },
+        },
+      ],
+      undefined,
+      [contatoEm(10, "São Paulo"), contatoEm(11, "Campinas")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Um negócio é um lead, em um lugar. O contato principal decide.
+    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", negocios: 1 }]);
+  });
+
+  it("mostra dez cidades antes do resto, mesmo com a linha de cadastro incompleto", async () => {
+    const nomes = [
+      "São Paulo",
+      "Campinas",
+      "Rio de Janeiro",
+      "Belo Horizonte",
+      "Guarulhos",
+      "Santo André",
+      "Osasco",
+      "Curitiba",
+      "Santos",
+      "Sorocaba",
+      "Niterói",
+      "Recife",
+    ];
+
+    const { report } = await relatorio(
+      [
+        ...nomes.map((_, i) => leadComContato(i + 1, i + 100)),
+        { id: 999, created_at: emSegundos("2026-02-10T09:00:00Z") },
+      ],
+      undefined,
+      nomes.map((nome, i) => contatoEm(i + 100, nome)),
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Quem pediu o top 10 quer dez lugares. A linha de cadastro incompleto abre
+    // a tabela mas não ocupa vaga no ranking, então a janela abre em onze.
+    expect(cidades?.initialRows).toBe(11);
+    expect(cidades?.rows[0]).toEqual({ cidade: "Sem cidade registrada", negocios: 1 });
+    expect(cidades?.rows.slice(1, 11).map((linha) => linha.cidade)).toHaveLength(10);
+  });
+
+  it("pede os contatos junto dos negócios, e busca os cadastros em lote", async () => {
+    const { chamadas } = await relatorio(
+      [leadComContato(1, 10), leadComContato(2, 11), leadComContato(3, 12)],
+      undefined,
+      [contatoEm(10, "São Paulo"), contatoEm(11, "Campinas"), contatoEm(12, "Santos")],
+    );
+
+    const enderecos = chamadas.mock.calls.map(([entrada]) => String(entrada));
+
+    // Sem `with=contacts` o negócio volta sem o id do contato, e a tabela
+    // nasceria vazia sem nenhum sinal de que faltou pedir.
+    expect(enderecos.some((url) => url.includes("with=loss_reason%2Ccontacts"))).toBe(true);
+
+    // Um contato por requisição seriam 250 chamadas por página de negócios,
+    // numa API que aceita cerca de sete por segundo.
+    const consultasDeContato = enderecos.filter((url) => url.includes("/contacts"));
+    expect(consultasDeContato).toHaveLength(1);
+    expect(consultasDeContato[0].match(/filter%5Bid%5D%5B%5D=/g)).toHaveLength(3);
+  });
+
+  it("sem cidade em contato nenhum, avisa em vez de mostrar uma tabela vazia", async () => {
+    const { report } = await relatorio([leadComContato(1, 10)], undefined, [{ id: 10 }]);
+
+    expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(false);
+    expect(report.notices.some((n) => /cidade preenchida/i.test(n.text))).toBe(true);
+  });
+
+  it("falha ao ler os contatos não derruba o resto do relatório", async () => {
+    const { report } = await relatorio(
+      [
+        leadComContato(1, 10, {
+          price: 900,
+          status_id: GANHO,
+          closed_at: emSegundos("2026-02-12T10:00:00Z"),
+        }),
+      ],
+      undefined,
+      [contatoEm(10, "São Paulo")],
+      true,
+    );
+
+    // A receita é o número pelo qual a clínica decide orçamento. Perdê-la
+    // porque uma tabela acessória falhou seria trocar o essencial pelo extra.
+    expect(kpi(report, "receita")).toBe(900);
+    expect(report.source).toBe("live");
+    expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(false);
+    expect(report.notices.some((n) => /não foi possível ler os contatos/i.test(n.text))).toBe(true);
+  });
+
+  it("não leva dado pessoal do contato para a tela", async () => {
+    const { report } = await relatorio([leadComContato(1, 10)], undefined, [
+      {
+        id: 10,
+        custom_fields_values: [
+          { field_name: "Cidade", values: [{ value: "São Paulo" }] },
+          { field_name: "Endereço", values: [{ value: "Rua Bergamota, 322" }] },
+          { field_name: "Peso Atual", values: [{ value: "64" }] },
+        ],
+      },
+    ]);
+
+    // O mesmo cadastro guarda endereço e dado de saúde do paciente. A tabela é
+    // publicável porque agrega — e só a cidade sai de lá.
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+    expect(cidades?.columns.map((c) => c.key)).toEqual(["cidade", "negocios"]);
+    expect(JSON.stringify(cidades)).not.toMatch(/Bergamota|64/);
   });
 
   it("sem credencial, cai em demonstração em vez de quebrar", async () => {
