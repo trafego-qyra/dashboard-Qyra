@@ -311,7 +311,8 @@ Só leitura, e só o necessário:
 - **funis e etapas** (`/api/v4/leads/pipelines`), para o funil sair com o nome
   das etapas em vez de números;
 - **contatos** (`/api/v4/contacts`), e deles **apenas a cidade** — é o que
-  alimenta o ranking de localização.
+  alimenta o ranking de localização. A UF vem junto do próprio negócio, como
+  tag, sem consulta extra.
 
 O Kommo herdou do amoCRM dois identificadores fixos, iguais em toda conta:
 **142 é venda ganha, 143 é perdido**. As demais etapas são as que a clínica
@@ -391,6 +392,22 @@ possível (o campo existe), mas seria outra conversa sobre granularidade.
 Quando nenhum contato tem cidade, a tabela some e o aviso diz o que configurar —
 para quem opera, não para o cliente. Se a consulta de contatos falhar, o
 relatório continua inteiro e só perde essa tabela: receita não depende dela.
+
+#### O estado vem da tag, e é de graça
+
+A UF é marcada como **tag do negócio** (`SP`, `RJ`), à mão pelo comercial. Ao
+contrário da cidade, a tag vem embutida em `/leads` — **nenhuma consulta a
+mais** — e vira a coluna Estado da mesma tabela. Ordenar por ela agrupa as
+cidades de cada UF, que é a leitura por região sem tabela nova.
+
+Tag é campo livre: quem opera o CRM marca lembrete, nome de campanha, o que for.
+Só as **27 siglas de unidade federativa** contam como estado; qualquer outra
+etiqueta é ignorada.
+
+O estado de uma cidade é a sigla **mais frequente** entre os negócios dela, e
+não o par cidade-e-tag. Agrupar pelo par partiria São Paulo em duas linhas no
+dia em que alguém esquecesse de marcar um lead, e o ranking deixaria de
+ranquear; a maioria também absorve uma marcação errada isolada.
 
 ### Leads de entrada
 

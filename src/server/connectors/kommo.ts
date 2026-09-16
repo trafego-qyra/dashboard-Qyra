@@ -59,6 +59,82 @@ const NOMES_DE_CIDADE = ["cidade", "city", "município", "municipio", "localidad
 const SEM_CIDADE = "Sem cidade registrada";
 
 /**
+ * O que a coluna Estado mostra quando não há UF a mostrar.
+ *
+ * Texto vazio deixaria a célula em branco, e no cartão do celular — onde o
+ * rótulo "Estado" aparece por cima do valor — isso lê como defeito de
+ * renderização. O travessão é o que o resto do painel usa para valor ausente.
+ */
+const SEM_ESTADO = "—";
+
+/**
+ * As 27 unidades da federação.
+ *
+ * Tag não é campo: quem opera o CRM marca ali o que quiser — nome de campanha,
+ * "urgente", um lembrete para depois. Sem a lista fechada, qualquer etiqueta
+ * viraria uma linha de estado num ranking de localização.
+ */
+const UFS = new Set([
+  "AC",
+  "AL",
+  "AM",
+  "AP",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MG",
+  "MS",
+  "MT",
+  "PA",
+  "PB",
+  "PE",
+  "PI",
+  "PR",
+  "RJ",
+  "RN",
+  "RO",
+  "RR",
+  "RS",
+  "SC",
+  "SE",
+  "SP",
+  "TO",
+]);
+
+/**
+ * A UF marcada no negócio, quando houver.
+ *
+ * Vem embutida no próprio negócio — diferente da cidade, que obriga passar por
+ * `/contacts`. Um negócio com várias tags entrega a primeira que é sigla de
+ * estado; as demais não são assunto desta tabela.
+ */
+function estadoDoLead(lead: LeadDoKommo): string | null {
+  for (const tag of lead._embedded?.tags ?? []) {
+    const nome = (tag.name ?? "").trim().toUpperCase();
+    if (UFS.has(nome)) return nome;
+  }
+  return null;
+}
+
+/**
+ * O estado de uma cidade, pela sigla mais frequente entre os negócios dela.
+ *
+ * Uma cidade pertence a um estado só. Agrupar pelo par cidade-e-tag partiria a
+ * linha de São Paulo em duas no dia em que alguém esquecesse de taguear um
+ * lead — e o ranking, que é o que se pediu, deixaria de ranquear. A maioria
+ * também absorve o engano de quem marcar a UF errada num negócio isolado.
+ */
+function estadoDominante(estados: Map<string, number>): string {
+  return (
+    [...estados.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
+    SEM_ESTADO
+  );
+}
+
+/**
  * Qualquer registro do Kommo que carregue campo personalizado.
  *
  * Negócio e contato guardam os campos na mesma forma, e parte do que o painel
@@ -96,6 +172,8 @@ interface LeadDoKommo extends ComCamposPersonalizados {
   _embedded?: {
     loss_reason?: { name?: string } | Array<{ name?: string }> | null;
     contacts?: Array<{ id: number; is_main?: boolean }> | null;
+    /** As tags do negócio, que é onde o comercial marca a UF. */
+    tags?: Array<{ id?: number; name?: string }> | null;
   } | null;
 }
 
@@ -460,7 +538,7 @@ function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBloc
  * de mídia — agregar é o que torna esta tabela publicável.
  */
 function montarLocalizacoes(criados: LeadDoKommo[], cidades: Map<number, string>): TableBlock {
-  const porCidade = new Map<string, number>();
+  const porCidade = new Map<string, { negocios: number; estados: Map<string, number> }>();
 
   for (const lead of criados) {
     const contatos = lead._embedded?.contacts ?? [];
@@ -469,18 +547,29 @@ function montarLocalizacoes(criados: LeadDoKommo[], cidades: Map<number, string>
     // vezes, e o total da tabela deixaria de bater com o da tela.
     const principal = contatos.find((contato) => contato.is_main) ?? contatos[0];
     const cidade = (principal ? cidades.get(principal.id) : undefined) ?? SEM_CIDADE;
-    porCidade.set(cidade, (porCidade.get(cidade) ?? 0) + 1);
+
+    const atual = porCidade.get(cidade) ?? { negocios: 0, estados: new Map<string, number>() };
+    atual.negocios += 1;
+    const estado = estadoDoLead(lead);
+    if (estado) atual.estados.set(estado, (atual.estados.get(estado) ?? 0) + 1);
+    porCidade.set(cidade, atual);
   }
 
-  const linhas = [...porCidade.entries()].map(([cidade, negocios]) => ({ cidade, negocios }));
+  const linhas = [...porCidade.entries()].map(([cidade, dados]) => ({
+    cidade,
+    // "Sem cidade" é um balde de vários lugares: não tem estado próprio.
+    estado: cidade === SEM_CIDADE ? SEM_ESTADO : estadoDominante(dados.estados),
+    negocios: dados.negocios,
+  }));
   const semCidade = linhas.filter((linha) => linha.cidade === SEM_CIDADE);
 
   return {
     title: "Leads por cidade",
     description:
-      "De onde vieram os negócios criados no período, pela cidade registrada no contato. As dez primeiras à vista; as demais, a um clique.",
+      "De onde vieram os negócios criados no período, pela cidade registrada no contato e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
     columns: [
       { key: "cidade", label: "Cidade", align: "left" },
+      { key: "estado", label: "Estado", align: "left" },
       { key: "negocios", label: "Negócios", format: "integer", align: "right" },
     ],
     // Dez cidades à vista. A linha de cadastro incompleto não ocupa vaga no
@@ -775,6 +864,17 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         ),
       );
     }
+    const temLocalizacoes = cidades !== null && cidades.size > 0;
+
+    // Coluna vazia sem explicação lê como defeito do painel. O aviso diz que a
+    // falta é de marcação no CRM, não de leitura.
+    if (temLocalizacoes && criados.length > 0 && criados.every((l) => estadoDoLead(l) === null)) {
+      avisos.push(
+        avisoOperacao(
+          "Nenhum negócio do Kommo traz tag de estado (SP, RJ, e assim por diante). A coluna Estado fica vazia até a equipe marcar a UF no negócio.",
+        ),
+      );
+    }
     if (cidades === null) {
       avisos.push(
         avisoOperacao(
@@ -866,7 +966,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         // Fora da lista quando não há cidade nenhuma: uma tabela de uma linha
         // dizendo "Sem cidade registrada" ocupa a tela sem informar nada, e o
         // aviso de operação já diz o que configurar.
-        ...(cidades && cidades.size > 0 ? [montarLocalizacoes(criados, cidades)] : []),
+        ...(temLocalizacoes ? [montarLocalizacoes(criados, cidades)] : []),
       ],
       notices: avisos,
     };

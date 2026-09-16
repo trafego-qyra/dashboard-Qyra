@@ -34,6 +34,7 @@ interface LeadFalso {
   _embedded?: {
     loss_reason?: { name?: string } | Array<{ name?: string }>;
     contacts?: Array<{ id: number; is_main?: boolean }>;
+    tags?: Array<{ name?: string }>;
   };
 }
 
@@ -42,12 +43,25 @@ interface ContatoFalso {
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
 }
 
-/** Um negócio ligado a um contato, que é o formato que o ranking exige. */
-function leadComContato(id: number, contatoId: number, extras: Partial<LeadFalso> = {}): LeadFalso {
+/**
+ * Um negócio ligado a um contato, que é o formato que o ranking exige.
+ *
+ * A tag é opcional porque a UF é marcada à mão: o lead sem tag é o caso normal
+ * do dia em que alguém esquece, não uma exceção de teste.
+ */
+function leadComContato(
+  id: number,
+  contatoId: number,
+  extras: Partial<LeadFalso> = {},
+  tags?: string[],
+): LeadFalso {
   return {
     id,
     created_at: emSegundos("2026-02-10T09:00:00Z"),
-    _embedded: { contacts: [{ id: contatoId, is_main: true }] },
+    _embedded: {
+      contacts: [{ id: contatoId, is_main: true }],
+      ...(tags ? { tags: tags.map((name) => ({ name })) } : {}),
+    },
     ...extras,
   };
 }
@@ -815,8 +829,8 @@ describe("vendas pelo Kommo", () => {
     // A cidade mora no contato, não no negócio: se o conector parasse de fazer
     // a segunda consulta, esta tabela nasceria só com "Sem cidade registrada".
     expect(cidades?.rows).toEqual([
-      { cidade: "São Paulo", negocios: 2 },
-      { cidade: "Campinas", negocios: 1 },
+      { cidade: "São Paulo", estado: "—", negocios: 2 },
+      { cidade: "Campinas", estado: "—", negocios: 1 },
     ]);
   });
 
@@ -836,8 +850,8 @@ describe("vendas pelo Kommo", () => {
     // Descartar o que não tem cidade faria a soma da tabela ficar menor que os
     // negócios da tela, e ninguém saberia o tamanho do buraco no cadastro.
     expect(cidades?.rows).toEqual([
-      { cidade: "Sem cidade registrada", negocios: 2 },
-      { cidade: "São Paulo", negocios: 1 },
+      { cidade: "Sem cidade registrada", estado: "—", negocios: 2 },
+      { cidade: "São Paulo", estado: "—", negocios: 1 },
     ]);
   });
 
@@ -859,7 +873,7 @@ describe("vendas pelo Kommo", () => {
     const cidades = report.tables.find((t) => t.title === "Leads por cidade");
 
     // Um negócio é um lead, em um lugar. O contato principal decide.
-    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", negocios: 1 }]);
+    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", estado: "—", negocios: 1 }]);
   });
 
   it("mostra dez cidades antes do resto, mesmo com a linha de cadastro incompleto", async () => {
@@ -892,7 +906,7 @@ describe("vendas pelo Kommo", () => {
     // Quem pediu o top 10 quer dez lugares. A linha de cadastro incompleto abre
     // a tabela mas não ocupa vaga no ranking, então a janela abre em onze.
     expect(cidades?.initialRows).toBe(11);
-    expect(cidades?.rows[0]).toEqual({ cidade: "Sem cidade registrada", negocios: 1 });
+    expect(cidades?.rows[0]).toEqual({ cidade: "Sem cidade registrada", estado: "—", negocios: 1 });
     expect(cidades?.rows.slice(1, 11).map((linha) => linha.cidade)).toHaveLength(10);
   });
 
@@ -960,8 +974,84 @@ describe("vendas pelo Kommo", () => {
     // O mesmo cadastro guarda endereço e dado de saúde do paciente. A tabela é
     // publicável porque agrega — e só a cidade sai de lá.
     const cidades = report.tables.find((t) => t.title === "Leads por cidade");
-    expect(cidades?.columns.map((c) => c.key)).toEqual(["cidade", "negocios"]);
+    expect(cidades?.columns.map((c) => c.key)).toEqual(["cidade", "estado", "negocios"]);
     expect(JSON.stringify(cidades)).not.toMatch(/Bergamota|64/);
+  });
+
+  it("a coluna de estado vem da tag do negócio", async () => {
+    const { report } = await relatorio(
+      [
+        leadComContato(1, 10, {}, ["SP"]),
+        leadComContato(2, 11, {}, ["RJ"]),
+        leadComContato(3, 12, {}, ["SP"]),
+      ],
+      undefined,
+      [contatoEm(10, "São Paulo"), contatoEm(11, "Niterói"), contatoEm(12, "Campinas")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // A tag vem embutida no negócio: diferente da cidade, não custa consulta.
+    expect(cidades?.rows).toEqual([
+      { cidade: "Campinas", estado: "SP", negocios: 1 },
+      { cidade: "Niterói", estado: "RJ", negocios: 1 },
+      { cidade: "São Paulo", estado: "SP", negocios: 1 },
+    ]);
+  });
+
+  it("tag que não é sigla de estado não vira estado", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["urgente", "Black Friday", "SP"])],
+      undefined,
+      [contatoEm(10, "São Paulo")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Tag é campo livre: quem opera o CRM marca lembrete, campanha, o que for.
+    // Sem a lista fechada de UF, "urgente" viraria uma linha de estado.
+    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", estado: "SP", negocios: 1 }]);
+  });
+
+  it("negócio sem tag não parte a linha da cidade em duas", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["SP"]), leadComContato(2, 11, {}, ["SP"]), leadComContato(3, 12)],
+      undefined,
+      [contatoEm(10, "São Paulo"), contatoEm(11, "São Paulo"), contatoEm(12, "São Paulo")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Uma cidade pertence a um estado só. Agrupar pelo par cidade-e-tag faria o
+    // esquecimento de uma marcação dividir São Paulo em duas linhas, e o
+    // ranking deixaria de ranquear.
+    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", estado: "SP", negocios: 3 }]);
+  });
+
+  it("uma marcação errada isolada não muda o estado da cidade", async () => {
+    const { report } = await relatorio(
+      [
+        leadComContato(1, 10, {}, ["SP"]),
+        leadComContato(2, 11, {}, ["SP"]),
+        leadComContato(3, 12, {}, ["RJ"]),
+      ],
+      undefined,
+      [contatoEm(10, "Campinas"), contatoEm(11, "Campinas"), contatoEm(12, "Campinas")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // A UF é marcada à mão, então erro acontece. A maioria absorve o engano.
+    expect(cidades?.rows).toEqual([{ cidade: "Campinas", estado: "SP", negocios: 3 }]);
+  });
+
+  it("sem tag de estado em negócio nenhum, avisa em vez de deixar a coluna vazia", async () => {
+    const { report } = await relatorio([leadComContato(1, 10)], undefined, [
+      contatoEm(10, "São Paulo"),
+    ]);
+
+    // Coluna vazia sem explicação lê como defeito do painel.
+    expect(report.notices.some((n) => /tag de estado/i.test(n.text))).toBe(true);
   });
 
   it("sem credencial, cai em demonstração em vez de quebrar", async () => {

@@ -952,9 +952,10 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
       {
         title: "Leads por cidade",
         description:
-          "De onde vieram os negócios criados no período, pela cidade registrada no contato. As dez primeiras à vista; as demais, a um clique.",
+          "De onde vieram os negócios criados no período, pela cidade registrada no contato e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
         columns: [
           { key: "cidade", label: "Cidade", align: "left" },
+          { key: "estado", label: "Estado", align: "left" },
           { key: "negocios", label: "Negócios", format: "integer", align: "right" },
         ],
         initialRows: 11,
@@ -965,24 +966,31 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         // A praça é a real da clínica — Grande São Paulo concentrada, capitais
         // e interior paulista na cauda. Cidade inventada faria a demonstração
         // sugerir cobertura que não existe.
+        //
+        // A linha sem cidade fica sem estado de propósito: é um balde de vários
+        // lugares, e preencher a UF ali ensinaria a ler errado.
         rows: (
           [
-            ["Sem cidade registrada", 0.09],
-            ["São Paulo", 0.28],
-            ["Campinas", 0.1],
-            ["Rio de Janeiro", 0.08],
-            ["Belo Horizonte", 0.07],
-            ["Guarulhos", 0.06],
-            ["Santo André", 0.05],
-            ["Osasco", 0.05],
-            ["Curitiba", 0.04],
-            ["São Bernardo do Campo", 0.04],
-            ["Ribeirão Preto", 0.04],
-            ["Santos", 0.04],
-            ["Sorocaba", 0.03],
-            ["Niterói", 0.03],
-          ] as Array<[string, number]>
-        ).map(([cidade, fatia]) => ({ cidade, negocios: Math.round(leads * fatia) })),
+            ["Sem cidade registrada", "—", 0.09],
+            ["São Paulo", "SP", 0.28],
+            ["Campinas", "SP", 0.1],
+            ["Rio de Janeiro", "RJ", 0.08],
+            ["Belo Horizonte", "MG", 0.07],
+            ["Guarulhos", "SP", 0.06],
+            ["Santo André", "SP", 0.05],
+            ["Osasco", "SP", 0.05],
+            ["Curitiba", "PR", 0.04],
+            ["São Bernardo do Campo", "SP", 0.04],
+            ["Ribeirão Preto", "SP", 0.04],
+            ["Santos", "SP", 0.04],
+            ["Sorocaba", "SP", 0.03],
+            ["Niterói", "RJ", 0.03],
+          ] as Array<[string, string, number]>
+        ).map(([cidade, estado, fatia]) => ({
+          cidade,
+          estado,
+          negocios: Math.round(leads * fatia),
+        })),
       },
     ],
     notices: [],
