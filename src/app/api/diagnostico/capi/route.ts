@@ -36,6 +36,29 @@ const IDENTIDADE_DE_TESTE: IdentidadeDoLead = {
   criadoEmMs: 0,
 };
 
+/**
+ * O formato do token, sem o token.
+ *
+ * `Bad signature` (código 190) é a Meta dizendo que o texto recebido não é um
+ * token válido — assinatura que não confere, tipicamente por valor truncado ou
+ * com caractere trocado na cópia. A mensagem é idêntica para um token colado
+ * pela metade e para um token de outra conta, e sem enxergar o formato não há
+ * como distinguir os dois senão por tentativa.
+ *
+ * Mesmo recorte do diagnóstico da Meta em `/api/diagnostico/meta`: tamanho e
+ * pontas bastam para reconhecer truncamento, e nenhum valor útil sai daqui.
+ */
+function formatoDoToken(token: string) {
+  return {
+    tamanho: token.length,
+    comecaCom: token.slice(0, 6),
+    terminaCom: token.slice(-6),
+    temEspacoEmQualquerLugar: /\s/.test(token),
+    temCaractereNaoAscii: /[^\x20-\x7E]/.test(token),
+    caracteresInesperados: [...new Set(token.replace(/[A-Za-z0-9]/g, ""))].join(" "),
+  };
+}
+
 export async function GET(request: Request) {
   const { headers, blocked } = guard(request);
   if (blocked) return blocked;
@@ -113,8 +136,16 @@ export async function GET(request: Request) {
         detalhe: descreverFalha(erro),
         camposEnviados: campos,
         configuracao: {
+          commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
           versaoApi: env.META_CAPI_API_VERSION,
           conjuntoDeDados: env.META_CAPI_DATASET_ID,
+          // Só no ramo de erro: quando a carga é aceita, o formato do token
+          // não interessa a ninguém e não precisa aparecer na resposta.
+          token: formatoDoToken(env.META_CAPI_ACCESS_TOKEN as string),
+          codigoDeTeste: {
+            tamanho: env.META_CAPI_TEST_EVENT_CODE?.length ?? 0,
+            comecaComTest: env.META_CAPI_TEST_EVENT_CODE?.startsWith("TEST") ?? false,
+          },
         },
       },
       { status: 200, headers },
