@@ -530,3 +530,75 @@ O conjunto `Pixel LP` **já recebia evento de servidor de alguma fonte** quando
 esta integração foi desenhada. Antes de tirar o `META_CAPI_TEST_EVENT_CODE`,
 confirme no Gerenciador de Eventos o que mais está mandando — senão passam a
 ser duas fontes escrevendo no mesmo lugar.
+
+---
+
+## Supabase (fila dos eventos de CRM)
+
+O passo que faltava entre "o conector sabe enviar" e "os eventos chegam
+sozinhos": memória.
+
+### Por que precisa de banco
+
+Três coisas que cache em memória não resolve, porque instância de serverless é
+reciclada sem aviso:
+
+1. **Deduplicação.** O Kommo reenvia webhook. A Meta deduplica por `event_id` —
+   mas só se o mesmo id for reenviado, e para isso alguém precisa lembrar qual
+   id foi gerado para aquele negócio naquela etapa.
+2. **Retentativa durável.** Graph API fora do ar às três da manhã não pode
+   matar o evento.
+3. **Auditoria.** Quando a Meta não mostrar a venda, a primeira pergunta é "a
+   gente mandou?". Sem registro, não há resposta — só suposição.
+
+### O que cadastrar
+
+| Variável | Valor |
+|---|---|
+| `SUPABASE_URL` | `https://xxxx.supabase.co`. Não é segredo |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave `service_role`. **É segredo, e é a mais perigosa do projeto** |
+
+A `service_role` ignora as políticas de linha do Postgres. Ela só existe em
+`src/server/**`, e o contrato do `.dependency-cruiser.cjs` é o que impede que
+ela chegue ao bundle do cliente.
+
+### Passo a passo
+
+1. Crie a conta em [supabase.com](https://supabase.com). Conta nova pede uma
+   **organização** antes do projeto — nome livre, plano **Free**.
+2. **New project** → nome `qyra-capi` → região **South America (São Paulo)**,
+   que é a mais perto e a que dá menor latência com a Vercel.
+3. **SQL Editor** → cole e rode [`sql/evento-crm.sql`](./sql/evento-crm.sql).
+4. **Project Settings → API** → copie `Project URL` e a chave `service_role`.
+5. Cadastre as duas na Vercel, em Production **e** Preview.
+6. Abra `/api/diagnostico/fila`. Ele diz se o banco responde e como está a fila.
+
+### O que a tabela guarda, e o que não guarda
+
+`user_data` entra **já hasheado**. O SHA-256 de telefone e e-mail é o que a Meta
+compara; reenviar não precisa do valor legível, então ele não existe ali. É o
+que permite o painel ter banco sem passar a armazenar contato de paciente.
+
+Os estados de uma linha:
+
+| Status | Significa |
+|---|---|
+| `pendente` | Gravado, ainda não foi para a Meta |
+| `enviado` | A Meta confirmou o recebimento |
+| `sem_identificador` | Não tinha telefone, e-mail, clique nem `lead_id` — **não tem como enviar** |
+| `falhou` | Cinco tentativas recusadas; saiu da fila para não bloquear o resto |
+
+`sem_identificador` é o status que mais informa. Ele é o tamanho do funil que a
+Meta não enxerga, e é o número que vai dizer se vale investir em capturar a
+origem da conversa no WhatsApp — sem ele, "a atribuição está ruim" é palpite.
+
+### Concorrência
+
+Não há trava. Duas execuções simultâneas pegariam as mesmas linhas e mandariam
+o mesmo `event_id` duas vezes — que é exatamente o caso que a deduplicação da
+Meta cobre.
+
+Um `SELECT ... FOR UPDATE SKIP LOCKED` resolveria de forma mais elegante, e
+custaria uma conexão direta ao Postgres num ambiente sem estado, para proteger
+de um problema que não causa dano. Quando o volume justificar, troque — e
+escreva por quê.

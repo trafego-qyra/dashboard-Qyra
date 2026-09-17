@@ -137,3 +137,16 @@ describe("redactSecrets", () => {
     expect(redactSecrets("v21.0 em /act_123/insights")).toBe("v21.0 em /act_123/insights");
   });
 });
+
+describe("httpJson com corpo vazio", () => {
+  it("entrega objeto vazio no 204, em vez de quebrar", async () => {
+    // O Kommo responde assim quando a página não tem nada, e o PostgREST em
+    // toda gravação com `Prefer: return=minimal`. `response.json()` num corpo
+    // vazio levanta SyntaxError, que chegaria ao conector como falha de rede.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204, statusText: "No Content" })),
+    );
+    await expect(httpJson("https://api.test/x")).resolves.toEqual({});
+  });
+});

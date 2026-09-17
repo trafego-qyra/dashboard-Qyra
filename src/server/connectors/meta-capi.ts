@@ -72,6 +72,22 @@ export interface DadosDoUsuario {
   fbp?: string;
 }
 
+/**
+ * Um evento cujo `user_data` já está pronto.
+ *
+ * É a forma que sai da fila: o hash acontece uma vez, na entrada, e o que fica
+ * guardado já não tem telefone nem e-mail legível. Reenviar não precisa do dado
+ * cru, e por isso ele não precisa existir no banco.
+ */
+export interface EventoPreparado {
+  eventName: string;
+  eventTime: number;
+  eventId: string;
+  usuario: DadosDoUsuario;
+  valor?: number | null;
+  moeda?: string;
+}
+
 interface RespostaDaCapi {
   events_received?: number;
   messages?: unknown[];
@@ -142,7 +158,7 @@ export function montarUsuario(identidade: IdentidadeDoLead): DadosDoUsuario | nu
 }
 
 /** Um evento na forma do protocolo, já com os campos fixos da Meta. */
-function paraEnvio(evento: EventoDeCrm, usuario: DadosDoUsuario): Record<string, unknown> {
+function paraEnvio(evento: EventoPreparado): Record<string, unknown> {
   const custom: Record<string, unknown> = {
     event_source: EVENT_SOURCE,
     lead_event_source: LEAD_EVENT_SOURCE,
@@ -161,7 +177,7 @@ function paraEnvio(evento: EventoDeCrm, usuario: DadosDoUsuario): Record<string,
     event_time: Math.trunc(evento.eventTime),
     event_id: evento.eventId,
     action_source: ACTION_SOURCE,
-    user_data: usuario,
+    user_data: evento.usuario,
     custom_data: custom,
   };
 }
@@ -201,15 +217,8 @@ function emLotes<T>(itens: T[], tamanho: number): T[][] {
  * eventos de teste e nada entra em produção.
  */
 export async function enviarEventosDeCrm(eventos: EventoDeCrm[]): Promise<ResultadoDoEnvio> {
-  if (!getCredentials().capi) {
-    throw new Error(
-      "API de Conversões sem credencial: configure META_CAPI_DATASET_ID e META_CAPI_ACCESS_TOKEN.",
-    );
-  }
-
-  const env = getEnv();
   const semIdentificador: string[] = [];
-  const prontos: Array<{ id: string; corpo: Record<string, unknown> }> = [];
+  const preparados: EventoPreparado[] = [];
 
   for (const evento of eventos) {
     const usuario = montarUsuario(evento.identidade);
@@ -217,22 +226,40 @@ export async function enviarEventosDeCrm(eventos: EventoDeCrm[]): Promise<Result
       semIdentificador.push(evento.eventId);
       continue;
     }
-    prontos.push({ id: evento.eventId, corpo: paraEnvio(evento, usuario) });
+    preparados.push({ ...evento, usuario });
   }
 
+  const resultado = await enviarPreparados(preparados);
+  return { ...resultado, semIdentificador };
+}
+
+/**
+ * Manda para a Meta eventos cujo `user_data` já está montado.
+ *
+ * É esta que a fila usa: o hash já aconteceu na entrada, e o que está guardado
+ * é o que vai no corpo, sem passar de novo por `montarUsuario`.
+ */
+export async function enviarPreparados(eventos: EventoPreparado[]): Promise<ResultadoDoEnvio> {
+  if (!getCredentials().capi) {
+    throw new Error(
+      "API de Conversões sem credencial: configure META_CAPI_DATASET_ID e META_CAPI_ACCESS_TOKEN.",
+    );
+  }
+
+  const env = getEnv();
   const resultado: ResultadoDoEnvio = {
     recebidos: 0,
-    enviados: prontos.map((p) => p.id),
-    semIdentificador,
+    enviados: eventos.map((e) => e.eventId),
+    semIdentificador: [],
     rastreio: [],
   };
 
-  if (prontos.length === 0) return resultado;
+  if (eventos.length === 0) return resultado;
 
   const url = `https://graph.facebook.com/${env.META_CAPI_API_VERSION}/${env.META_CAPI_DATASET_ID}/events`;
 
-  for (const lote of emLotes(prontos, MAX_POR_LOTE)) {
-    const corpo: Record<string, unknown> = { data: lote.map((item) => item.corpo) };
+  for (const lote of emLotes(eventos, MAX_POR_LOTE)) {
+    const corpo: Record<string, unknown> = { data: lote.map(paraEnvio) };
     if (env.META_CAPI_TEST_EVENT_CODE) corpo.test_event_code = env.META_CAPI_TEST_EVENT_CODE;
 
     const resposta = await httpJson<RespostaDaCapi>(url, {
