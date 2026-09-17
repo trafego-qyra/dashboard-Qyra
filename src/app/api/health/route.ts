@@ -47,6 +47,14 @@ const CONFIGURAVEIS = [
   // de antes: variável que ninguém consegue conferir se pegou. Opcional, então
   // aparecer em "ausentes" é resultado legítimo.
   "KOMMO_PIPELINE_ID",
+  // API de Conversões. Pela quarta vez a mesma armadilha desta lista mantida à
+  // mão: sem os nomes aqui, quem cadastra não consegue conferir se pegaram — e
+  // o código de teste é o que separa "evento foi para a aba de teste" de
+  // "evento entrou no conjunto de produção", que não dá para desfazer.
+  "META_CAPI_DATASET_ID",
+  "META_CAPI_ACCESS_TOKEN",
+  "META_CAPI_API_VERSION",
+  "META_CAPI_TEST_EVENT_CODE",
   // Redis opcional, para a última leitura do Clarity sobreviver a uma partida a
   // frio. Aqui pela terceira vez pela mesma razão das duas anteriores: sem
   // aparecer na lista, quem cadastra não consegue conferir se pegou.
