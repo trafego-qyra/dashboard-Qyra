@@ -309,7 +309,10 @@ Só leitura, e só o necessário:
 - **negócios** (`/api/v4/leads`) criados no período, com valor, etapa e datas de
   criação e fechamento;
 - **funis e etapas** (`/api/v4/leads/pipelines`), para o funil sair com o nome
-  das etapas em vez de números.
+  das etapas em vez de números;
+- **contatos** (`/api/v4/contacts`), e deles **apenas a cidade** — é o que
+  alimenta o ranking de localização. A UF vem junto do próprio negócio, como
+  tag, sem consulta extra.
 
 O Kommo herdou do amoCRM dois identificadores fixos, iguais em toda conta:
 **142 é venda ganha, 143 é perdido**. As demais etapas são as que a clínica
@@ -366,6 +369,46 @@ suporte ou pós-venda, negócios ganhos ali entrariam no faturamento sem ningué
 notar. `KOMMO_PIPELINE_ID` restringe ao funil de vendas; sem ele, a conta
 inteira é somada.
 
+### A cidade mora no contato, não no negócio
+
+O ranking de leads por cidade lê o campo **Cidade** do **contato**, e não do
+negócio. Isso obriga uma segunda consulta: `/leads` devolve os contatos apenas
+como id, mesmo pedindo `with=contacts`, e campo personalizado de contato só vem
+por `/contacts`.
+
+Os ids vão filtrados em lote, cem por consulta, e os lotes são disparados em
+série — juntos, estouram o limite de requisições e voltam 429 de uma vez.
+
+O conector procura o campo pelos nomes `cidade`, `city`, `município` e
+`localidade`. Contato sem cidade preenchida vira a linha **"Sem cidade
+registrada"**, que abre a tabela: é a medida do buraco no cadastro, e sumir com
+ela faria a soma da tabela não bater com os negócios da tela.
+
+**Nada além de cidade e contagem sai desse cadastro.** O mesmo contato guarda
+nome, telefone, endereço e dados de saúde do paciente — é agregar que torna esta
+tabela publicável numa tela atrás de senha compartilhada. Um corte por bairro é
+possível (o campo existe), mas seria outra conversa sobre granularidade.
+
+Quando nenhum contato tem cidade, a tabela some e o aviso diz o que configurar —
+para quem opera, não para o cliente. Se a consulta de contatos falhar, o
+relatório continua inteiro e só perde essa tabela: receita não depende dela.
+
+#### O estado vem da tag, e é de graça
+
+A UF é marcada como **tag do negócio** (`SP`, `RJ`), à mão pelo comercial. Ao
+contrário da cidade, a tag vem embutida em `/leads` — **nenhuma consulta a
+mais** — e vira a coluna Estado da mesma tabela. Ordenar por ela agrupa as
+cidades de cada UF, que é a leitura por região sem tabela nova.
+
+Tag é campo livre: quem opera o CRM marca lembrete, nome de campanha, o que for.
+Só as **27 siglas de unidade federativa** contam como estado; qualquer outra
+etiqueta é ignorada.
+
+O estado de uma cidade é a sigla **mais frequente** entre os negócios dela, e
+não o par cidade-e-tag. Agrupar pelo par partiria São Paulo em duas linhas no
+dia em que alguém esquecesse de marcar um lead, e o ranking deixaria de
+ranquear; a maioria também absorve uma marcação errada isolada.
+
 ### Leads de entrada
 
 A área de **leads de entrada** (não organizados) vive num endpoint separado e
@@ -380,6 +423,9 @@ adivinhar a forma para extrair valor renderia um total inventado.
 A API do Kommo limita a cerca de **7 requisições por segundo** e devolve no
 máximo **250 negócios por página**. O conector pagina até 20 páginas — 5.000
 negócios num período —, o que cobre com folga o volume de uma clínica.
+
+A busca de contatos tem a própria trava: 30 lotes de cem, ou 3.000 contatos por
+leitura. Acima disso os negócios restantes caem em "Sem cidade registrada".
 
 ---
 
