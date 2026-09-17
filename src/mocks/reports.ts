@@ -952,7 +952,7 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
       {
         title: "Leads por cidade",
         description:
-          "De onde vieram os negócios criados no período, pela cidade registrada no contato e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
+          "De onde vieram os negócios criados no período, pela cidade registrada no contato — ou pela tag `cidade:` quando o cadastro não traz — e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
         columns: [
           { key: "cidade", label: "Cidade", align: "left" },
           { key: "estado", label: "Estado", align: "left" },

@@ -105,6 +105,35 @@ const UFS = new Set([
 ]);
 
 /**
+ * O prefixo que transforma uma tag em cidade.
+ *
+ * Tag é campo livre: sem exigir a marcação, `urgente` ou um nome de campanha
+ * viraria uma linha no ranking de localização. O prefixo é o combinado com quem
+ * opera o CRM, e é o que separa marcação de lugar de marcação de qualquer outra
+ * coisa.
+ */
+const PREFIXO_DE_CIDADE = /^\s*cidade\s*:\s*/i;
+
+/**
+ * A cidade marcada como tag do negócio, quando houver.
+ *
+ * Complementa o cadastro do contato, que é a fonte principal — na primeira
+ * leitura real, um terço dos negócios chegou sem o campo preenchido, e essa
+ * marcação manual é o que fecha o buraco.
+ */
+function cidadeDaTag(lead: LeadDoKommo): string | null {
+  for (const tag of lead._embedded?.tags ?? []) {
+    const nome = tag.name ?? "";
+    if (!PREFIXO_DE_CIDADE.test(nome)) continue;
+
+    const cidade = nome.replace(PREFIXO_DE_CIDADE, "").trim();
+    // `cidade:` sem nada depois é marcação pela metade, não uma cidade nova.
+    if (cidade) return cidade;
+  }
+  return null;
+}
+
+/**
  * A UF marcada no negócio, quando houver.
  *
  * Vem embutida no próprio negócio — diferente da cidade, que obriga passar por
@@ -172,7 +201,7 @@ interface LeadDoKommo extends ComCamposPersonalizados {
   _embedded?: {
     loss_reason?: { name?: string } | Array<{ name?: string }> | null;
     contacts?: Array<{ id: number; is_main?: boolean }> | null;
-    /** As tags do negócio, que é onde o comercial marca a UF. */
+    /** As tags do negócio: onde o comercial marca a UF e a cidade. */
     tags?: Array<{ id?: number; name?: string }> | null;
   } | null;
 }
@@ -546,7 +575,11 @@ function montarLocalizacoes(criados: LeadDoKommo[], cidades: Map<number, string>
     // lista. Somar os dois contatos de um mesmo negócio contaria o lead duas
     // vezes, e o total da tabela deixaria de bater com o da tela.
     const principal = contatos.find((contato) => contato.is_main) ?? contatos[0];
-    const cidade = (principal ? cidades.get(principal.id) : undefined) ?? SEM_CIDADE;
+    // O cadastro manda: vem do formulário preenchido pelo próprio paciente. A
+    // tag é digitada à mão depois, e entra só onde o cadastro está vazio —
+    // encolhe a linha de "sem cidade" sem mexer no que já estava certo.
+    const cidade =
+      (principal ? cidades.get(principal.id) : undefined) ?? cidadeDaTag(lead) ?? SEM_CIDADE;
 
     const atual = porCidade.get(cidade) ?? { negocios: 0, estados: new Map<string, number>() };
     atual.negocios += 1;
@@ -566,7 +599,7 @@ function montarLocalizacoes(criados: LeadDoKommo[], cidades: Map<number, string>
   return {
     title: "Leads por cidade",
     description:
-      "De onde vieram os negócios criados no período, pela cidade registrada no contato e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
+      "De onde vieram os negócios criados no período, pela cidade registrada no contato — ou pela tag `cidade:` quando o cadastro não traz — e pela UF marcada no negócio. Ordene por Estado para ler por região. As dez primeiras à vista; as demais, a um clique.",
     columns: [
       { key: "cidade", label: "Cidade", align: "left" },
       { key: "estado", label: "Estado", align: "left" },
@@ -864,7 +897,10 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         ),
       );
     }
-    const temLocalizacoes = cidades !== null && cidades.size > 0;
+    // Basta uma das duas fontes para a tabela valer a tela: o cadastro do
+    // contato ou a tag do negócio.
+    const algumaTagDeCidade = criados.some((l) => cidadeDaTag(l) !== null);
+    const temLocalizacoes = cidades !== null && (cidades.size > 0 || algumaTagDeCidade);
 
     // Coluna vazia sem explicação lê como defeito do painel. O aviso diz que a
     // falta é de marcação no CRM, não de leitura.
@@ -881,10 +917,10 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           "Não foi possível ler os contatos do Kommo nesta leitura, então a tabela de leads por cidade ficou de fora. O resto do relatório não depende dela.",
         ),
       );
-    } else if (cidades.size === 0 && criados.length > 0) {
+    } else if (cidades.size === 0 && !algumaTagDeCidade && criados.length > 0) {
       avisos.push(
         avisoOperacao(
-          "Nenhum contato do Kommo traz cidade preenchida. Sem isso não dá para ranquear os leads por localização — é preciso o formulário ou a automação gravar a cidade no cadastro do contato.",
+          "Nenhum negócio do Kommo traz cidade, nem no cadastro do contato nem em tag `cidade:`. Sem isso não dá para ranquear os leads por localização — é preciso o formulário gravar a cidade no contato, ou a equipe marcar `cidade: <nome>` no negócio.",
         ),
       );
     }

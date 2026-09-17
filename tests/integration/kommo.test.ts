@@ -934,7 +934,7 @@ describe("vendas pelo Kommo", () => {
     const { report } = await relatorio([leadComContato(1, 10)], undefined, [{ id: 10 }]);
 
     expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(false);
-    expect(report.notices.some((n) => /cidade preenchida/i.test(n.text))).toBe(true);
+    expect(report.notices.some((n) => /nem no cadastro/i.test(n.text))).toBe(true);
   });
 
   it("falha ao ler os contatos não derruba o resto do relatório", async () => {
@@ -1052,6 +1052,103 @@ describe("vendas pelo Kommo", () => {
 
     // Coluna vazia sem explicação lê como defeito do painel.
     expect(report.notices.some((n) => /tag de estado/i.test(n.text))).toBe(true);
+  });
+
+  it("tag `cidade:` preenche o que o cadastro não traz", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["cidade: Campinas"]), leadComContato(2, 11)],
+      undefined,
+      // Nenhum dos dois contatos tem cidade no cadastro.
+      [{ id: 10 }, { id: 11 }],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Um terço dos negócios chega sem o campo preenchido; a marcação manual é
+    // o que fecha esse buraco.
+    expect(cidades?.rows).toEqual([
+      { cidade: "Sem cidade registrada", estado: "—", negocios: 1 },
+      { cidade: "Campinas", estado: "—", negocios: 1 },
+    ]);
+  });
+
+  it("o cadastro prevalece sobre a tag", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["cidade: Campinas"])],
+      undefined,
+      [contatoEm(10, "São Paulo")],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // O cadastro vem do formulário preenchido pelo próprio paciente; a tag é
+    // digitada à mão depois, e serve para completar, não para sobrescrever.
+    expect(cidades?.rows).toEqual([{ cidade: "São Paulo", estado: "—", negocios: 1 }]);
+  });
+
+  it("tag sem o prefixo não vira cidade", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["Campinas", "urgente", "Black Friday"])],
+      undefined,
+      [{ id: 10 }],
+    );
+
+    // É o prefixo que separa marcação de lugar de marcação de qualquer outra
+    // coisa. Sem ele, "urgente" viraria uma linha no ranking de localização —
+    // e sem cidade nenhuma a tabela some, em vez de sair com uma linha só.
+    expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(false);
+  });
+
+  it("reconhece o prefixo escrito de outras formas", async () => {
+    const { report } = await relatorio(
+      [
+        leadComContato(1, 10, {}, ["Cidade:Santos"]),
+        leadComContato(2, 11, {}, ["CIDADE : Santos"]),
+        leadComContato(3, 12, {}, ["  cidade:   Santos  "]),
+      ],
+      undefined,
+      [{ id: 10 }, { id: 11 }, { id: 12 }],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // Quem digita a tag não vai lembrar da grafia exata, e três linhas de
+    // "Santos" no ranking seriam um defeito difícil de enxergar.
+    expect(cidades?.rows).toEqual([{ cidade: "Santos", estado: "—", negocios: 3 }]);
+  });
+
+  it("`cidade:` sem nada depois não cria linha vazia", async () => {
+    const { report } = await relatorio([leadComContato(1, 10, {}, ["cidade:"])], undefined, [
+      { id: 10 },
+    ]);
+
+    // Marcação pela metade é marcação que falta, não uma cidade nova.
+    expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(false);
+  });
+
+  it("a tag de UF continua virando estado, e não cidade", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["SP", "cidade: Campinas"])],
+      undefined,
+      [{ id: 10 }],
+    );
+
+    const cidades = report.tables.find((t) => t.title === "Leads por cidade");
+
+    // As duas marcações convivem no mesmo negócio, cada uma na sua coluna.
+    expect(cidades?.rows).toEqual([{ cidade: "Campinas", estado: "SP", negocios: 1 }]);
+  });
+
+  it("só com tag de cidade, a tabela aparece em vez de sumir", async () => {
+    const { report } = await relatorio(
+      [leadComContato(1, 10, {}, ["cidade: Fortaleza"])],
+      undefined,
+      [{ id: 10 }],
+    );
+
+    // Antes a tabela dependia do cadastro. Basta uma das duas fontes.
+    expect(report.tables.some((t) => t.title === "Leads por cidade")).toBe(true);
+    expect(report.notices.some((n) => /nem no cadastro/i.test(n.text))).toBe(false);
   });
 
   it("sem credencial, cai em demonstração em vez de quebrar", async () => {

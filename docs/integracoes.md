@@ -393,6 +393,25 @@ Quando nenhum contato tem cidade, a tabela some e o aviso diz o que configurar �
 para quem opera, não para o cliente. Se a consulta de contatos falhar, o
 relatório continua inteiro e só perde essa tabela: receita não depende dela.
 
+#### A tag `cidade:` cobre o que o cadastro não traz
+
+Na primeira leitura real, **"Sem cidade registrada" foi a maior linha da
+tabela** — um terço dos negócios chegou sem o campo preenchido no contato. Para
+fechar esse buraco, o comercial marca a cidade como tag do negócio, no formato
+**`cidade: Campinas`**.
+
+O prefixo não é capricho: tag é campo livre, e sem ele `urgente` ou um nome de
+campanha viraria uma linha no ranking de localização. Só tag com o prefixo é
+lida; qualquer outra continua ignorada. A grafia é tolerante — `cidade:`,
+`Cidade:`, `CIDADE :`, com ou sem espaço depois dos dois-pontos.
+
+**O cadastro prevalece.** A tag entra apenas onde o campo `Cidade` do contato
+está vazio: o cadastro vem do formulário preenchido pelo próprio paciente, e a
+tag é digitada à mão depois. Ela completa, não sobrescreve.
+
+Basta uma das duas fontes para a tabela valer a tela. Sem nenhuma delas, a
+tabela some e o aviso de operação diz o que configurar.
+
 #### O estado vem da tag, e é de graça
 
 A UF é marcada como **tag do negócio** (`SP`, `RJ`), à mão pelo comercial. Ao
