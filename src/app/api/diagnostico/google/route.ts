@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { rangeFromPreset } from "@/lib/date-range";
 import { VERSOES_CANDIDATAS } from "@/server/connectors/google-ads";
+import { type Etapa, veredictoDoToken } from "@/server/diagnostico/veredicto-ads";
 import { getCredentials, getEnv } from "@/server/env";
 import { guard } from "@/server/lib/api";
 import { redactSecrets } from "@/server/lib/http";
@@ -18,14 +19,6 @@ export const maxDuration = 30;
  * (OAuth + developer token + conta gerente + propriedade), e cada elo falha
  * com uma mensagem diferente.
  */
-
-interface Etapa {
-  etapa: string;
-  descricao: string;
-  status: number | null;
-  ok: boolean;
-  resultado: string;
-}
 
 function mascarar(valor: string): string {
   if (valor.length <= 10) return valor;
@@ -279,7 +272,7 @@ export async function GET(request: Request) {
       etapas.push(
         await requisitar(
           "ads-acesso",
-          "O developer token é aceito e quais contas ele alcança?",
+          "Quais contas este login alcança? (não prova aprovação do token)",
           {
             url: `https://googleads.googleapis.com/${versaoAds}/customers:listAccessibleCustomers`,
             init: { headers: cabecalhos },
@@ -289,12 +282,32 @@ export async function GET(request: Request) {
             const contas = (dados.resourceNames ?? []).map((r) => r.replace("customers/", ""));
             const alvo = env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, "");
             const encontrada = alvo ? contas.includes(alvo) : false;
-            return `${contas.length} conta(s) acessível(is).${
+
+            // Duas armadilhas nesta chamada, e as duas já custaram uma
+            // conclusão errada.
+            //
+            // Ela **responde 200 com token de acesso de teste**. Passar aqui não
+            // diz nada sobre aprovação — quem prova isso é a consulta a uma
+            // conta de produção, na etapa seguinte.
+            //
+            // E ela **ignora `login-customer-id`**: lista o que o usuário do
+            // OAuth alcança direto. Por isso a ausência da conta gerente aqui é
+            // informação, e não detalhe.
+            const gerente = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.replace(/-/g, "");
+            const gerenteAlcancavel = gerente ? contas.includes(gerente) : null;
+
+            return `${contas.length} conta(s) acessível(is): ${contas.map(mascarar).join(", ")}. Esta chamada responde mesmo com token de acesso de teste, então passar aqui não prova aprovação.${
               alvo
                 ? encontrada
                   ? " A conta configurada está entre elas."
-                  : ` A conta configurada (${mascarar(alvo)}) NÃO está entre elas — verifique GOOGLE_ADS_LOGIN_CUSTOMER_ID.`
+                  : ` A conta configurada (${mascarar(alvo)}) NÃO está entre elas.`
                 : " GOOGLE_ADS_CUSTOMER_ID não configurado."
+            }${
+              gerenteAlcancavel === false
+                ? ` A conta gerente configurada (${mascarar(gerente as string)}) NÃO está entre elas — este login não a alcança, e entrar por ela é o que devolve 403 na consulta.`
+                : gerenteAlcancavel === true
+                  ? " A conta gerente configurada também está entre elas."
+                  : ""
             }`;
           },
         ),
@@ -303,6 +316,17 @@ export async function GET(request: Request) {
       // 4. Google Ads — a consulta real funciona?
       if (env.GOOGLE_ADS_CUSTOMER_ID) {
         const range = rangeFromPreset("7d");
+        const consulta = `SELECT segments.date, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${range.from}' AND '${range.to}'`;
+        const enderecoDaConsulta = `https://googleads.googleapis.com/${versaoAds}/customers/${env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, "")}/googleAds:searchStream`;
+
+        const resumirConsulta = (d: unknown) => {
+          const blocos = d as Array<{ results?: unknown[] }>;
+          const linhas = blocos.flatMap((b) => b.results ?? []);
+          return linhas.length === 0
+            ? "Consulta aceita, mas sem linhas — nenhuma entrega no período."
+            : `${linhas.length} dia(s) com dado.`;
+        };
+
         etapas.push(
           await requisitar(
             "ads-consulta",
@@ -312,20 +336,45 @@ export async function GET(request: Request) {
               init: {
                 method: "POST",
                 headers: { ...cabecalhos, "content-type": "application/json" },
-                body: JSON.stringify({
-                  query: `SELECT segments.date, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${range.from}' AND '${range.to}'`,
-                }),
+                body: JSON.stringify({ query: consulta }),
               },
             },
-            (d) => {
-              const blocos = d as Array<{ results?: unknown[] }>;
-              const linhas = blocos.flatMap((b) => b.results ?? []);
-              return linhas.length === 0
-                ? "Consulta aceita, mas sem linhas — nenhuma entrega no período."
-                : `${linhas.length} dia(s) com dado.`;
-            },
+            resumirConsulta,
           ),
         );
+
+        // 4b. A mesma consulta, sem entrar pela conta gerente.
+        //
+        // Só roda quando a de cima falhou e existe gerente configurado, e é o
+        // que transforma um palpite em resposta: se esta passa, o problema é o
+        // cabeçalho `login-customer-id`, não a credencial nem a conta. Sem
+        // isso, descobrir a causa exige apagar uma variável em produção e
+        // torcer — que é exatamente o que ninguém deveria precisar fazer para
+        // ler um diagnóstico.
+        const consultaFalhou = etapas.at(-1)?.ok === false;
+        if (consultaFalhou && env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) {
+          const semGerente: Record<string, string> = {
+            ...cabecalhos,
+            "content-type": "application/json",
+          };
+          delete semGerente["login-customer-id"];
+
+          etapas.push(
+            await requisitar(
+              "ads-consulta-sem-gerente",
+              "E sem entrar pela conta gerente, a mesma consulta responde?",
+              {
+                url: enderecoDaConsulta,
+                init: {
+                  method: "POST",
+                  headers: semGerente,
+                  body: JSON.stringify({ query: consulta }),
+                },
+              },
+              resumirConsulta,
+            ),
+          );
+        }
       }
     } else {
       etapas.push({
@@ -346,6 +395,11 @@ export async function GET(request: Request) {
       conclusao: primeiraFalha
         ? `Quebra na etapa "${primeiraFalha.etapa}": ${primeiraFalha.descricao}`
         : "Cadeia completa funcionando para os canais configurados.",
+      // A pergunta que mais se faz nesta página, respondida em uma linha em vez
+      // de escondida dentro do texto cru de uma etapa. Enquanto o Google não
+      // aprova o acesso básico, o Google Ads fica no snapshot exportado — e é
+      // esta a única coisa que decide se a tela vira tempo real.
+      tokenDeDesenvolvedor: veredictoDoToken(etapas),
       escopos: {
         concedidos: escopos || null,
         // Escopo ausente é a causa mais comum de 403 que parece problema de conta.
@@ -357,6 +411,17 @@ export async function GET(request: Request) {
         propriedadeGa4: env.GA4_PROPERTY_ID ? mascarar(env.GA4_PROPERTY_ID) : null,
         contaAds: env.GOOGLE_ADS_CUSTOMER_ID ? mascarar(env.GOOGLE_ADS_CUSTOMER_ID) : null,
         usaContaGerente: Boolean(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID),
+        // Pontas do token de desenvolvedor, para conferir contra a Central de
+        // API sem o valor sair daqui.
+        //
+        // Existe porque há um caso que nenhuma outra linha desta resposta
+        // distingue: o acesso básico aprovado num token e o painel usando
+        // outro — gerado noutra conta gerente, ou regerado depois. Os dois
+        // cenários produzem exatamente o mesmo `DEVELOPER_TOKEN_NOT_APPROVED`,
+        // e sem comparar as pontas a investigação anda em círculo.
+        tokenDesenvolvedor: env.GOOGLE_ADS_DEVELOPER_TOKEN
+          ? mascarar(env.GOOGLE_ADS_DEVELOPER_TOKEN)
+          : null,
         credenciais: getCredentials(),
       },
       etapas,

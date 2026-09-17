@@ -91,6 +91,20 @@ const schema = z.object({
   // Token da API de exportação do Clarity. Esse é segredo, ao contrário do ID.
   CLARITY_API_TOKEN: optionalString,
 
+  /**
+   * Armazenamento compartilhado, para o que precisa sobreviver a uma partida a
+   * frio. Opcional: sem ele o painel funciona igual, só perde a memória entre
+   * instâncias.
+   *
+   * Aceita os dois nomes porque a Vercel usa `KV_*` quando o Redis é criado
+   * pelo próprio painel e `UPSTASH_*` quando vem do marketplace — e quem
+   * cadastra não escolhe qual.
+   */
+  KV_REST_API_URL: optionalString,
+  KV_REST_API_TOKEN: optionalString,
+  UPSTASH_REDIS_REST_URL: optionalString,
+  UPSTASH_REDIS_REST_TOKEN: optionalString,
+
   // ---- Meta: API de Conversões, eventos de CRM ----
   /**
    * Conjunto de dados que recebe os eventos de CRM. Não é segredo — aparece na
@@ -124,6 +138,13 @@ const schema = z.object({
   KOMMO_SUBDOMAIN: optionalString,
   /** Chave de longa duração da integração privada. */
   KOMMO_ACCESS_TOKEN: optionalString,
+  /**
+   * Funil de vendas, quando a conta tem mais de um.
+   *
+   * `142` é etapa de ganho em todo funil do Kommo: sem restringir, um pipeline
+   * de suporte ou de pós-venda entra no faturamento junto.
+   */
+  KOMMO_PIPELINE_ID: optionalString,
 
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),

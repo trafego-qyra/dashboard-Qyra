@@ -24,6 +24,9 @@ import { COOKIE_DA_SESSAO, senhaConfigurada, tokenValido } from "@/server/auth/s
 function ehPublico(pathname: string): boolean {
   return (
     pathname === "/login" ||
+    // Onde o formulário de login posta. Sem isso o porteiro barraria a própria
+    // entrada, e o login viraria um laço.
+    pathname === "/api/sessao" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||
@@ -39,6 +42,18 @@ export async function middleware(request: NextRequest) {
 
   // Sem senha e fora de produção: projeto local roda como sempre rodou.
   if (!senhaConfigurada() && process.env.NODE_ENV !== "production") {
+    return NextResponse.next();
+  }
+
+  // Sem senha configurada, `/api/health` responde mesmo assim.
+  //
+  // É a única situação em que o painel tranca tudo, e trancar junto o
+  // diagnóstico que explica o porquê deixa quem opera sem saída: a tela de
+  // login diz "falta configurar" e não há como descobrir o que falta. Aqui
+  // nenhum dado de negócio está acessível — os relatórios seguem barrados —,
+  // e a resposta lista apenas nomes de variável, nunca valores. Assim que a
+  // senha existir, esta porta se fecha junto com as outras.
+  if (!senhaConfigurada() && pathname === "/api/health") {
     return NextResponse.next();
   }
 

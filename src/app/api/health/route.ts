@@ -36,6 +36,28 @@ const CONFIGURAVEIS = [
   "CLARITY_PROJECT_ID",
   "CLARITY_API_TOKEN",
   "QYRA_FORCE_MOCK",
+  // A senha de acesso. Só a presença — o valor nunca sai daqui. Sem ela na
+  // lista, a variável mais importante do painel era a única que ninguém
+  // conseguia conferir.
+  "QYRA_SENHA",
+  "QYRA_SESSAO_SECRET",
+  "KOMMO_SUBDOMAIN",
+  "KOMMO_ACCESS_TOKEN",
+  // Entrou depois das outras duas e ficou de fora da lista — a mesma armadilha
+  // de antes: variável que ninguém consegue conferir se pegou. Opcional, então
+  // aparecer em "ausentes" é resultado legítimo.
+  "KOMMO_PIPELINE_ID",
+  // Redis opcional, para a última leitura do Clarity sobreviver a uma partida a
+  // frio. Aqui pela terceira vez pela mesma razão das duas anteriores: sem
+  // aparecer na lista, quem cadastra não consegue conferir se pegou.
+  //
+  // Esta lista já errou três vezes por ser mantida à mão. Derivá-la do schema
+  // do `env.ts` acabaria com a categoria de erro — está anotado como próximo
+  // passo, e é dívida consciente.
+  "KV_REST_API_URL",
+  "KV_REST_API_TOKEN",
+  "UPSTASH_REDIS_REST_URL",
+  "UPSTASH_REDIS_REST_TOKEN",
 ] as const;
 
 /**

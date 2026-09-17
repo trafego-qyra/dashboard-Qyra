@@ -2,7 +2,15 @@ import "server-only";
 
 import { avisoOperacao } from "@/lib/avisos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, Notice, SeriesPoint, TableBlock } from "@/lib/types";
+import type {
+  ChannelReport,
+  DateRange,
+  FunnelBlock,
+  FunnelStage,
+  Notice,
+  SeriesPoint,
+  TableBlock,
+} from "@/lib/types";
 import { mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
@@ -44,6 +52,16 @@ interface LeadDoKommo {
     field_code?: string;
     values?: Array<{ value?: string | number | boolean }>;
   }> | null;
+  /**
+   * O motivo de perda nativo do Kommo, quando pedido com `with=loss_reason`.
+   *
+   * A documentação mostra ora um objeto, ora uma lista de um item — e as duas
+   * formas aparecem em contas reais. Aceitar as duas custa uma linha; supor a
+   * errada faz a tabela de perdas nascer vazia sem erro nenhum.
+   */
+  _embedded?: {
+    loss_reason?: { name?: string } | Array<{ name?: string }> | null;
+  } | null;
 }
 
 interface RespostaDeLeads {
@@ -106,18 +124,34 @@ function campo(lead: LeadDoKommo, nomes: string[]): string | null {
  * O Kommo responde **204 sem corpo** quando não há nada na página — que o
  * `httpJson` entrega como objeto vazio, e o laço encerra sozinho.
  */
-async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
+function inicioDoDia(dia: string): number {
+  return Date.parse(`${dia}T00:00:00Z`) / 1000;
+}
+
+function fimDoDia(dia: string): number {
+  return Date.parse(`${dia}T23:59:59Z`) / 1000;
+}
+
+/**
+ * Negócios de uma janela, filtrados por criação ou por fechamento.
+ *
+ * As duas perguntas do relatório precisam de conjuntos diferentes: "quantos
+ * negócios entraram" olha a criação, "quanto vendemos" olha o fechamento. Um
+ * negócio criado em julho e fechado em agosto pertence ao agosto do segundo, e
+ * ao julho do primeiro.
+ */
+async function buscarLeads(range: DateRange, campoDeData: "created_at" | "closed_at") {
   const url = new URL(`${baseDaApi()}/leads`);
-  // Fechamento pode cair fora da janela em que o lead nasceu, então o filtro é
-  // por criação e o corte por data de fechamento acontece depois, em memória.
-  url.searchParams.set(
-    "filter[created_at][from]",
-    String(Date.parse(`${range.from}T00:00:00Z`) / 1000),
-  );
-  url.searchParams.set(
-    "filter[created_at][to]",
-    String(Date.parse(`${range.to}T23:59:59Z`) / 1000),
-  );
+  url.searchParams.set(`filter[${campoDeData}][from]`, String(inicioDoDia(range.from)));
+  url.searchParams.set(`filter[${campoDeData}][to]`, String(fimDoDia(range.to)));
+  const funil = getEnv().KOMMO_PIPELINE_ID;
+  // Sem funil configurado, conta a conta inteira. Com ele, só o funil de
+  // vendas — `142` é etapa de ganho em **todo** funil, e um pipeline de
+  // suporte com etapa de ganho entraria no faturamento sem ninguém notar.
+  if (funil) url.searchParams.set("filter[pipeline_id]", funil);
+  // Sem `with`, o motivo de perda não vem — e a tabela de perdas nasce vazia
+  // sem nenhum sinal de que faltou pedir.
+  url.searchParams.set("with", "loss_reason");
   url.searchParams.set("limit", String(POR_PAGINA));
 
   const todos: LeadDoKommo[] = [];
@@ -132,7 +166,15 @@ async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
     proxima = leads.length === POR_PAGINA ? (resposta._links?.next?.href ?? null) : null;
   }
 
-  return todos;
+  // Confere a janela de novo em memória. Filtro que a API não reconheça é
+  // ignorado em silêncio, e "ignorado em silêncio" num relatório de vendas
+  // significa somar negócio de outro período sem ninguém perceber.
+  const de = inicioDoDia(range.from);
+  const ate = fimDoDia(range.to);
+  return todos.filter((lead) => {
+    const quando = lead[campoDeData];
+    return typeof quando === "number" && quando >= de && quando <= ate;
+  });
 }
 
 /**
@@ -146,42 +188,67 @@ async function buscarLeads(range: DateRange): Promise<LeadDoKommo[]> {
  * negócio comum, e adivinhar a forma para extrair valor renderia um total
  * inventado.
  */
-async function contarLeadsDeEntrada(): Promise<number> {
+async function contarLeadsDeEntrada(range: DateRange): Promise<number> {
   try {
-    const resposta = await httpJson<{ _embedded?: { unsorted?: unknown[] } }>(
+    const resposta = await httpJson<{ _embedded?: { unsorted?: Array<{ created_at?: number }> } }>(
       `${baseDaApi()}/leads/unsorted?limit=${POR_PAGINA}`,
       { headers: autorizacao() },
     );
-    return resposta._embedded?.unsorted?.length ?? 0;
+
+    // Recortado pelo período, como todas as outras linhas da tabela. Sem isso
+    // a fila inteira entrava numa tabela que promete "os negócios do período",
+    // e o total não fechava com nada.
+    const de = inicioDoDia(range.from);
+    const ate = fimDoDia(range.to);
+    return (resposta._embedded?.unsorted ?? []).filter(
+      (item) =>
+        typeof item.created_at === "number" && item.created_at >= de && item.created_at <= ate,
+    ).length;
   } catch {
     // A área pode estar vazia (204) ou o escopo não cobrir: some da tabela.
     return 0;
   }
 }
 
-/** Nome de cada etapa, por id. Sem isso o funil sairia como números. */
-async function buscarEtapas(): Promise<Map<number, string>> {
-  const nomes = new Map<number, string>();
+interface EtapaDoFunil {
+  id: number;
+  nome: string;
+}
+
+/**
+ * As etapas do funil, **na ordem do funil e todas elas**.
+ *
+ * Não é só para trocar número por nome. É o esqueleto da tabela: sem ele, só
+ * apareciam as etapas que tinham negócio no período, e etapa vazia sumia da
+ * tela. Só que "ninguém chega em Negociação" é exatamente o que um funil
+ * precisa mostrar — some a etapa, some o gargalo.
+ *
+ * A ordem vem do `sort` do Kommo, a mesma das colunas lá. Ordenar por volume
+ * transformaria o funil numa lista de campeões, que não é o que ele é.
+ */
+async function buscarEtapas(): Promise<EtapaDoFunil[]> {
   try {
     const resposta = await httpJson<RespostaDeFunis>(`${baseDaApi()}/leads/pipelines`, {
       headers: autorizacao(),
     });
-    for (const funil of resposta._embedded?.pipelines ?? []) {
-      for (const etapa of funil._embedded?.statuses ?? []) {
-        if (etapa.name) nomes.set(etapa.id, etapa.name);
-      }
-    }
+
+    const escolhido = getEnv().KOMMO_PIPELINE_ID;
+    const funis = (resposta._embedded?.pipelines ?? []).filter(
+      (funil) => !escolhido || String(funil.id) === escolhido,
+    );
+
+    return funis
+      .flatMap((funil) => funil._embedded?.statuses ?? [])
+      .filter((etapa) => Boolean(etapa.name))
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+      .map((etapa) => ({ id: etapa.id, nome: etapa.name as string }));
   } catch {
-    // Enfeite: sem os nomes o funil ainda soma, só fica menos legível.
+    // Sem o esqueleto o funil ainda soma o que veio, só perde as etapas vazias.
+    return [];
   }
-  return nomes;
 }
 
-function montarFunil(
-  leads: LeadDoKommo[],
-  nomes: Map<number, string>,
-  deEntrada: number,
-): TableBlock {
+function montarFunil(leads: LeadDoKommo[], etapas: EtapaDoFunil[], deEntrada: number): TableBlock {
   const porEtapa = new Map<number, { negocios: number; valor: number }>();
   for (const lead of leads) {
     const id = lead.status_id ?? 0;
@@ -191,30 +258,40 @@ function montarFunil(
     porEtapa.set(id, atual);
   }
 
+  const linha = (etapa: string, id: number) => {
+    const dados = porEtapa.get(id) ?? { negocios: 0, valor: 0 };
+    return { etapa, negocios: dados.negocios, valor: Math.round(dados.valor * 100) / 100 };
+  };
+
+  // A fila de entrada abre a tabela: é a porta, não uma etapa do funil.
+  const rows =
+    deEntrada > 0
+      ? [{ etapa: "Leads de entrada (a organizar)", negocios: deEntrada, valor: 0 }]
+      : [];
+
+  // Todas as etapas, na ordem do funil, inclusive as zeradas.
+  for (const etapa of etapas) rows.push(linha(etapa.nome, etapa.id));
+
+  // O que apareceu nos negócios mas não está no esqueleto — outro funil, ou
+  // etapa apagada depois de o negócio passar por ela. Vai ao fim em vez de
+  // sumir da conta.
+  const conhecidas = new Set(etapas.map((e) => e.id));
+  for (const [id] of porEtapa) {
+    if (conhecidas.has(id)) continue;
+    const nome = id === GANHO ? "Venda ganha" : id === PERDIDO ? "Perdido" : `Etapa ${id}`;
+    rows.push(linha(nome, id));
+  }
+
   return {
     title: "Negócios por etapa",
-    description: "Onde os negócios do período estão parados, e quanto há em cada etapa.",
+    description:
+      "Onde os negócios do período estão parados. Na ordem do funil, com as etapas vazias à vista — etapa sem ninguém é o gargalo.",
     columns: [
       { key: "etapa", label: "Etapa", align: "left" },
       { key: "negocios", label: "Negócios", format: "integer", align: "right" },
       { key: "valor", label: "Valor", format: "currency", align: "right" },
     ],
-    rows: [...porEtapa.entries()]
-      .map(([id, dados]) => ({
-        etapa:
-          nomes.get(id) ??
-          (id === GANHO ? "Venda ganha" : id === PERDIDO ? "Perdido" : `Etapa ${id}`),
-        negocios: dados.negocios,
-        valor: Math.round(dados.valor * 100) / 100,
-      }))
-      .concat(
-        // No topo da lista e fora da ordenação: é a porta de entrada, não uma
-        // etapa concorrendo por volume.
-        deEntrada > 0
-          ? [{ etapa: "Leads de entrada (a organizar)", negocios: deEntrada, valor: 0 }]
-          : [],
-      )
-      .sort((a, b) => b.negocios - a.negocios),
+    rows,
   };
 }
 
@@ -224,28 +301,36 @@ function montarFunil(
  * Só existe se o Kommo estiver recebendo a UTM no negócio. Quando não estiver,
  * a tabela sai vazia em vez de inventar origem, e o aviso diz o que configurar.
  */
-function montarOrigens(leads: LeadDoKommo[]): TableBlock {
+function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBlock {
   const porOrigem = new Map<string, { leads: number; vendas: number; receita: number }>();
 
-  for (const lead of leads) {
-    const origem =
-      campo(lead, ["utm_source", "utm source", "origem"]) ??
-      (lead.custom_fields_values ? "Sem UTM" : "Sem UTM");
+  const chaveDaOrigem = (lead: LeadDoKommo): string => {
+    const origem = campo(lead, ["utm_source", "utm source", "origem"]) ?? "Sem UTM";
     const campanha = campo(lead, ["utm_campaign", "utm campaign", "campanha"]);
-    const chave = campanha ? `${origem} · ${campanha}` : origem;
+    return campanha ? `${origem} · ${campanha}` : origem;
+  };
 
+  const linha = (chave: string) => {
     const atual = porOrigem.get(chave) ?? { leads: 0, vendas: 0, receita: 0 };
-    atual.leads += 1;
-    if (lead.status_id === GANHO) {
-      atual.vendas += 1;
-      atual.receita += lead.price ?? 0;
-    }
     porOrigem.set(chave, atual);
+    return atual;
+  };
+
+  // Negócios contam por criação, vendas por fechamento — a mesma separação do
+  // resto da tela. Por isso a coluna de conversão aqui é aproximada quando o
+  // ciclo é longo, e a descrição diz isso.
+  for (const lead of criados) linha(chaveDaOrigem(lead)).leads += 1;
+
+  for (const lead of ganhos) {
+    const atual = linha(chaveDaOrigem(lead));
+    atual.vendas += 1;
+    atual.receita += lead.price ?? 0;
   }
 
   return {
     title: "Vendas por origem",
-    description: "De onde vieram os negócios que fecharam, pela UTM registrada no Kommo.",
+    description:
+      "De onde vieram os negócios, pela UTM registrada no Kommo. Negócios contam por criação e vendas por fechamento, então a conversão é aproximada quando o ciclo passa do período.",
     columns: [
       { key: "origem", label: "Origem", align: "left" },
       { key: "leads", label: "Negócios", format: "integer", align: "right" },
@@ -265,6 +350,174 @@ function montarOrigens(leads: LeadDoKommo[]): TableBlock {
   };
 }
 
+/**
+ * Motivo da perda, venha ele de onde vier.
+ *
+ * O Kommo tem um motivo de perda nativo, mas nada obriga a clínica a usá-lo —
+ * aqui o time montou a lista como campo do próprio negócio, com as opções
+ * escritas por eles. As duas formas convivem numa mesma conta, e ler só uma
+ * delas produziria uma tabela vazia sem nenhum erro para investigar.
+ *
+ * O campo personalizado é procurado por conteúdo do nome, não por nome exato:
+ * "Motivo de perda", "Motivos da perda" e "MOTIVO DE PERDA" são a mesma coisa
+ * para quem preenche, e exigir a grafia certa quebraria no dia em que alguém
+ * renomeasse a etiqueta.
+ */
+function motivoDaPerda(lead: LeadDoKommo): string | null {
+  const nativo = lead._embedded?.loss_reason;
+  const primeiro = Array.isArray(nativo) ? nativo[0] : nativo;
+  const doKommo = primeiro?.name?.trim();
+  if (doKommo) return doKommo;
+
+  for (const item of lead.custom_fields_values ?? []) {
+    const nome = (item.field_name ?? "").toLowerCase();
+    const codigo = (item.field_code ?? "").toLowerCase();
+    const ehMotivo = codigo === "loss_reason" || (nome.includes("motivo") && nome.includes("perd"));
+    if (!ehMotivo) continue;
+
+    const valor = item.values?.[0]?.value;
+    if (valor === undefined || valor === null || valor === "") continue;
+    return String(valor).trim();
+  }
+
+  return null;
+}
+
+/**
+ * Perda que ainda pode virar venda.
+ *
+ * Decisão do comercial, não do código: preço, tempo e área de cobertura são as
+ * três que voltam — o orçamento muda, a agenda abre, a cobertura cresce. As
+ * demais ("preferiu concorrente", "não elegível", "não respondeu") entram para
+ * o arquivo.
+ *
+ * A classificação é por conteúdo do texto, e não por uma lista fechada de
+ * opções, porque a lista do Kommo é editada por quem opera o CRM. Opção nova
+ * cai em "arquivar" — o lado conservador: deixar de fora uma perda recuperável
+ * custa uma oportunidade, prometer recuperação de quem não volta custa a
+ * confiança na tela.
+ */
+const RECUPERAVEIS: Array<{ marca: RegExp }> = [
+  // "Preço fora do orçamento", "Achou caro sem ver valor"
+  { marca: /car[oa]|pre[çc]o|or[çc]amento/i },
+  // "Sem tempo no momento", "Vai pensar / precisa de tempo"
+  { marca: /tempo|pensar/i },
+  // "Fora da Área de Cobertura"
+  { marca: /[áa]rea|cobertura/i },
+];
+
+function ehRecuperavel(motivo: string): boolean {
+  return RECUPERAVEIS.some(({ marca }) => marca.test(motivo));
+}
+
+/**
+ * Por que os negócios se perderam — e quais dá para retomar.
+ *
+ * É a outra metade do funil. A tabela de etapas mostra onde as pessoas param;
+ * esta mostra por quê pararam, que é o que dá para agir em cima. A coluna de
+ * situação existe para separar a fila de retomada do arquivo morto sem
+ * depender de quem lê lembrar quais motivos voltam.
+ */
+function montarPerdas(perdidos: LeadDoKommo[]): TableBlock {
+  const porMotivo = new Map<string, { negocios: number; valor: number }>();
+
+  for (const lead of perdidos) {
+    const motivo = motivoDaPerda(lead) ?? "Sem motivo registrado";
+    const atual = porMotivo.get(motivo) ?? { negocios: 0, valor: 0 };
+    atual.negocios += 1;
+    atual.valor += lead.price ?? 0;
+    porMotivo.set(motivo, atual);
+  }
+
+  return {
+    title: "Motivos de perda",
+    description:
+      "Por que os negócios do período não fecharam. Preço, tempo e área de cobertura entram como recuperáveis — são as perdas que voltam quando o orçamento, a agenda ou a cobertura mudam.",
+    columns: [
+      { key: "motivo", label: "Motivo", align: "left" },
+      { key: "situacao", label: "Situação", align: "left" },
+      { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+      { key: "valor", label: "Valor", format: "currency", align: "right" },
+    ],
+    rows: [...porMotivo.entries()]
+      .map(([motivo, dados]) => ({
+        motivo,
+        // Texto, e não cor: a situação precisa sobreviver a um print em preto
+        // e branco e a quem não distingue as duas cores.
+        situacao: ehRecuperavel(motivo) ? "Recuperável" : "Arquivar",
+        negocios: dados.negocios,
+        valor: Math.round(dados.valor * 100) / 100,
+      }))
+      .sort((a, b) => b.negocios - a.negocios || b.valor - a.valor),
+  };
+}
+
+/**
+ * O funil em figura: quantos **chegaram** a cada etapa.
+ *
+ * A tabela ao lado conta ocupação — quantos estão parados em cada etapa agora.
+ * Desenhar aquilo como funil seria errado: um negócio em Negociação já passou
+ * por Qualificação, e a etapa do meio pareceria um gargalo que não existe. Aqui
+ * cada etapa soma quem está nela e quem já foi adiante.
+ *
+ * **O negócio perdido conta só na boca do funil.** O Kommo guarda apenas a
+ * etapa atual, e a etapa atual de um perdido é "perdido" — quem morreu em
+ * Negociação não deixa rastro de onde estava. Creditá-lo à última etapa
+ * conhecida seria inventar; contá-lo só na entrada subestima o meio do funil, e
+ * é o erro que dá para admitir em voz alta. A ressalva vai junto da figura.
+ */
+function montarFunilVisual(
+  leads: LeadDoKommo[],
+  etapas: EtapaDoFunil[],
+  ganhos: number,
+): FunnelBlock | undefined {
+  if (etapas.length === 0) return undefined;
+
+  const posicao = new Map(etapas.map((etapa, i) => [etapa.id, i]));
+
+  // Quantos chegaram a cada etapa, e o valor que veio junto.
+  const chegaram = etapas.map(() => ({ negocios: 0, valor: 0 }));
+  let valorGanho = 0;
+
+  for (const lead of leads) {
+    const valor = lead.price ?? 0;
+    // Ganho passou por tudo. Perdido, e etapa que não está no funil, contam só
+    // na entrada — é o que dá para afirmar sem inventar.
+    const ate =
+      lead.status_id === GANHO ? etapas.length - 1 : (posicao.get(lead.status_id ?? 0) ?? 0);
+    if (lead.status_id === GANHO) valorGanho += valor;
+
+    for (let i = 0; i <= ate; i++) {
+      chegaram[i].negocios += 1;
+      chegaram[i].valor += valor;
+    }
+  }
+
+  const stages: FunnelStage[] = etapas.map((etapa, i) => ({
+    label: etapa.nome,
+    value: chegaram[i].negocios,
+    amount: Math.round(chegaram[i].valor * 100) / 100,
+  }));
+
+  // O desfecho fecha a figura. Sem ele o funil termina numa etapa de passagem,
+  // e a tela de vendas não mostra a venda.
+  stages.push({
+    label: "Venda ganha",
+    value: ganhos,
+    amount: Math.round(valorGanho * 100) / 100,
+    outcome: "ganho",
+  });
+
+  return {
+    title: "Do primeiro contato ao pagamento",
+    description:
+      "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
+    caveat:
+      "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+    stages,
+  };
+}
+
 export async function fetchVendasReport(range: DateRange): Promise<ChannelReport> {
   const forceMock = isForceMock();
 
@@ -281,15 +534,33 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
   }
 
   try {
-    const [leads, etapas, deEntrada] = await Promise.all([
-      buscarLeads(range),
+    // Dois conjuntos, duas perguntas. `criados` responde "quantos negócios
+    // entraram e onde estão agora"; `fechados` responde "quanto vendemos".
+    // Antes o indicador contava criado-e-ganho e o gráfico creditava no dia do
+    // fechamento — bases diferentes na mesma tela, e os dois números não
+    // batiam.
+    const [criados, fechados, etapas, deEntrada] = await Promise.all([
+      buscarLeads(range, "created_at"),
+      buscarLeads(range, "closed_at"),
       buscarEtapas(),
-      contarLeadsDeEntrada(),
+      contarLeadsDeEntrada(range),
     ]);
 
-    const ganhos = leads.filter((l) => l.status_id === GANHO);
+    const leads = criados;
+    const ganhos = fechados.filter((l) => l.status_id === GANHO);
     const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
-    const emAberto = leads.filter((l) => l.status_id !== GANHO && l.status_id !== PERDIDO);
+    const emAberto = criados.filter((l) => l.status_id !== GANHO && l.status_id !== PERDIDO);
+    // Perdas contam por fechamento, como as vendas: é a mesma pergunta com o
+    // sinal trocado — "o que se decidiu neste período".
+    const perdidos = fechados.filter((l) => l.status_id === PERDIDO);
+    const recuperaveis = perdidos.filter((l) => {
+      const motivo = motivoDaPerda(l);
+      return motivo !== null && ehRecuperavel(motivo);
+    });
+    // Cortada entre os criados, não entre os fechados: é a fatia daquela safra
+    // que já virou venda. Misturar "fechados no mês" com "criados no mês"
+    // produziria uma taxa que pode passar de 100%.
+    const ganhosDaSafra = criados.filter((l) => l.status_id === GANHO).length;
 
     // Ciclo médio só considera quem fechou e tem as duas pontas: sem
     // `closed_at`, incluir o negócio arrastaria a média para baixo.
@@ -299,23 +570,22 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const cicloMedio = ciclos.length === 0 ? 0 : ciclos.reduce((a, b) => a + b, 0) / ciclos.length;
 
     const porDia = new Map<string, { vendas: number; receita: number; leads: number }>();
-    for (const lead of leads) {
-      const criado = paraDia(lead.created_at);
-      if (criado) {
-        const atual = porDia.get(criado) ?? { vendas: 0, receita: 0, leads: 0 };
-        atual.leads += 1;
-        porDia.set(criado, atual);
-      }
-      // A venda conta no dia em que fechou, não no dia em que o lead nasceu —
-      // é a diferença entre "quanto entrou" e "quanto vendemos" no dia.
-      if (lead.status_id === GANHO) {
-        const fechado = paraDia(lead.closed_at) ?? criado;
-        if (!fechado) continue;
-        const atual = porDia.get(fechado) ?? { vendas: 0, receita: 0, leads: 0 };
-        atual.vendas += 1;
-        atual.receita += lead.price ?? 0;
-        porDia.set(fechado, atual);
-      }
+    for (const lead of criados) {
+      const dia = paraDia(lead.created_at);
+      if (!dia) continue;
+      const atual = porDia.get(dia) ?? { vendas: 0, receita: 0, leads: 0 };
+      atual.leads += 1;
+      porDia.set(dia, atual);
+    }
+    // A venda conta no dia em que fechou — mesma base do indicador acima, para
+    // a soma das barras bater com o total.
+    for (const lead of ganhos) {
+      const dia = paraDia(lead.closed_at);
+      if (!dia) continue;
+      const atual = porDia.get(dia) ?? { vendas: 0, receita: 0, leads: 0 };
+      atual.vendas += 1;
+      atual.receita += lead.price ?? 0;
+      porDia.set(dia, atual);
     }
 
     const series: SeriesPoint[] = eachDay(range).map((date) => {
@@ -340,6 +610,16 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       avisos.push(
         avisoOperacao(
           `${ganhos.length} negócio(s) ganho(s) no período estão sem valor preenchido no Kommo. Receita e ticket médio ficam em zero até o campo de valor ser preenchido ao fechar a venda.`,
+        ),
+      );
+    }
+    // Perda sem motivo é perda que não vira aprendizado: o negócio some do
+    // funil e ninguém sabe se dava para recuperar.
+    const semMotivo = perdidos.filter((l) => motivoDaPerda(l) === null).length;
+    if (semMotivo > 0) {
+      avisos.push(
+        avisoOperacao(
+          `${semMotivo} de ${perdidos.length} negócio(s) perdido(s) no período estão sem motivo registrado no Kommo. Sem o motivo não dá para separar a perda que volta da que fica arquivada.`,
         ),
       );
     }
@@ -373,13 +653,15 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           label: "Ticket médio",
           value: ganhos.length === 0 ? 0 : receita / ganhos.length,
           format: "currency",
+          semComparacao: ganhos.length === 0,
         },
         {
           key: "conversao",
           label: "Lead vira venda",
-          value: leads.length === 0 ? 0 : ganhos.length / leads.length,
+          value: criados.length === 0 ? 0 : ganhosDaSafra / criados.length,
           format: "percent",
-          hint: "Negócios ganhos sobre todos os negócios criados no período.",
+          semComparacao: criados.length === 0,
+          hint: "Dos negócios criados no período, quantos já viraram venda. Conta a mesma safra dos dois lados, então não se compara com as vendas fechadas acima.",
         },
         {
           key: "ciclo",
@@ -387,16 +669,36 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           value: cicloMedio,
           format: "decimal",
           lowerIsBetter: true,
-          hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
+          // Sem fechamento no período não há ciclo. Comparar pintaria de verde
+          // um "-100%" que significa "nada fechou".
+          semComparacao: ciclos.length === 0,
+          hint: "Dias entre a criação do negócio e a etapa de venda ganha, que é quando o pagamento entra. Média dos que fecharam no período.",
         },
         { key: "emAberto", label: "Em aberto", value: emAberto.length, format: "integer" },
+        {
+          key: "recuperaveis",
+          label: "Perdas recuperáveis",
+          value: recuperaveis.length,
+          format: "integer",
+          semComparacao: true,
+          // Sem comparação de propósito: este número não tem lado bom. Subir
+          // pode ser "perdemos mais" ou "perdemos mais gente que volta", e a
+          // seta pintaria de verde ou de vermelho uma das duas sem saber qual.
+          // É uma fila de trabalho do mês, não um placar.
+          hint: "Negócios perdidos por preço, tempo ou área de cobertura — os motivos que voltam quando o orçamento, a agenda ou a cobertura mudam. Estão detalhados na tabela de motivos.",
+        },
       ],
       series,
       seriesDefs: [
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
-      tables: [montarFunil(leads, etapas, deEntrada), montarOrigens(leads)],
+      funnel: montarFunilVisual(criados, etapas, ganhosDaSafra),
+      tables: [
+        montarFunil(criados, etapas, deEntrada),
+        montarPerdas(perdidos),
+        montarOrigens(criados, ganhos),
+      ],
       notices: avisos,
     };
   } catch (erro) {

@@ -130,6 +130,41 @@ GOOGLE_ADS_API_VERSION=                      # opcional, ver abaixo
 
 Os hífens são removidos pelo conector — pode colar como aparece na interface.
 
+### O que a API não entrega
+
+**Informações de leilão.** O relatório que mostra quem mais aparece nas mesmas
+buscas não existe na API do Google Ads — nem por GAQL nem por recurso próprio.
+Consultas a `auction_insight_*` respondem `BAD_RESOURCE_TYPE_IN_FROM_CLAUSE`, e
+o programa de acesso por lista está fechado para novas contas. É dado exclusivo
+da interface: Insights → Relatórios → Informações do leilão.
+
+Não há aviso disso na tela, por decisão de quem opera — a limitação fica
+registrada aqui.
+
+### O token de desenvolvedor
+
+O token nasce com acesso *Test* e só lê contas de teste. Para ler a conta de
+produção é preciso solicitar o **acesso básico** na Central de API da conta
+gerente — o token não muda, só o nível de acesso, e a tela vira tempo real
+sozinha no carregamento seguinte.
+
+O pedido é analisado por gente, leva dias, e costuma voltar com pergunta por
+e-mail antes de ser aprovado. **A pergunta chega no e-mail de contato cadastrado
+na Central de API**, e o caso fica parado até alguém responder — sem prazo e sem
+cobrança. Vale usar um endereço de função, não o pessoal de quem configurou.
+
+O painel não tem plano B: falha da API sobe como em qualquer canal, a visão
+geral registra o erro e a tela do canal diz o que aconteceu. Houve um piso —
+os relatórios em CSV exportados da plataforma, congelados num período fixo —
+que serviu enquanto o token aguardava aprovação; ele saiu junto com a aprovação,
+porque número congelado servido no lugar de dado atual, sem nada na tela dizendo
+qual dos dois se está lendo, é pior que uma tela de erro.
+
+Para diagnosticar: `/api/diagnostico/google` traz `tokenDeDesenvolvedor`, que
+diz em uma linha se o acesso básico já saiu — e, quando a consulta falha havendo
+conta gerente configurada, refaz a mesma consulta sem o cabeçalho, o que separa
+"problema de credencial" de "problema de por onde estamos entrando".
+
 **Sobre a versão da API.** Deixe `GOOGLE_ADS_API_VERSION` vazio: o conector
 desce uma lista de candidatas e usa a primeira que responder.
 
@@ -179,7 +214,47 @@ Sem o token, a seção some da tela do Analytics e o resto continua igual.
 | Restrição | Consequência |
 |---|---|
 | Janela máxima de 3 dias | A seção é uma fotografia recente, não série histórica. Não acompanha o filtro de datas. |
-| Cota diária baixa | O resultado é cacheado por 30 minutos e a chamada nunca é repetida em erro. |
+| **10 requisições por projeto por dia** | O conector gasta 2 por atualização — uma geral, uma por URL. O cache vale **6 horas**, o que dá 4 atualizações e 8 chamadas, com 2 de folga para um deploy. A chamada nunca é repetida em erro. |
+
+**A conta do cache não é opcional.** A primeira versão usava 30 minutos, o que
+daria até 48 atualizações e 96 chamadas por dia contra um teto de 10: a cota
+acabava antes do almoço e a tela passava o resto do dia em `429 Exceeded daily
+limit`. Ao mexer nesse intervalo, refaça a conta.
+
+E o cache precisa ser o **compartilhado**, não o de memória. O de memória é por
+instância, e a Vercel sobe várias — cada partida a frio recomeçava com o cache
+vazio e gastava mais duas chamadas. É o que faz o `httpJson` aceitar
+`revalidateSeconds`, usado só aqui.
+
+**Quando a cota acabar mesmo assim**, a tela mostra a última leitura que deu
+certo, com o carimbo de quando foi feita, em vez de uma tela de erro. Dado de
+ontem rotulado como de ontem vale mais que nada — quem abre o painel quer ver o
+comportamento do site, e cota estourada é problema do painel, não da pergunta.
+
+#### Para essa lembrança sobreviver a uma partida a frio
+
+Sem Redis, a última leitura vive na memória da instância — e a Vercel sobe
+instâncias novas o tempo todo. A instância nova nasce sem lembrança nenhuma, e
+é justamente quando alguém abre o painel para mostrar a alguém.
+
+Com um Redis cadastrado, a lembrança passa a valer para todas as instâncias, por
+sete dias. É **opcional**: sem ele o painel funciona igual, só perde a memória
+entre instâncias.
+
+Na Vercel: **Storage → Create Database → Upstash for Redis**, e conectar ao
+projeto. Ela injeta as variáveis sozinha, com um dos dois conjuntos de nomes:
+
+```env
+KV_REST_API_URL=...            # ou UPSTASH_REDIS_REST_URL
+KV_REST_API_TOKEN=...          # ou UPSTASH_REDIS_REST_TOKEN
+```
+
+O painel aceita os dois — quem cadastra não escolhe qual a Vercel usa. Confira
+em `/api/health` que apareceram.
+
+O limite não é ajustável pelo próprio painel do Clarity; aumentar exige pedir
+ao suporte da Microsoft.
+[Documentação](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api)
 
 **O mapa de calor em si não sai por API** — o Clarity não expõe a imagem. O que
 o painel traz é o número por trás dele (profundidade de rolagem por página) e o
@@ -211,6 +286,7 @@ Kommo diz quanto daquilo virou dinheiro.
 |---|---|
 | `KOMMO_SUBDOMAIN` | `marketingqyracombr` — o nome na URL da conta. Não é segredo |
 | `KOMMO_ACCESS_TOKEN` | Chave de longa duração da integração privada. **É segredo** |
+| `KOMMO_PIPELINE_ID` | Opcional. O funil de vendas, quando a conta tem mais de um — o do Kommo aparece na URL do funil |
 
 ### Passo a passo
 
@@ -266,6 +342,29 @@ que não passa por URL com parâmetro e portanto não carrega UTM naturalmente.
 Ligar venda a campanha nesses casos exige uma automação capturando a origem da
 conversa e gravando no negócio — é o ponto em que uma ferramenta como o n8n
 tem função de verdade.
+
+### Quando uma venda conta
+
+**Pela data de fechamento.** "Vendemos 17 em agosto" significa 17 negócios que
+foram marcados como ganhos em agosto — não 17 que entraram em agosto e
+fecharam algum dia. É a conta que a operação usa, e é a que faz o total dos
+indicadores bater com a soma das barras do gráfico.
+
+Por isso o conector faz **duas consultas**: uma por data de criação, que
+responde "quantos negócios entraram e onde estão agora", e outra por data de
+fechamento, que responde "quanto vendemos".
+
+A taxa de conversão é a exceção, e de propósito: ela olha só os **criados** no
+período e pergunta quantos daquela safra já viraram venda. Cruzar "fechados no
+mês" com "criados no mês" produziria uma taxa que pode passar de 100% quando o
+ciclo é longo.
+
+### Mais de um funil
+
+`142` é a etapa de ganho em **todo** funil do Kommo. Numa conta com pipeline de
+suporte ou pós-venda, negócios ganhos ali entrariam no faturamento sem ninguém
+notar. `KOMMO_PIPELINE_ID` restringe ao funil de vendas; sem ele, a conta
+inteira é somada.
 
 ### Leads de entrada
 

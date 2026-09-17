@@ -5,7 +5,6 @@ import { LightBlock } from "@/components/brand/light-block";
 import { QyraLogo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { senhaConfigurada } from "@/server/auth/sessao";
-import { entrar } from "./actions";
 
 /**
  * Porta de entrada do painel.
@@ -23,6 +22,7 @@ const MENSAGENS: Record<string, string> = {
   senha: "Senha incorreta. Confira e tente de novo.",
   espera: "Tentativas demais. Espere alguns minutos antes de tentar outra vez.",
   config: "O painel ainda não tem senha configurada. Avise quem cuida do deploy.",
+  origem: "O envio não partiu desta página. Recarregue e tente de novo.",
 };
 
 export default async function LoginPage({
@@ -47,8 +47,25 @@ export default async function LoginPage({
             O desempenho de mídia da QYRA é restrito a quem tem a senha de acesso.
           </p>
 
-          <form action={entrar} className="mt-7 space-y-3">
+          {/* Envio nativo, e não Server Action: é a navegação do POST que faz o
+              gerenciador de senha do navegador oferecer guardar a senha — e
+              senha compartilhada precisa morar num gerenciador, não num
+              post-it. `method="post"` também mantém o formulário funcionando
+              se o JavaScript falhar. */}
+          <form method="post" action="/api/sessao" className="mt-7 space-y-3">
             <input type="hidden" name="de" value={de} />
+            {/* O Chrome só guarda a senha quando há um usuário para associar
+                a ela. Aqui a conta é uma só, então o campo é fixo e invisível:
+                dá ao gerenciador o par que ele espera sem inventar uma pergunta
+                para quem entra. */}
+            <input
+              type="text"
+              name="usuario"
+              value="qyra"
+              readOnly
+              hidden
+              autoComplete="username"
+            />
 
             <div className="space-y-1.5">
               <label htmlFor="senha" className="block font-medium text-plum-200 text-xs">

@@ -99,8 +99,34 @@ bolha, small multiples) usam no máximo **3 slots**. Acima disso o gate
 all-pairs reprova. `maxSlotsFor("all-pairs")` devolve esse número, e há teste
 travando a regra.
 
-Rampa ordinal (funil, faixas): lilás em 5 passos, também validada
-(`--ordinal`, monotonia e contraste da ponta clara aprovados).
+Rampa ordinal (funil): lilás em 5 passos, `--qy-funnel-1..5`, mais
+`--qy-funnel-ganho` para o desfecho.
+
+**Ela é a mesma nos dois temas, e fica fora dos blocos de tema.** O funil
+(`FunnelChart`) mora sempre no slab escuro da marca — o mesmo da navegação e da
+tela de entrada —, então a superfície é fixa em `#2f2535` e a rampa é validada
+uma vez só em vez de duas. Sobre fundo escuro quem tem mais volume precisa de
+mais luz: a ordem vai do passo mais claro para o mais fechado.
+
+**Cone contínuo, com boca e bica arredondadas.** As faixas se encostam — 2px de
+superfície entre elas, o mesmo respiro de qualquer marca colada do painel — e
+formam uma peça só, em vez de blocos empilhados. Recorte poligonal não aceita
+raio, então a boca e a bica ganham uma tampa própria: retângulo de raio total na
+mesma largura da aresta, encaixado sem costura. É o que tira a quina viva de uma
+interface arredondada em todo o resto.
+
+O degradê de cada faixa é **horizontal**. Tampa e corpo são elementos separados,
+e qualquer componente vertical mudaria de tom entre os dois, deixando emenda
+visível justo na aresta que deveria ser lisa.
+
+Três regras que o componente cumpre:
+
+- **Largura é a única codificação de grandeza.** A cor apenas ordena.
+- **O desfecho sai da rampa.** "Venda ganha" não é etapa de passagem: vem em
+  verde, com troféu e rótulo — cor trocada sozinha não avisa que a categoria
+  mudou.
+- **Etapa zerada mantém um traço visível.** "Ninguém chega aqui" é a informação
+  mais útil que um funil dá; largura zero levaria o rótulo junto.
 
 ---
 

@@ -20,12 +20,15 @@ export type ChannelId = (typeof CHANNEL_IDS)[number];
 /**
  * De onde veio o número.
  *
- * `snapshot` é dado REAL exportado da plataforma, congelado num período fixo —
- * usado quando a API ainda não está liberada. Precisa ser distinto de `mock`
- * (número inventado) e de `live` (período acompanha o filtro), porque as três
- * situações pedem leituras diferentes de quem olha a tela.
+ * `live` acompanha o filtro de datas; `mock` é número inventado, para quando
+ * falta credencial.
+ *
+ * Houve uma terceira, `snapshot`: dado real exportado da plataforma e congelado
+ * num período fixo, que serviu o Google Ads enquanto o token da API aguardava
+ * aprovação. Saiu quando a API foi liberada — origem que nenhum canal produz é
+ * peso morto que todo código de consolidação ainda precisa considerar.
  */
-export type DataSource = "live" | "mock" | "snapshot";
+export type DataSource = "live" | "mock";
 
 /** Como um número deve ser renderizado. A UI nunca decide formato sozinha. */
 export type MetricFormat = "currency" | "integer" | "decimal" | "percent" | "ratio" | "duration";
@@ -47,6 +50,15 @@ export interface Kpi {
   /** `true` quando cair é bom (CPA, CPC, CPL). Inverte a leitura do delta. */
   lowerIsBetter?: boolean;
   hint?: string;
+  /**
+   * Não compare este número com o período anterior.
+   *
+   * Para métrica derivada — ticket médio, ciclo, taxa —, zero não quer dizer
+   * "caiu para zero", quer dizer "não houve o que medir". Comparar produz
+   * "-100%" com seta, e num ciclo de fechamento a seta sai **verde**, como se
+   * fechar nada fosse melhora.
+   */
+  semComparacao?: boolean;
 }
 
 /** Um ponto diário da série. `date` é ISO; o resto são métricas numéricas. */
@@ -84,6 +96,47 @@ export interface TableBlock {
   initialRows?: number;
   /** Atalho para fora do painel, no cabeçalho da tabela. */
   action?: { label: string; href: string };
+}
+
+/**
+ * Uma etapa do funil comercial, já com o acumulado calculado.
+ *
+ * `value` é **quantos chegaram até aqui**, não quantos estão parados aqui. São
+ * perguntas diferentes: um negócio em Negociação já passou por Qualificação, e
+ * desenhar a ocupação como se fosse fluxo faria a etapa do meio parecer um
+ * gargalo que não existe.
+ */
+export interface FunnelStage {
+  label: string;
+  /** Negócios que chegaram a esta etapa ou passaram dela. */
+  value: number;
+  /** Soma do valor dos negócios contados, quando o CRM tem esse campo. */
+  amount?: number;
+  /**
+   * Etapa de desfecho, e não de passagem.
+   *
+   * O ganho encerra o funil e por isso não usa a rampa das demais: é outra
+   * categoria de coisa, e a cor sozinha não diz isso — vem com ícone e rótulo.
+   */
+  outcome?: "ganho";
+}
+
+/**
+ * O funil comercial em forma de figura.
+ *
+ * Vive ao lado da tabela, não no lugar dela: a figura mostra o estrangulamento
+ * de relance, a tabela é a versão em texto que sobrevive a leitor de tela, a
+ * impressão em preto e branco e ao "me manda esse número".
+ */
+export interface FunnelBlock {
+  title: string;
+  description?: string;
+  stages: FunnelStage[];
+  /**
+   * O que a figura não consegue mostrar, dito antes de alguém tirar a conclusão
+   * errada — por exemplo, que o CRM só guarda a etapa atual do negócio.
+   */
+  caveat?: string;
 }
 
 /**
@@ -142,6 +195,32 @@ export interface ContentCard {
  * Mora aqui, e não no conector, porque `components/` não pode importar de
  * `server/` — é o contrato de arquitetura cravado na CI.
  */
+/**
+ * O que a tela de Comportamento recebe.
+ *
+ * Três estados, e não "resumo ou nada". A primeira versão devolvia `null` tanto
+ * para "falta credencial" quanto para "a chamada falhou", e a tela imprimia
+ * "Clarity não configurado" nos dois casos — com o token cadastrado e presente
+ * no diagnóstico. Quem lia era mandado configurar o que já estava configurado.
+ */
+export type ClarityEstado =
+  | { estado: "sem-credencial" }
+  | { estado: "falhou"; motivo: string }
+  | {
+      estado: "ok";
+      resumo: ClarityResumo;
+      /** Quando estes números foram lidos da API. */
+      atualizadoEm: string;
+      /**
+       * A leitura falhou e estes são os últimos números bons que havia.
+       *
+       * Dado de ontem rotulado como tal vale mais que uma tela de erro: quem
+       * abre o painel quer ver o comportamento do site, e a cota estourada é
+       * problema do painel, não da pergunta.
+       */
+      defasado?: true;
+    };
+
 export interface ClarityResumo {
   /** Fração média da página que as pessoas percorreram. Entre 0 e 1. */
   rolagemMedia: number;
@@ -194,9 +273,9 @@ export interface ChannelReport {
    * origem só fornece agregado por hora do dia, sem quebra por data.
    */
   seriesAxis?: "date" | "hour";
-  /** Período real dos dados, quando difere do intervalo pedido. */
-  periodLabel?: string;
   tables: TableBlock[];
+  /** O funil comercial em figura, quando o canal tem etapas ordenadas. */
+  funnel?: FunnelBlock;
   /** Peças com a arte, quando a origem fornece: anúncios ou publicações. */
   creatives?: ContentCard[];
   /**

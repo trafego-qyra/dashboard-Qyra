@@ -210,8 +210,10 @@ faz. Onde não dá, o número aparece com a dica dizendo o que ele é.
 **Razão não é média de razões.** CPM, CTR, CPL e frequência são calculados sobre
 os totais do período. Média das médias diárias dá número diferente e errado.
 
-**Dado congelado é dado real.** `snapshot` não é `mock`. O consolidado soma
-snapshot com honestidade e avisa que parte do período é fixa; só `mock` — número
+**Dado congelado é dado real.** Enquanto o token do Google Ads aguardava
+aprovação, o canal foi servido por um export em CSV da plataforma — origem
+`snapshot`. O consolidado somava snapshot com honestidade e avisava que parte do
+período era fixa; só `mock` — número
 inventado — contamina o total.
 
 ### Sobre a tela
@@ -285,7 +287,7 @@ Curto de propósito. A ideia é não repetir.
 | Item | De quem depende |
 |---|---|
 | Cadastrar `QYRA_SENHA` na Vercel e mergear o PR da senha | **Você** — sem a variável o deploy sobe trancado |
-| Aprovação do token de desenvolvedor do Google Ads | Google. Enquanto isso, snapshot |
+| Aprovação do token de desenvolvedor do Google Ads | **Saiu em 02/09/2026.** O canal lê ao vivo, e o snapshot foi removido |
 | Validar os números do Clarity | Esperar tráfego acumular |
 | Aprovação jurídica de termos e privacidade | Mais relevante agora que o Clarity grava sessão real |
 | Carrossel de criativo dinâmico (`asset_feed_spec`) | Só se aparecer anúncio desse tipo na conta |
