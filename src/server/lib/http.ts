@@ -121,7 +121,12 @@ export async function httpJson<T>(url: string, options: HttpOptions = {}): Promi
         throw error;
       }
 
-      return (await response.json()) as T;
+      // **Corpo vazio é resposta legítima.** O Kommo devolve 204 quando a
+      // página não tem nada, e o PostgREST devolve 204 em toda gravação com
+      // `Prefer: return=minimal`. `response.json()` num corpo vazio levanta
+      // SyntaxError, que chegaria ao conector disfarçado de falha de rede.
+      const texto = await response.text();
+      return (texto === "" ? {} : JSON.parse(texto)) as T;
     } catch (error) {
       lastError = error;
       const retryable = !(error instanceof HttpError) && attempt < retries;

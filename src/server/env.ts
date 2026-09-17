@@ -133,6 +133,19 @@ const schema = z.object({
    */
   META_CAPI_TEST_EVENT_CODE: optionalString,
 
+  // ---- Supabase: fila dos eventos de CRM ----
+  /**
+   * URL do projeto, algo como `https://xxxx.supabase.co`. Não é segredo —
+   * aparece em qualquer requisição feita ao banco.
+   */
+  SUPABASE_URL: optionalString,
+  /**
+   * Chave `service_role`. **É segredo, e é a mais perigosa do projeto**: ela
+   * ignora as políticas de linha do Postgres e lê a tabela inteira. Só existe
+   * em `src/server/**`, nunca em `NEXT_PUBLIC_*`.
+   */
+  SUPABASE_SERVICE_ROLE_KEY: optionalString,
+
   // ---- Kommo (CRM de vendas) ----
   /** O nome que aparece na URL da conta: `https://SUBDOMINIO.kommo.com`. */
   KOMMO_SUBDOMAIN: optionalString,
@@ -191,6 +204,7 @@ export interface Credentials {
   clarity: boolean;
   vendas: boolean;
   capi: boolean;
+  banco: boolean;
 }
 
 /** Quais integrações têm credencial completa **agora**. */
@@ -219,5 +233,7 @@ export function getCredentials(): Credentials {
     // O conjunto de dados sem o token não autentica, e o token sem o conjunto
     // não sabe para onde mandar.
     capi: Boolean(env.META_CAPI_DATASET_ID && env.META_CAPI_ACCESS_TOKEN),
+    // A URL sem a chave não autentica, e a chave sem a URL não sabe para onde ir.
+    banco: Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY),
   };
 }

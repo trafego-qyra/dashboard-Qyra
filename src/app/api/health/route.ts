@@ -55,6 +55,10 @@ const CONFIGURAVEIS = [
   "META_CAPI_ACCESS_TOKEN",
   "META_CAPI_API_VERSION",
   "META_CAPI_TEST_EVENT_CODE",
+  // Fila dos eventos de CRM. Mesma razão das anteriores: sem os nomes aqui,
+  // não há como conferir se a credencial pegou na implantação.
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
   // Redis opcional, para a última leitura do Clarity sobreviver a uma partida a
   // frio. Aqui pela terceira vez pela mesma razão das duas anteriores: sem
   // aparecer na lista, quem cadastra não consegue conferir se pegou.

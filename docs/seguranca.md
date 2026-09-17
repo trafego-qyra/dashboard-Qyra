@@ -20,10 +20,34 @@ têm o mesmo peso.
 | **Dado de negócio** | Nunca armazenado — buscado por requisição | Investimento, leads, CPL e origem de tráfego. Constrangedor e útil para concorrente; não é dado pessoal |
 | **Dado de comportamento** | Microsoft Clarity, fora daqui | Gravação de sessão de visitante. É o único ponto com implicação de LGPD, e ele não mora neste sistema |
 
-**O painel não tem banco de dados.** Nada é persistido: cada visita busca na
-origem e devolve. Isso elimina de saída uma classe inteira de problema —
-injeção de SQL, vazamento de dump, backup exposto. Não é mérito de design
-defensivo, é consequência da arquitetura, mas conta a favor.
+**O painel passou a ter banco, e só para uma coisa.** Até a API de Conversões,
+nada era persistido — cada visita buscava na origem e devolvia. Isso eliminava
+de saída uma classe inteira de problema: injeção de SQL, vazamento de dump,
+backup exposto.
+
+A fila de eventos de CRM (`evento_crm`, no Supabase) quebrou essa propriedade,
+porque enviar evento para a Meta exige memória: sem lembrar qual `event_id` foi
+gerado para cada negócio não há deduplicação, sem linha no banco não há
+retentativa que sobreviva a uma instância reciclada, e sem registro do que saiu
+não há como depurar uma venda que a Meta não mostrou.
+
+**O que a decisão comprou de volta:** a tabela guarda `user_data` **já
+hasheado**. O SHA-256 de telefone e e-mail é o que a Meta compara, reenviar não
+precisa do valor cru, e por isso o valor cru não existe ali. O painel ganhou
+banco sem ganhar contato de paciente armazenado — e `tests/integration/fila-eventos-crm.test.ts`
+falha se isso deixar de ser verdade.
+
+**O que continua sendo risco, com honestidade:** hash de telefone brasileiro é
+reversível por força bruta. O espaço de números de celular é pequeno o bastante
+para ser percorrido inteiro, então quem obtiver um dump consegue saber *se um
+número específico está na base* — não a lista, mas a pertinência. Para uma
+clínica, saber que um número passou por lá já é informação sensível.
+
+Mitigações em pé hoje: a chave `service_role` só existe em `src/server/**`, a
+tabela tem RLS ligado sem política (acesso anônimo não lê nada), e a única rota
+que expõe a fila devolve contagem, nunca linha. **O que falta:** prazo de
+expurgo. Evento com mais de 90 dias não serve à Meta nem à operação, e continua
+guardado. Está anotado como achado aberto na seção 4, em S9.
 
 ## 2. De quem, realisticamente
 
@@ -122,6 +146,28 @@ Qualquer pessoa com o endereço vê investimento, leads e CPL. Não é hipótese
 justifica pressa.**
 
 **Correção:** cadastrar `QYRA_SENHA` e mergear o PR #35.
+
+### 🟠 S9 — A fila de eventos guarda hash de telefone, e hash de telefone é reversível
+
+**Novo.** Com a fila da API de Conversões (`evento_crm`, no Supabase), o painel
+passou a persistir `user_data` — SHA-256 de telefone e e-mail. Nunca o valor
+legível: o hash acontece antes da gravação e
+`tests/integration/fila-eventos-crm.test.ts` falha se isso mudar.
+
+Só que hash de telefone brasileiro **é reversível por força bruta**. São onze
+dígitos com DDD, um espaço pequeno o bastante para ser percorrido inteiro. Quem
+obtiver um dump não reconstrói a lista, mas consegue testar **se um número
+específico está nela** — e para uma clínica, saber que um número passou por lá
+já é informação sensível.
+
+Em pé hoje: a chave `service_role` só existe em `src/server/**`; a tabela tem
+RLS ligado sem política, então acesso anônimo não lê linha alguma; e
+`/api/diagnostico/fila` devolve contagem, nunca conteúdo.
+
+**Correção:** prazo de expurgo. Evento com mais de 90 dias não serve nem à Meta
+(que atribui numa janela bem menor) nem à operação, e continua guardado. Um
+`delete from evento_crm where criado_em < now() - interval '90 days'` na
+varredura diária resolve, e reduz a janela de qualquer vazamento a um trimestre.
 
 ### 🟠 S2 — Os diagnósticos descrevem a configuração
 
