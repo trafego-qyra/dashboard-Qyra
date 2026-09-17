@@ -91,6 +91,34 @@ const schema = z.object({
   // Token da API de exportação do Clarity. Esse é segredo, ao contrário do ID.
   CLARITY_API_TOKEN: optionalString,
 
+  // ---- Meta: API de Conversões, eventos de CRM ----
+  /**
+   * Conjunto de dados que recebe os eventos de CRM. Não é segredo — aparece na
+   * própria tela do Gerenciador de Eventos.
+   */
+  META_CAPI_DATASET_ID: optionalString,
+  /**
+   * Token do conjunto de dados. **É segredo, e não é o `META_ACCESS_TOKEN`**:
+   * aquele lê métricas de anúncio, este escreve evento. Trocar um pelo outro
+   * responde 200 e não entrega nada.
+   */
+  META_CAPI_ACCESS_TOKEN: optionalString,
+  /**
+   * Versão própria, separada da `META_API_VERSION`.
+   *
+   * A Insights está presa em `v21.0` e a instrução de CRM da Meta pede `v26.0`.
+   * Amarrar as duas na mesma variável faria subir a versão de um lado quebrar
+   * o outro — e o sintoma apareceria na tela errada.
+   */
+  META_CAPI_API_VERSION: trimmedString("v26.0"),
+  /**
+   * Código de evento de teste do Gerenciador de Eventos.
+   *
+   * Preenchido, o envio aparece só na aba "Eventos de teste" e **não** entra
+   * no conjunto de produção. É o que permite validar a carga sem sujar o dado.
+   */
+  META_CAPI_TEST_EVENT_CODE: optionalString,
+
   // ---- Kommo (CRM de vendas) ----
   /** O nome que aparece na URL da conta: `https://SUBDOMINIO.kommo.com`. */
   KOMMO_SUBDOMAIN: optionalString,
@@ -141,6 +169,7 @@ export interface Credentials {
   ga4: boolean;
   clarity: boolean;
   vendas: boolean;
+  capi: boolean;
 }
 
 /** Quais integrações têm credencial completa **agora**. */
@@ -166,5 +195,8 @@ export function getCredentials(): Credentials {
     clarity: Boolean(env.CLARITY_API_TOKEN),
     // As duas juntas: o token sem o subdomínio não sabe para qual conta ir.
     vendas: Boolean(env.KOMMO_SUBDOMAIN && env.KOMMO_ACCESS_TOKEN),
+    // O conjunto de dados sem o token não autentica, e o token sem o conjunto
+    // não sabe para onde mandar.
+    capi: Boolean(env.META_CAPI_DATASET_ID && env.META_CAPI_ACCESS_TOKEN),
   };
 }

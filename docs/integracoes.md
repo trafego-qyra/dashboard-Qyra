@@ -281,3 +281,107 @@ adivinhar a forma para extrair valor renderia um total inventado.
 A API do Kommo limita a cerca de **7 requisições por segundo** e devolve no
 máximo **250 negócios por página**. O conector pagina até 20 páginas — 5.000
 negócios num período —, o que cobre com folga o volume de uma clínica.
+
+---
+
+## API de Conversões (eventos de CRM para a Meta)
+
+Todas as outras integrações **leem**. Esta **escreve**: manda para a Meta o que
+aconteceu com o lead depois que ele saiu do anúncio.
+
+É o que muda a otimização de lado. Sem ela a Meta só sabe quem preencheu o
+formulário, e aprende a buscar mais gente parecida com quem preenche. Com ela a
+Meta sabe quem **fechou**, e passa a buscar gente parecida com quem compra.
+
+Não depende de Zapier, Make ou n8n: é uma requisição HTTPS que o próprio painel
+faz.
+
+### O que cadastrar
+
+| Variável | Valor |
+|---|---|
+| `META_CAPI_DATASET_ID` | ID do conjunto de dados. Não é segredo |
+| `META_CAPI_ACCESS_TOKEN` | Token **do conjunto de dados**. É segredo |
+| `META_CAPI_API_VERSION` | `v26.0` |
+| `META_CAPI_TEST_EVENT_CODE` | `TESTxxxxx` enquanto estiver validando |
+
+**O token não é o `META_ACCESS_TOKEN`.** Aquele lê métrica de anúncio; este
+escreve evento. Trocar um pelo outro responde `200` e não entrega nada — o
+sintoma mais caro desta integração, porque não parece erro.
+
+A versão também é separada de propósito: a Insights está presa em `v21.0` e a
+instrução de CRM da Meta pede `v26.0`. Amarrar as duas na mesma variável faria
+subir a versão de um lado quebrar o outro.
+
+### Passo a passo
+
+1. Gerenciador de Eventos → o conjunto de dados → **Conectar CRM**.
+2. Aba **Conectar manualmente** → "Fazer a programação manualmente por conta
+   própria". Não é preciso parceiro nenhum.
+3. Na etapa "Criar ponto de extremidade", gere o **token de acesso do conjunto
+   de dados** e cadastre as variáveis na Vercel.
+4. Copie o código da aba **Eventos de teste** para `META_CAPI_TEST_EVENT_CODE`.
+5. Abra `/api/diagnostico/capi`. Ele manda um evento de teste e diz o que a
+   Meta respondeu.
+
+### O que é fixo e não se negocia
+
+A instrução de CRM da Meta exige três valores. Sem eles o evento é aceito e
+ignorado — de novo, sem erro:
+
+| Campo | Valor |
+|---|---|
+| `action_source` | `system_generated` |
+| `custom_data.event_source` | `crm` |
+| `custom_data.lead_event_source` | `Kommo` |
+
+### Por que o nome do evento é a etapa, e não `Lead`
+
+O conjunto que recebe estes eventos é o **mesmo do pixel da landing page**, que
+já dispara `Lead` do navegador. Reaproveitar `Lead` aqui faria o mesmo lead ser
+contado duas vezes.
+
+Por isso o `event_name` é o nome da **etapa do Kommo**. É também o que a
+instrução da Meta pede, e deixa o funil legível no Gerenciador de Eventos.
+
+### Quem consegue ser identificado, e quem não
+
+A Meta só credita a venda à campanha se reconhecer a pessoa. As três portas de
+entrada da clínica não são iguais nisso:
+
+| Origem do lead | O que dá para mandar | Força |
+|---|---|---|
+| Questionário na landing page | `fbc` do clique, `_fbp`, telefone e e-mail | Alta |
+| WhatsApp no Kommo | telefone (sempre existe) | Média |
+| DM de Instagram e Facebook | frequentemente **nada** | Nenhuma |
+
+O lead de DM que nunca deixou telefone **não tem como ser enviado**. O conector
+devolve `null` em `montarUsuario` e registra o evento como sem identificador,
+em vez de mandar uma carga vazia: evento sem correspondência não fica neutro,
+ele derruba a qualidade do conjunto inteiro — inclusive a dos eventos bons.
+
+Essa é a mesma lacuna que o `docs/integracoes.md` já registrava na seção do
+Kommo para a UTM: quem entra por DM não carrega origem. Fechá-la é trabalho de
+captura na conversa, não de código.
+
+### Valor do negócio
+
+`value` e `currency` só são enviados quando há valor **maior que zero**.
+
+O funil da conta hoje vem com `R$ 0` na maioria dos negócios. Mandar zero
+ensinaria a Meta a otimizar para venda que não vale nada, que é pior que não
+mandar valor nenhum. Enquanto o campo não for preenchido no Kommo, a otimização
+por valor não tem como funcionar.
+
+### Deduplicação
+
+Cada evento leva um `event_id` estável. Reenviar o mesmo id não conta duas
+vezes — é o que torna seguro repetir a requisição em falha de rede, e o que vai
+proteger o reenvio de webhook do Kommo no passo seguinte.
+
+### Antes de ligar para valer
+
+O conjunto `Pixel LP` **já recebia evento de servidor de alguma fonte** quando
+esta integração foi desenhada. Antes de tirar o `META_CAPI_TEST_EVENT_CODE`,
+confirme no Gerenciador de Eventos o que mais está mandando — senão passam a
+ser duas fontes escrevendo no mesmo lugar.
