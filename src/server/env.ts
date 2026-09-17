@@ -158,6 +158,21 @@ const schema = z.object({
    * de suporte ou de pós-venda entra no faturamento junto.
    */
   KOMMO_PIPELINE_ID: optionalString,
+  /**
+   * Id da etapa que representa lead qualificado.
+   *
+   * `142` (ganho) e `143` (perdido) são fixos em toda conta do Kommo, mas a
+   * etapa de qualificação é criada por cada uma — e o id dela não aparece em
+   * nenhuma tela. `/api/diagnostico/kommo` lista todos.
+   */
+  KOMMO_ETAPA_QUALIFICADO: optionalString,
+  /**
+   * Segredo que autentica o webhook, no caminho da URL.
+   *
+   * O Kommo não assina as entregas nem deixa configurar cabeçalho, então a
+   * URL é o único lugar possível. Vazio deixa a rota fechada, não aberta.
+   */
+  KOMMO_WEBHOOK_SECRET: optionalString,
 
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),

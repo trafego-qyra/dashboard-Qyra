@@ -47,6 +47,8 @@ const CONFIGURAVEIS = [
   // de antes: variável que ninguém consegue conferir se pegou. Opcional, então
   // aparecer em "ausentes" é resultado legítimo.
   "KOMMO_PIPELINE_ID",
+  "KOMMO_ETAPA_QUALIFICADO",
+  "KOMMO_WEBHOOK_SECRET",
   // API de Conversões. Pela quarta vez a mesma armadilha desta lista mantida à
   // mão: sem os nomes aqui, quem cadastra não consegue conferir se pegaram — e
   // o código de teste é o que separa "evento foi para a aba de teste" de

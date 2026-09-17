@@ -28,7 +28,7 @@ import { descreverFalha, httpJson } from "@/server/lib/http";
  * nomes vêm da API em vez de ficarem escritos aqui.
  */
 
-const GANHO = 142;
+export const GANHO = 142;
 const PERDIDO = 143;
 
 /** Teto da API por página. Acima disso ela ignora o valor e devolve 250. */
@@ -141,7 +141,7 @@ function estadoDominante(estados: Map<string, number>): string {
  * precisa mora de cada lado — a UTM no negócio, a cidade no contato. Sem o tipo
  * compartilhado, `campo()` só saberia ler metade da conta.
  */
-interface ComCamposPersonalizados {
+export interface ComCamposPersonalizados {
   custom_fields_values?: Array<{
     field_name?: string;
     field_code?: string;
@@ -200,11 +200,11 @@ interface RespostaDeFunis {
   };
 }
 
-function baseDaApi(): string {
+export function baseDaApi(): string {
   return `https://${getEnv().KOMMO_SUBDOMAIN}.kommo.com/api/v4`;
 }
 
-function autorizacao(): Record<string, string> {
+export function autorizacao(): Record<string, string> {
   return {
     authorization: `Bearer ${getEnv().KOMMO_ACCESS_TOKEN}`,
     accept: "application/json",
@@ -224,7 +224,7 @@ function paraDia(unix: number | undefined): string | null {
  * clínica criou à mão têm apenas `field_name`. Procurar pelos dois é o que faz
  * a UTM aparecer independentemente de como o campo entrou na conta.
  */
-function campo(registro: ComCamposPersonalizados, nomes: string[]): string | null {
+export function campo(registro: ComCamposPersonalizados, nomes: string[]): string | null {
   const procurados = nomes.map((n) => n.toLowerCase());
   for (const item of registro.custom_fields_values ?? []) {
     const identificadores = [item.field_code, item.field_name]
