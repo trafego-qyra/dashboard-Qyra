@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { autorizacao, baseDaApi } from "@/server/connectors/kommo";
 import { getCredentials, getEnv } from "@/server/env";
 import { conferirCaptura } from "@/server/kommo/captura";
+import { montarConclusao } from "@/server/kommo/conclusao";
 import { guard } from "@/server/lib/api";
 import { descreverFalha, httpJson } from "@/server/lib/http";
 
@@ -66,8 +67,15 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        conclusao:
-          "Escolha a etapa que representa lead qualificado e cadastre o id dela em KOMMO_ETAPA_QUALIFICADO.",
+        conclusao: montarConclusao(
+          {
+            pipelineId: env.KOMMO_PIPELINE_ID,
+            etapaQualificado: env.KOMMO_ETAPA_QUALIFICADO,
+            temSegredoDoWebhook: Boolean(env.KOMMO_WEBHOOK_SECRET),
+          },
+          funis,
+          captura,
+        ),
         configuradoHoje: {
           KOMMO_PIPELINE_ID: env.KOMMO_PIPELINE_ID ?? null,
           KOMMO_ETAPA_QUALIFICADO: env.KOMMO_ETAPA_QUALIFICADO ?? null,
