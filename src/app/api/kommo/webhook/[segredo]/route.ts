@@ -33,6 +33,31 @@ function segredoConfere(recebido: string, esperado: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * A verificação de alcance que o Kommo faz antes de salvar a URL.
+ *
+ * Ele consulta o endereço com `GET` e espera `2xx`. Uma rota só de `POST`
+ * devolve `405`, e o Kommo traduz isso para "endereço não é publicamente
+ * acessível" — mensagem que manda procurar o problema em DNS e firewall, onde
+ * ele não está.
+ *
+ * Responde o mínimo: confirma que a rota existe e que o segredo confere, e
+ * nada além disso. Sem o segredo é 404, igual ao `POST`.
+ */
+export async function GET(request: Request, { params }: { params: Promise<{ segredo: string }> }) {
+  const { headers, blocked } = guard(request);
+  if (blocked) return blocked;
+
+  const esperado = getEnv().KOMMO_WEBHOOK_SECRET;
+  const { segredo } = await params;
+
+  if (!esperado || !segredoConfere(segredo, esperado)) {
+    return apiError("nao_encontrado", "Não encontrado.", 404, headers);
+  }
+
+  return NextResponse.json({ ok: true, metodo: "use POST para entregar eventos" }, { headers });
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ segredo: string }> }) {
   const { headers, blocked } = guard(request);
   if (blocked) return blocked;
