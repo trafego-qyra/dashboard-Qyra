@@ -621,3 +621,75 @@ Um `SELECT ... FOR UPDATE SKIP LOCKED` resolveria de forma mais elegante, e
 custaria uma conexão direta ao Postgres num ambiente sem estado, para proteger
 de um problema que não causa dano. Quando o volume justificar, troque — e
 escreva por quê.
+
+---
+
+## Webhook do Kommo (o gatilho)
+
+O que fecha o ciclo: o Kommo avisa quando um negócio muda de etapa, e o painel
+transforma isso em evento para a Meta. Sem ele, a fila só enche à mão.
+
+### Duas etapas viram evento
+
+| Etapa no Kommo | Evento na Meta | Leva valor? |
+|---|---|---|
+| A que você marcar como qualificação | `Qualificado` | Não |
+| Venda ganha (`142`) | `Purchase` | Sim, o `price` do negócio |
+
+O `142` é fixo em toda conta do Kommo, herdado do amoCRM. A etapa de
+qualificação é da sua conta, e o id dela **não aparece em nenhuma tela** —
+abra `/api/diagnostico/kommo`, que lista funis e etapas com os ids.
+
+Perdido (`143`) não vira evento: a Meta não tem o que fazer com uma perda.
+
+Na qualificação o valor não vai de propósito. Nessa altura o campo costuma ter
+a expectativa, não o que foi pago, e mandá-lo ensinaria a Meta a otimizar por um
+número inventado.
+
+### O que cadastrar
+
+| Variável | Valor |
+|---|---|
+| `KOMMO_ETAPA_QUALIFICADO` | Id da etapa, de `/api/diagnostico/kommo` |
+| `KOMMO_WEBHOOK_SECRET` | Algo longo e aleatório. **É segredo** |
+
+### Passo a passo
+
+1. Abra `/api/diagnostico/kommo` e anote o id da etapa de qualificação.
+2. Gere um segredo longo (`openssl rand -hex 32` serve) e cadastre as duas
+   variáveis na Vercel. Faça o deploy.
+3. No Kommo: **Configurações → Integrações → sua integração → Webhooks**.
+4. Endereço:
+   `https://dashboard.qyra.com.br/api/kommo/webhook/SEGREDO`
+5. Evento: **mudança de etapa do negócio** (*status do lead alterado*). Só esse.
+6. Mova um negócio de teste para a etapa de qualificação e confira em
+   `/api/diagnostico/fila`.
+
+### Por que o segredo vai na URL
+
+O Kommo **não assina** as entregas como o Stripe faz, e não deixa configurar
+cabeçalho. A URL é o único lugar possível.
+
+O custo é real: ela aparece em log de plataforma, e trocá-la exige reconfigurar
+do lado do Kommo. Está registrado em [`seguranca.md`](./seguranca.md) como
+limitação conhecida — não como problema resolvido.
+
+Duas coisas atenuam. Sem `KOMMO_WEBHOOK_SECRET` cadastrado, a rota responde
+**404**, nunca fica aberta. E segredo errado devolve 404 também: para quem varre
+caminhos, não há diferença entre "errei o segredo" e "não tem nada aqui".
+
+### Por que o webhook faz duas consultas extras
+
+A entrega do Kommo é magra — id do negócio e etapa nova, mais nada. Telefone e
+e-mail moram no **contato vinculado**, e a UTM e o `fbclid` no próprio negócio.
+São duas consultas por evento, e no volume de uma clínica isso não pesa.
+
+Se o contato não vier, o evento segue mesmo assim: o `fbc` gravado no negócio
+sozinho já identifica. Meia identidade é melhor que nenhuma, e quem decide se dá
+para enviar é o conector.
+
+### Reenvio não conta duas vezes
+
+O `event_id` é `kommo-<negócio>-<etapa>`, estável de propósito. O Kommo reenvia
+quando não recebe `200`, e um negócio que volta para a mesma etapa é o mesmo
+fato. A segunda entrega vira silêncio, não uma venda duplicada.

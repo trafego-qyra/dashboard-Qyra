@@ -27,6 +27,11 @@ function ehPublico(pathname: string): boolean {
     // Onde o formulário de login posta. Sem isso o porteiro barraria a própria
     // entrada, e o login viraria um laço.
     pathname === "/api/sessao" ||
+    // O webhook do Kommo. Quem chama é a plataforma dele, que não tem sessão
+    // e não consegue mandar cabeçalho: o segredo no caminho é a autenticação,
+    // e a rota devolve 404 sem ele. Barrar aqui seria trancar a porta por onde
+    // as vendas entram.
+    pathname.startsWith("/api/kommo/webhook/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||

@@ -147,6 +147,29 @@ justifica pressa.**
 
 **Correção:** cadastrar `QYRA_SENHA` e mergear o PR #35.
 
+### 🟠 S10 — O webhook do Kommo se autentica por um segredo na URL
+
+**Novo.** `/api/kommo/webhook/<segredo>` é a **única rota fora do porteiro** do
+painel. Tem que ser: quem chama é a plataforma do Kommo, que não tem sessão.
+
+O Kommo não assina as entregas como o Stripe faz, e não deixa configurar
+cabeçalho — então a URL é o único lugar onde a autenticação cabe. Ela aparece em
+log de plataforma, em histórico de configuração e em qualquer captura de tráfego
+no caminho, e trocá-la exige reconfigurar do lado do Kommo.
+
+**O que um segredo vazado permite:** gravar eventos falsos na fila, que virariam
+conversões falsas na Meta. Não dá acesso a leitura nenhuma — a rota só aceita
+`POST`, e devolve apenas a contagem do que gravou.
+
+Em pé hoje: sem `KOMMO_WEBHOOK_SECRET` cadastrado a rota responde 404 (fechada,
+nunca aberta); segredo errado também devolve 404, indistinguível de rota
+inexistente; a comparação é de tempo constante; o rate limit se aplica; e
+`tests/e2e/porta.spec.ts` prova que abrir este caminho não abriu os vizinhos.
+
+**Correção:** não há uma melhor enquanto o Kommo não assinar os webhooks. O que
+cabe é operação: segredo longo e aleatório, e rotação junto com a chave do
+Kommo. Se um dia a conta migrar para uma integração que assine, isto sai.
+
 ### 🟠 S9 — A fila de eventos guarda hash de telefone, e hash de telefone é reversível
 
 **Novo.** Com a fila da API de Conversões (`evento_crm`, no Supabase), o painel

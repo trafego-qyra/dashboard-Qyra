@@ -60,6 +60,30 @@ test("o diagnóstico, que expõe configuração, também está atrás da porta",
   expect(resposta.status()).toBe(307);
 });
 
+test("o webhook do Kommo fica fora da porta, e fechado sem o segredo", async ({ request }) => {
+  // Esta rota é a única exceção deliberada do porteiro: quem chama é a
+  // plataforma do Kommo, que não tem sessão nem consegue mandar cabeçalho. A
+  // troca é que a autenticação passa a ser o segredo no caminho — então o que
+  // precisa estar provado aqui são as duas metades.
+
+  // 1. Não redireciona para o login: o Kommo não saberia o que fazer com isso.
+  const semSegredo = await request.post("/api/kommo/webhook/segredo-errado", {
+    data: "leads[status][0][id]=1&leads[status][0][status_id]=142",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    maxRedirects: 0,
+  });
+  expect(semSegredo.status()).not.toBe(307);
+
+  // 2. E não aceita: 404, que para quem varre caminhos é indistinguível de
+  //    rota inexistente.
+  expect(semSegredo.status()).toBe(404);
+
+  // O resto de /api continua atrás da porta — abrir um caminho não abriu os
+  // vizinhos.
+  const vizinha = await request.get("/api/kommo/qualquer-outra", { maxRedirects: 0 });
+  expect(vizinha.status()).toBe(307);
+});
+
 test("um cookie forjado não abre a porta", async ({ page, context }) => {
   await context.addCookies([
     {
