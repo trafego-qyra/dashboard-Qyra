@@ -745,3 +745,22 @@ tudo de novo para a Meta", e de apagar histórico.
 
 Vercel → o projeto → aba **Cron Jobs**. As execuções aparecem lá com o resultado
 de cada uma. Em dia normal o corpo é `"Nada pendente — o webhook deu conta."`
+
+### O placar na tela de Vendas
+
+A tela de Vendas ganha um indicador **Atribuição na Meta** e uma tabela com o
+estado de cada evento.
+
+O número é a pergunta que a integração inteira existe para responder, e que
+nenhum relatório da Meta responde: **quanto do que o CRM sabe chega até lá**. A
+Meta mostra as conversões que recebeu; ela não tem como mostrar as que nunca
+chegaram.
+
+`Sem como identificar` é a linha que mais informa. São os negócios que entraram
+por conversa e nunca deixaram telefone, e-mail nem clique — nenhum ajuste de
+campanha melhora isso, só captura na origem. É esse número que diz se vale o
+trabalho de gravar `fbc` no formulário e origem da conversa no WhatsApp.
+
+O placar **some** sem banco configurado, com a fila vazia, e se o banco não
+responder. Uma tabela de zeros sugere integração falhando quando o certo é que
+ela ainda não começou — e quem lê a tela de Vendas não acompanha o encanamento.
