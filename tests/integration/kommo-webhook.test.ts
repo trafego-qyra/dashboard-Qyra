@@ -12,14 +12,19 @@ import { eventosDaMudanca, lerMudancas, nomeDoEvento } from "@/server/kommo/webh
  */
 
 const QUALIFICADO = 90210;
+const FUNIL = 14120879;
+const OUTRO_FUNIL = 14308259;
 
 /** O corpo exatamente como o Kommo entrega: formulário, não JSON. */
-function corpoDoKommo(mudancas: Array<{ lead: number; etapa: number }>, tipo = "status"): string {
+function corpoDoKommo(
+  mudancas: Array<{ lead: number; etapa: number; funil?: number }>,
+  tipo = "status",
+): string {
   const partes = ["account[id]=1", "account[subdomain]=qyra"];
   mudancas.forEach((m, i) => {
     partes.push(`leads[${tipo}][${i}][id]=${m.lead}`);
     partes.push(`leads[${tipo}][${i}][status_id]=${m.etapa}`);
-    partes.push(`leads[${tipo}][${i}][pipeline_id]=555`);
+    partes.push(`leads[${tipo}][${i}][pipeline_id]=${m.funil ?? FUNIL}`);
   });
   return partes.join("&");
 }
@@ -27,7 +32,7 @@ function corpoDoKommo(mudancas: Array<{ lead: number; etapa: number }>, tipo = "
 describe("lerMudancas", () => {
   it("lê o formulário aninhado do Kommo", () => {
     expect(lerMudancas(corpoDoKommo([{ lead: 8842, etapa: 142 }]))).toEqual([
-      { leadId: 8842, statusId: 142 },
+      { leadId: 8842, statusId: 142, pipelineId: FUNIL },
     ]);
   });
 
@@ -40,8 +45,8 @@ describe("lerMudancas", () => {
         ]),
       ),
     ).toEqual([
-      { leadId: 1, statusId: 142 },
-      { leadId: 2, statusId: 90210 },
+      { leadId: 1, statusId: 142, pipelineId: FUNIL },
+      { leadId: 2, statusId: 90210, pipelineId: FUNIL },
     ]);
   });
 
@@ -59,27 +64,51 @@ describe("lerMudancas", () => {
 });
 
 describe("nomeDoEvento", () => {
-  beforeEach(() => vi.stubEnv("KOMMO_ETAPA_QUALIFICADO", String(QUALIFICADO)));
+  const mudanca = (statusId: number, pipelineId: number | null = FUNIL) => ({
+    leadId: 1,
+    statusId,
+    pipelineId,
+  });
+
+  beforeEach(() => {
+    vi.stubEnv("KOMMO_ETAPA_QUALIFICADO", String(QUALIFICADO));
+    vi.stubEnv("KOMMO_PIPELINE_ID", String(FUNIL));
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   it("142 é venda ganha em toda conta do Kommo", () => {
-    expect(nomeDoEvento(142)).toBe("Purchase");
+    expect(nomeDoEvento(mudanca(142))).toBe("Purchase");
   });
 
   it("a etapa configurada vira qualificação", () => {
-    expect(nomeDoEvento(QUALIFICADO)).toBe("Qualificado");
+    expect(nomeDoEvento(mudanca(QUALIFICADO))).toBe("Qualificado");
   });
 
   it("as demais etapas não viram evento", () => {
     // Inclusive 143 (perdido): a Meta não tem o que fazer com uma perda.
-    expect(nomeDoEvento(143)).toBeNull();
-    expect(nomeDoEvento(11111)).toBeNull();
+    expect(nomeDoEvento(mudanca(143))).toBeNull();
+    expect(nomeDoEvento(mudanca(11111))).toBeNull();
+  });
+
+  it("142 de OUTRO funil não é venda", () => {
+    // A conta da clínica tem dois funis. No de vendas o 142 é "GANHO"; no de
+    // clientes, é "Arquivo". Sem conferir o funil, arquivar um cliente viraria
+    // uma venda inventada na Meta -- e ninguém desconfiaria, porque só sobe.
+    expect(nomeDoEvento(mudanca(142, OUTRO_FUNIL))).toBeNull();
+    expect(nomeDoEvento(mudanca(QUALIFICADO, OUTRO_FUNIL))).toBeNull();
+  });
+
+  it("sem funil configurado, qualquer um passa", () => {
+    // Comportamento antigo, preservado: é o mesmo que o relatório de Vendas já
+    // faz quando KOMMO_PIPELINE_ID está vazio.
+    vi.stubEnv("KOMMO_PIPELINE_ID", "");
+    expect(nomeDoEvento(mudanca(142, OUTRO_FUNIL))).toBe("Purchase");
   });
 
   it("sem a etapa configurada, só a venda conta", () => {
     vi.stubEnv("KOMMO_ETAPA_QUALIFICADO", "");
-    expect(nomeDoEvento(QUALIFICADO)).toBeNull();
-    expect(nomeDoEvento(142)).toBe("Purchase");
+    expect(nomeDoEvento(mudanca(QUALIFICADO))).toBeNull();
+    expect(nomeDoEvento(mudanca(142))).toBe("Purchase");
   });
 });
 
@@ -131,7 +160,7 @@ describe("eventosDaMudanca", () => {
 
   it("junta identidade do negócio e do contato", async () => {
     kommo();
-    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142 }]);
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
 
     expect(evento.identidade.telefone).toBe("(11) 99999-9999");
     expect(evento.identidade.email).toBe("ana@gmail.com");
@@ -143,8 +172,8 @@ describe("eventosDaMudanca", () => {
 
   it("gera id estável, para o reenvio do Kommo não contar duas vezes", async () => {
     kommo();
-    const [primeiro] = await eventosDaMudanca([{ leadId: 8842, statusId: 142 }]);
-    const [segundo] = await eventosDaMudanca([{ leadId: 8842, statusId: 142 }]);
+    const [primeiro] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
+    const [segundo] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
 
     expect(primeiro.eventId).toBe("kommo-8842-142");
     expect(segundo.eventId).toBe(primeiro.eventId);
@@ -152,7 +181,7 @@ describe("eventosDaMudanca", () => {
 
   it("leva valor na venda", async () => {
     kommo();
-    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142 }]);
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
     expect(evento.valor).toBe(2500);
   });
 
@@ -160,7 +189,9 @@ describe("eventosDaMudanca", () => {
     // Na etapa intermediária o campo costuma ter a expectativa, não o que foi
     // pago — e mandar isso ensinaria a Meta a otimizar por um número inventado.
     kommo();
-    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: QUALIFICADO }]);
+    const [evento] = await eventosDaMudanca([
+      { leadId: 8842, statusId: QUALIFICADO, pipelineId: FUNIL },
+    ]);
 
     expect(evento.eventName).toBe("Qualificado");
     expect(evento.valor).toBeNull();
@@ -168,7 +199,9 @@ describe("eventosDaMudanca", () => {
 
   it("ignora etapa que não interessa, sem nem consultar o Kommo", async () => {
     const chamadas = kommo();
-    await expect(eventosDaMudanca([{ leadId: 8842, statusId: 143 }])).resolves.toEqual([]);
+    await expect(
+      eventosDaMudanca([{ leadId: 8842, statusId: 143, pipelineId: FUNIL }]),
+    ).resolves.toEqual([]);
     expect(chamadas).not.toHaveBeenCalled();
   });
 
@@ -176,7 +209,7 @@ describe("eventosDaMudanca", () => {
     // O `fbc` do negócio sozinho já identifica. Meia identidade é melhor que
     // nenhuma, e quem decide se dá para enviar é o conector.
     kommo({ contatoFalha: true });
-    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142 }]);
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
 
     expect(evento.identidade.telefone).toBeNull();
     expect(evento.identidade.clique).toBe("IwAR1abc");
@@ -184,6 +217,8 @@ describe("eventosDaMudanca", () => {
 
   it("um negócio que a API não devolveu não derruba os outros", async () => {
     kommo({ leadFalha: true });
-    await expect(eventosDaMudanca([{ leadId: 8842, statusId: 142 }])).resolves.toEqual([]);
+    await expect(
+      eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]),
+    ).resolves.toEqual([]);
   });
 });

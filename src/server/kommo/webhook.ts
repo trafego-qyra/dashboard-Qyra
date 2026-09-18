@@ -54,6 +54,8 @@ interface LeadComContatos extends ComCamposPersonalizados {
 export interface MudancaDeEtapa {
   leadId: number;
   statusId: number;
+  /** O funil em que ela aconteceu. Sem isto, `142` de qualquer funil viraria venda. */
+  pipelineId: number | null;
 }
 
 /**
@@ -69,7 +71,7 @@ export function lerMudancas(corpo: string): MudancaDeEtapa[] {
   const porIndice = new Map<string, Partial<MudancaDeEtapa>>();
 
   for (const [chave, valor] of parametros) {
-    const partes = chave.match(/^leads\[status\]\[(\d+)\]\[(id|status_id)\]$/);
+    const partes = chave.match(/^leads\[status\]\[(\d+)\]\[(id|status_id|pipeline_id)\]$/);
     if (!partes) continue;
 
     const [, indice, campoDoKommo] = partes;
@@ -78,27 +80,48 @@ export function lerMudancas(corpo: string): MudancaDeEtapa[] {
     if (!Number.isFinite(numero)) continue;
 
     if (campoDoKommo === "id") atual.leadId = numero;
-    else atual.statusId = numero;
+    else if (campoDoKommo === "status_id") atual.statusId = numero;
+    else atual.pipelineId = numero;
     porIndice.set(indice, atual);
   }
 
-  return [...porIndice.values()].filter(
-    (m): m is MudancaDeEtapa => typeof m.leadId === "number" && typeof m.statusId === "number",
-  );
+  return [...porIndice.values()]
+    .filter(
+      (m): m is Partial<MudancaDeEtapa> & { leadId: number; statusId: number } =>
+        typeof m.leadId === "number" && typeof m.statusId === "number",
+    )
+    .map((m) => ({ leadId: m.leadId, statusId: m.statusId, pipelineId: m.pipelineId ?? null }));
 }
 
 /**
- * O nome do evento para uma etapa, ou `null` quando ela não interessa.
+ * O nome do evento para uma mudança, ou `null` quando ela não interessa.
  *
- * `142` é venda ganha em toda conta do Kommo, herdado do amoCRM. A etapa de
- * qualificação é criada por cada conta, então o id dela vem de variável — e
- * `/api/diagnostico/kommo` existe para descobri-lo sem adivinhação.
+ * **O funil precisa bater primeiro, e essa é a parte que não é óbvia.** Os ids
+ * `142` (ganho) e `143` (perdido) são fixos em toda conta do Kommo, e o mesmo
+ * par se repete em **cada funil**. A conta da clínica tem dois: no de vendas o
+ * `142` é "GANHO"; no de clientes, é "Arquivo". Sem conferir o funil, arquivar
+ * um cliente viraria uma venda inventada na Meta — e uma que ninguém
+ * desconfiaria, porque o número só sobe.
+ *
+ * `KOMMO_PIPELINE_ID` é a mesma variável que o relatório de Vendas já usa para
+ * não somar pós-venda no faturamento. Sem ela configurada, qualquer funil
+ * passa: é o comportamento antigo, e a tela de Vendas já avisa que ele mistura.
  */
-export function nomeDoEvento(statusId: number): string | null {
-  if (statusId === GANHO) return COMPRA;
+export function nomeDoEvento(mudanca: MudancaDeEtapa): string | null {
+  const funilEsperado = Number(getEnv().KOMMO_PIPELINE_ID);
+  if (
+    Number.isFinite(funilEsperado) &&
+    funilEsperado > 0 &&
+    mudanca.pipelineId !== null &&
+    mudanca.pipelineId !== funilEsperado
+  ) {
+    return null;
+  }
+
+  if (mudanca.statusId === GANHO) return COMPRA;
 
   const qualificado = Number(getEnv().KOMMO_ETAPA_QUALIFICADO);
-  if (Number.isFinite(qualificado) && qualificado > 0 && statusId === qualificado) {
+  if (Number.isFinite(qualificado) && qualificado > 0 && mudanca.statusId === qualificado) {
     return QUALIFICADO;
   }
 
@@ -162,7 +185,7 @@ function montarIdentidade(lead: LeadComContatos, contato: ContatoDoKommo | null)
  */
 export async function eventosDaMudanca(mudancas: MudancaDeEtapa[]): Promise<EventoDeCrm[]> {
   const interessantes = mudancas
-    .map((mudanca) => ({ mudanca, eventName: nomeDoEvento(mudanca.statusId) }))
+    .map((mudanca) => ({ mudanca, eventName: nomeDoEvento(mudanca) }))
     .filter(
       (item): item is { mudanca: MudancaDeEtapa; eventName: string } => item.eventName !== null,
     );

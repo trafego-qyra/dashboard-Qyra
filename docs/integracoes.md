@@ -642,6 +642,15 @@ abra `/api/diagnostico/kommo`, que lista funis e etapas com os ids.
 
 Perdido (`143`) não vira evento: a Meta não tem o que fazer com uma perda.
 
+**O funil é conferido antes da etapa.** Os ids `142` e `143` se repetem em
+**cada funil** da conta. A da clínica tem dois: no FUNIL DE VENDAS o `142` é
+"GANHO"; no FUNIL DE CLIENTES, é "Arquivo". Sem conferir de qual funil veio a
+mudança, arquivar um cliente viraria uma venda inventada na Meta — e uma que
+ninguém desconfiaria, porque o número só sobe.
+
+Quem decide é `KOMMO_PIPELINE_ID`, a mesma variável que o relatório de Vendas já
+usa para não somar pós-venda no faturamento. Vazia, qualquer funil passa.
+
 Na qualificação o valor não vai de propósito. Nessa altura o campo costuma ter
 a expectativa, não o que foi pago, e mandá-lo ensinaria a Meta a otimizar por um
 número inventado.
