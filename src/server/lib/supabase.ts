@@ -112,3 +112,14 @@ export async function contar(
   const total = resposta.headers.get("content-range")?.split("/")[1];
   return total && total !== "*" ? Number(total) : 0;
 }
+
+/** `DELETE ... WHERE`, com os mesmos filtros do `selecionar`. */
+export async function excluir(tabela: string, filtros: Record<string, string>): Promise<void> {
+  const url = new URL(`${base()}/${tabela}`);
+  for (const [chave, valor] of Object.entries(filtros)) url.searchParams.set(chave, valor);
+
+  await httpJson<unknown>(url.toString(), {
+    method: "DELETE",
+    headers: cabecalhos({ prefer: "return=minimal" }),
+  });
+}

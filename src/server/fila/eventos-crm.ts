@@ -8,7 +8,7 @@ import {
   montarUsuario,
 } from "@/server/connectors/meta-capi";
 import { descreverFalha } from "@/server/lib/http";
-import { atualizar, contar, inserir, selecionar } from "@/server/lib/supabase";
+import { atualizar, contar, excluir, inserir, selecionar } from "@/server/lib/supabase";
 
 /**
  * Fila dos eventos de CRM que vão para a Meta.
@@ -38,6 +38,16 @@ const MAX_TENTATIVAS = 5;
 
 /** Teto por rodada de despacho, para uma execução não estourar o tempo da função. */
 const POR_RODADA = 200;
+
+/**
+ * Por quanto tempo um evento fica guardado.
+ *
+ * Noventa dias não é número redondo escolhido por estética: passa da janela em
+ * que a Meta ainda atribui qualquer coisa, e passa do prazo em que a operação
+ * ainda vai querer conferir se uma venda saiu. Guardar além disso só aumenta o
+ * estrago de um vazamento, e é o que o achado S9 de docs/seguranca.md cobra.
+ */
+const DIAS_ATE_O_EXPURGO = 90;
 
 type StatusDaFila = "pendente" | "enviado" | "sem_identificador" | "falhou";
 
@@ -186,4 +196,21 @@ export async function resumo(): Promise<ResumoDaFila> {
   );
 
   return Object.fromEntries(estados.map((estado, i) => [estado, contagens[i]])) as ResumoDaFila;
+}
+
+/**
+ * Apaga o que já passou da validade.
+ *
+ * Roda junto com a varredura diária porque é o único lugar que acontece todo
+ * dia sem ninguém mandar. Apaga por data de criação, não por status: evento que
+ * falhou cinco vezes há três meses também não serve mais a ninguém, e mantê-lo
+ * só preserva hash de telefone que já deveria ter sumido.
+ */
+export async function expurgar(dias = DIAS_ATE_O_EXPURGO): Promise<number> {
+  const corte = new Date(Date.now() - dias * 86_400_000).toISOString();
+  const quantos = await contar(TABELA, { criado_em: `lt.${corte}` });
+
+  if (quantos > 0) await excluir(TABELA, { criado_em: `lt.${corte}` });
+
+  return quantos;
 }

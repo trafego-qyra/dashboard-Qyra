@@ -187,10 +187,11 @@ Em pé hoje: a chave `service_role` só existe em `src/server/**`; a tabela tem
 RLS ligado sem política, então acesso anônimo não lê linha alguma; e
 `/api/diagnostico/fila` devolve contagem, nunca conteúdo.
 
-**Correção:** prazo de expurgo. Evento com mais de 90 dias não serve nem à Meta
-(que atribui numa janela bem menor) nem à operação, e continua guardado. Um
-`delete from evento_crm where criado_em < now() - interval '90 days'` na
-varredura diária resolve, e reduz a janela de qualquer vazamento a um trimestre.
+**Corrigido.** A varredura diária apaga tudo que passou de 90 dias, por data de
+criação e independente de status — evento que falhou há três meses também não
+serve mais a ninguém, e mantê-lo só preserva hash de telefone que já deveria ter
+sumido. A janela de qualquer vazamento passa a ser de um trimestre, não do
+histórico inteiro.
 
 ### 🟠 S2 — Os diagnósticos descrevem a configuração
 

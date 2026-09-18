@@ -711,3 +711,37 @@ para enviar é o conector.
 O `event_id` é `kommo-<negócio>-<etapa>`, estável de propósito. O Kommo reenvia
 quando não recebe `200`, e um negócio que volta para a mesma etapa é o mesmo
 fato. A segunda entrega vira silêncio, não uma venda duplicada.
+
+---
+
+## Varredura diária
+
+Roda todo dia às 6h (Brasília), agendada em `vercel.json`. Faz duas coisas:
+
+1. **Manda o que ficou para trás.** O webhook já tenta enviar na hora, então em
+   dia normal a varredura não encontra nada. Ela existe para os dias que não são
+   normais — a Meta fora do ar, uma entrega do Kommo perdida, um deploy no meio
+   do caminho. **Webhook falha calado**, e sem uma segunda passagem a venda some
+   sem ninguém notar. A própria Meta pede carga ao menos uma vez por dia.
+2. **Apaga o que passou de 90 dias.** Além disso o evento não serve nem à Meta
+   (que atribui numa janela bem menor) nem à operação, e guardá-lo só aumenta o
+   estrago de um vazamento. É o que o achado **S9** de
+   [`seguranca.md`](./seguranca.md) cobrava.
+
+Despacha antes de expurgar, de propósito: a ordem inversa apagaria um evento
+velho que ainda não tinha sido enviado.
+
+### O que cadastrar
+
+| Variável | Valor |
+|---|---|
+| `CRON_SECRET` | Algo longo e aleatório. **É segredo** |
+
+A Vercel manda esse valor em `Authorization: Bearer` nas chamadas agendadas.
+Vazio deixa a rota **fechada** — aberta, ela seria um botão público de "mande
+tudo de novo para a Meta", e de apagar histórico.
+
+### Como conferir
+
+Vercel → o projeto → aba **Cron Jobs**. As execuções aparecem lá com o resultado
+de cada uma. Em dia normal o corpo é `"Nada pendente — o webhook deu conta."`
