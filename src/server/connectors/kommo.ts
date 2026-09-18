@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
+import { montarPlacar } from "@/server/fila/placar";
 import { descreverFalha, httpJson } from "@/server/lib/http";
 
 /**
@@ -932,6 +933,11 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       );
     }
 
+    // Quanto do que este relatório mostra chegou até a Meta. Enfeite: `null`
+    // sem banco, com a fila vazia, ou se o banco não responder -- em nenhum
+    // desses casos a receita da tela pode cair junto.
+    const placar = await montarPlacar();
+
     return {
       channel: "vendas",
       label: "Vendas",
@@ -976,6 +982,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           hint: "Dias entre a criação do negócio e a etapa de venda ganha, que é quando o pagamento entra. Média dos que fecharam no período.",
         },
         { key: "emAberto", label: "Em aberto", value: emAberto.length, format: "integer" },
+        ...(placar ? [placar.kpi] : []),
         {
           key: "recuperaveis",
           label: "Perdas recuperáveis",
@@ -1003,6 +1010,9 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         // dizendo "Sem cidade registrada" ocupa a tela sem informar nada, e o
         // aviso de operação já diz o que configurar.
         ...(temLocalizacoes ? [montarLocalizacoes(criados, cidades)] : []),
+        // Por último: quem abre a tela de Vendas quer ver venda primeiro. O
+        // estado do encanamento interessa depois, a quem opera.
+        ...(placar ? [placar.tabela] : []),
       ],
       notices: avisos,
     };
