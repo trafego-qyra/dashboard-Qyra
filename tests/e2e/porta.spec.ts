@@ -85,6 +85,11 @@ test("o webhook do Kommo fica fora da porta, e fechado sem o segredo", async ({ 
   });
   expect(conferencia.status()).toBe(404);
 
+  // A varredura diária é a outra exceção. Sem o cabeçalho da Vercel, 404 —
+  // aberta, ela seria um botão público de reenviar tudo e apagar histórico.
+  const cron = await request.get("/api/cron/eventos-crm", { maxRedirects: 0 });
+  expect(cron.status()).toBe(404);
+
   // O resto de /api continua atrás da porta — abrir um caminho não abriu os
   // vizinhos.
   const vizinha = await request.get("/api/kommo/qualquer-outra", { maxRedirects: 0 });

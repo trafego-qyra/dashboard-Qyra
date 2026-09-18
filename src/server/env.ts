@@ -174,6 +174,14 @@ const schema = z.object({
    */
   KOMMO_WEBHOOK_SECRET: optionalString,
 
+  /**
+   * Segredo da varredura diária, mandado pela Vercel em `Authorization`.
+   *
+   * Vazio deixa a rota fechada. Aberta, ela seria um botão público de "mande
+   * tudo de novo para a Meta" — e de apagar histórico.
+   */
+  CRON_SECRET: optionalString,
+
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),

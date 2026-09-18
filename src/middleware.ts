@@ -32,6 +32,10 @@ function ehPublico(pathname: string): boolean {
     // e a rota devolve 404 sem ele. Barrar aqui seria trancar a porta por onde
     // as vendas entram.
     pathname.startsWith("/api/kommo/webhook/") ||
+    // A varredura diária. Quem chama é o agendador da Vercel, que também não
+    // tem sessão; ela se autentica pelo CRON_SECRET no cabeçalho, e responde
+    // 404 sem ele.
+    pathname === "/api/cron/eventos-crm" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||

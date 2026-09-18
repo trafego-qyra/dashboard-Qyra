@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EventoDeCrm } from "@/server/connectors/meta-capi";
-import { despachar, enfileirar, resumo } from "@/server/fila/eventos-crm";
+import { despachar, enfileirar, expurgar, resumo } from "@/server/fila/eventos-crm";
 
 /**
  * Fila dos eventos de CRM.
@@ -73,6 +73,7 @@ function servidor(opcoes: { pendentes?: unknown[]; metaRecusa?: boolean; total?:
   return chamadas;
 }
 
+const exclusoes = (chamadas: Chamada[]) => chamadas.filter((c) => c.metodo === "DELETE");
 const gravacoes = (chamadas: Chamada[]) =>
   chamadas.filter((c) => c.metodo === "POST" && !c.url.includes("graph.facebook.com"));
 const atualizacoes = (chamadas: Chamada[]) => chamadas.filter((c) => c.metodo === "PATCH");
@@ -217,5 +218,32 @@ describe("resumo", () => {
       sem_identificador: 7,
       falhou: 7,
     });
+  });
+});
+
+describe("expurgar", () => {
+  it("apaga o que passou da validade e diz quantos", async () => {
+    const chamadas = servidor({ total: 12 });
+    await expect(expurgar(90)).resolves.toBe(12);
+
+    const [exclusao] = exclusoes(chamadas);
+    // Por data de criação, não por status: evento que falhou há três meses
+    // também não serve mais, e guardá-lo só preserva hash de telefone.
+    expect(exclusao.url).toContain("criado_em=lt.");
+  });
+
+  it("não chama o banco para apagar quando não há nada vencido", async () => {
+    const chamadas = servidor({ total: 0 });
+    await expect(expurgar(90)).resolves.toBe(0);
+    expect(exclusoes(chamadas)).toHaveLength(0);
+  });
+
+  it("o corte é a data pedida, não a de hoje", async () => {
+    const chamadas = servidor({ total: 1 });
+    await expurgar(30);
+
+    const corte = new URL(exclusoes(chamadas)[0].url).searchParams.get("criado_em") ?? "";
+    const dias = (Date.now() - Date.parse(corte.replace("lt.", ""))) / 86_400_000;
+    expect(Math.round(dias)).toBe(30);
   });
 });
