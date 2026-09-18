@@ -78,6 +78,13 @@ test("o webhook do Kommo fica fora da porta, e fechado sem o segredo", async ({ 
   //    rota inexistente.
   expect(semSegredo.status()).toBe(404);
 
+  // O Kommo consulta a URL com GET antes de salvar, e lê 405 como "endereço
+  // não é publicamente acessível". Sem o segredo, porém, continua 404.
+  const conferencia = await request.get("/api/kommo/webhook/segredo-errado", {
+    maxRedirects: 0,
+  });
+  expect(conferencia.status()).toBe(404);
+
   // O resto de /api continua atrás da porta — abrir um caminho não abriu os
   // vizinhos.
   const vizinha = await request.get("/api/kommo/qualquer-outra", { maxRedirects: 0 });

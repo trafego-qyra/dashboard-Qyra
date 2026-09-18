@@ -674,6 +674,15 @@ número inventado.
 6. Mova um negócio de teste para a etapa de qualificação e confira em
    `/api/diagnostico/fila`.
 
+### Se o Kommo recusar a URL
+
+Ele consulta o endereço com `GET` antes de salvar e espera `2xx`. A rota
+responde a `GET` só para isso, confirmando que existe e que o segredo confere —
+nada além. Sem o segredo é `404`, igual ao `POST`.
+
+A mensagem que o Kommo dá quando isso falha ("endereço não é publicamente
+acessível") manda procurar o problema em DNS e firewall, onde ele não está.
+
 ### Por que o segredo vai na URL
 
 O Kommo **não assina** as entregas como o Stripe faz, e não deixa configurar
