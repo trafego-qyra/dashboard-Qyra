@@ -119,3 +119,28 @@ describe("montarConclusao", () => {
     expect(frase).toContain("Configuração completa");
   });
 });
+
+describe("montarConclusao com a ponte de captura", () => {
+  it("não acusa campo vazio quando a ponte já está resolvendo o clique", () => {
+    // A ponte liga clique e venda pelo `cliente_id`, sem passar pelo campo do
+    // negócio. Campo vazio com a ponte trabalhando é o esperado — dizer o
+    // contrário mandaria alguém consertar o que está de pé.
+    const frase = montarConclusao(COMPLETO, [VENDAS], captura({ comClique: 0 }), {
+      guardadas: 40,
+      comClique: 31,
+    });
+
+    expect(frase).toContain("31");
+    expect(frase).toContain("ponte");
+    expect(frase).not.toMatch(/confira em camposVistos/);
+  });
+
+  it("volta a acusar quando a ponte também não tem clique nenhum", () => {
+    const frase = montarConclusao(COMPLETO, [VENDAS], captura({ comClique: 0 }), {
+      guardadas: 0,
+      comClique: 0,
+    });
+
+    expect(frase).toMatch(/camposVistos/);
+  });
+});

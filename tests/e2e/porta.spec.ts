@@ -96,6 +96,36 @@ test("o webhook do Kommo fica fora da porta, e fechado sem o segredo", async ({ 
   expect(vizinha.status()).toBe(307);
 });
 
+test("a ponte de captura fica fora da porta, e recusa quem não é da casa", async ({ request }) => {
+  // Terceira e última exceção deliberada. Aqui não existe segredo possível —
+  // a tag que chama esta rota é servida em texto puro para quem abrir o site.
+  // O que precisa estar provado é que a ausência de senha não virou porta
+  // aberta: a rota se defende pela origem e pelo formato do que aceita.
+
+  // 1. Não redireciona: o navegador de um visitante não tem sessão.
+  const semSessao = await request.post("/api/captura", {
+    data: { cliente_id: "nao-e-uuid" },
+    maxRedirects: 0,
+  });
+  expect(semSessao.status()).not.toBe(307);
+
+  // 2. Chamada de outro site é recusada antes de qualquer outra coisa.
+  const deFora = await request.post("/api/captura", {
+    data: { cliente_id: "bfaa05dd-6946-4ac0-9500-cbd312b47907" },
+    headers: { origin: "https://site-de-terceiro.com" },
+    maxRedirects: 0,
+  });
+  expect(deFora.status()).toBe(403);
+
+  // 3. Não serve para ler nada: sem GET, e sem redirecionar para o login.
+  const leitura = await request.get("/api/captura", { maxRedirects: 0 });
+  expect(leitura.status()).toBe(405);
+
+  // 4. Abrir este caminho não abriu os vizinhos.
+  const vizinha = await request.get("/api/captura/qualquer-outra", { maxRedirects: 0 });
+  expect(vizinha.status()).toBe(307);
+});
+
 test("um cookie forjado não abre a porta", async ({ page, context }) => {
   await context.addCookies([
     {

@@ -18,6 +18,12 @@ export interface FunilDoKommo {
   etapas: Array<{ id: number; nome: string }>;
 }
 
+/** O que a ponte de captura resolveu, quando ela está em uso. */
+export interface ResumoDaPonte {
+  guardadas: number;
+  comClique: number;
+}
+
 /** Só o que a conclusão precisa saber do ambiente. */
 export interface EstadoConfigurado {
   pipelineId: string | undefined;
@@ -37,6 +43,7 @@ export function montarConclusao(
   estado: EstadoConfigurado,
   funis: FunilDoKommo[],
   captura: Captura | null,
+  ponte: ResumoDaPonte | null = null,
 ): string {
   if (!estado.pipelineId) {
     return "Cadastre KOMMO_PIPELINE_ID com o id do funil de vendas. Sem ele, a etapa 142 de qualquer funil viraria venda — inclusive o arquivamento de um cliente.";
@@ -65,6 +72,13 @@ export function montarConclusao(
   // Amostra vazia é conta sem negócio recente, não captura quebrada. Dizer que
   // falta `fbc` numa conta sem lead nenhum seria acusar o inocente.
   if (captura && captura.amostra > 0 && captura.comClique === 0) {
+    // A ponte resolve o clique pelo `cliente_id`, sem passar pelo campo do
+    // negócio — então campo vazio com ponte trabalhando é o esperado, não
+    // falha. Dizer o contrário mandaria alguém consertar o que está de pé.
+    if (ponte && ponte.comClique > 0) {
+      return `${base} O campo não vem preenchido no negócio, mas a ponte de captura já ligou ${ponte.comClique} cliente(s) ao clique — ver docs/ponte-captura.md.`;
+    }
+
     return `${base} Nenhum dos ${captura.amostra} negócios recentes traz identificador de clique: confira em camposVistos se o campo existe com outra grafia, e se a landing page está mesmo gravando o fbc.`;
   }
 

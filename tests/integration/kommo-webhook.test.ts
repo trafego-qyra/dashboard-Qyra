@@ -222,3 +222,89 @@ describe("eventosDaMudanca", () => {
     ).resolves.toEqual([]);
   });
 });
+
+/**
+ * A ponte de captura, vista de dentro do webhook.
+ *
+ * O campo do negócio vem **primeiro**, sempre. A ponte é um desvio construído
+ * porque o questionário não grava o `fbc` no Kommo; no dia em que gravar, ela
+ * precisa sair de cena sozinha, sem ninguém lembrar de desligá-la.
+ */
+describe("eventosDaMudanca com a ponte de captura", () => {
+  const FUNIL = 14120879;
+  const CLIENTE = "bfaa05dd-6946-4ac0-9500-cbd312b47907";
+  const DA_PONTE = "fb.1.1758000000000.IwAR_daponte";
+
+  function mundo(opcoes: { cliqueNoNegocio?: string; naPonte?: unknown[] } = {}) {
+    const campos: Array<{ field_name: string; values: Array<{ value: string }> }> = [
+      { field_name: "qyra_cliente_id", values: [{ value: CLIENTE }] },
+    ];
+    if (opcoes.cliqueNoNegocio) {
+      campos.push({ field_name: "fbc", values: [{ value: opcoes.cliqueNoNegocio }] });
+    }
+
+    const chamadas: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        chamadas.push(url);
+
+        if (url.includes("captura_clique")) {
+          return new Response(JSON.stringify(opcoes.naPonte ?? []), { status: 200 });
+        }
+        if (url.includes("/contacts/")) {
+          return new Response(JSON.stringify({ id: 77, first_name: "Ana" }), { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({
+            id: 8842,
+            price: 2500,
+            created_at: 1_758_000_000,
+            custom_fields_values: campos,
+            _embedded: { contacts: [{ id: 77, is_main: true }] },
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    return chamadas;
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("KOMMO_SUBDOMAIN", "qyra");
+    vi.stubEnv("KOMMO_ACCESS_TOKEN", "chave");
+    vi.stubEnv("SUPABASE_URL", "https://banco.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "chave");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("resgata o clique pela ponte quando o negócio não traz nenhum", async () => {
+    mundo({ naPonte: [{ cliente_id: CLIENTE, fbc: DA_PONTE, fbp: null }] });
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
+
+    expect(evento.identidade.clique).toBe(DA_PONTE);
+  });
+
+  it("não consulta a ponte quando o negócio já traz o clique", async () => {
+    // É o que faz a ponte se aposentar sozinha no dia em que o questionário
+    // passar a gravar o campo.
+    const chamadas = mundo({ cliqueNoNegocio: "fb.1.1758000000000.doNegocio" });
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
+
+    expect(evento.identidade.clique).toBe("fb.1.1758000000000.doNegocio");
+    expect(chamadas.some((u) => u.includes("captura_clique"))).toBe(false);
+  });
+
+  it("segue sem clique quando a ponte não tem aquele cliente", async () => {
+    mundo({ naPonte: [] });
+    const [evento] = await eventosDaMudanca([{ leadId: 8842, statusId: 142, pipelineId: FUNIL }]);
+
+    expect(evento.identidade.clique).toBeNull();
+    expect(evento.eventName).toBe("Purchase");
+  });
+});

@@ -188,6 +188,7 @@ Em código, isso é a diferença entre `avisoOperacao` (não vai para a tela) e
 | `docs/design-system.md` | Tokens, tipografia, componentes, regras de gráfico |
 | `docs/utm.md` | Padrão de UTM — o que a tabela de origem do Analytics lê |
 | `docs/captura-fbc.md` | Como o identificador de clique chega ao negócio — o teto da atribuição na Meta |
+| `docs/ponte-captura.md` | O desvio que liga clique e venda pelo `cliente_id`, sem depender do questionário |
 | `docs/arquitetura.md` | Camadas, fluxo de dados, decisões |
 | `docs/integracoes.md` | Como obter credencial de cada plataforma |
 | `docs/qualidade.md` | Esteira, observabilidade, orçamento de performance |

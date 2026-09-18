@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { expurgar as expurgarPonte } from "@/server/captura/ponte";
 import { getCredentials, getEnv } from "@/server/env";
 import { despachar, expurgar, resumo } from "@/server/fila/eventos-crm";
 import { apiError } from "@/server/lib/api";
@@ -54,6 +55,10 @@ export async function GET(request: Request) {
     // não tinha sido enviado, e o certo é tentar mandá-lo uma última vez.
     const envio = await despachar();
     const apagados = await expurgar();
+    // A ponte guarda captura de quem ainda não comprou. Passados noventa dias,
+    // a janela de atribuição da Meta já fechou e a linha virou dado sem
+    // finalidade. Falhar aqui não pode derrubar a varredura das vendas.
+    await expurgarPonte().catch(() => undefined);
     const fila = await resumo();
 
     return NextResponse.json({

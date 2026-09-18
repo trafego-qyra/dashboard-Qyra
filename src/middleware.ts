@@ -36,6 +36,10 @@ function ehPublico(pathname: string): boolean {
     // tem sessão; ela se autentica pelo CRON_SECRET no cabeçalho, e responde
     // 404 sem ele.
     pathname === "/api/cron/eventos-crm" ||
+    // A ponte de captura. Quem chama é o navegador de quem está respondendo o
+    // questionário, em outro domínio e sem sessão nenhuma. Ela se defende pelo
+    // formato do que aceita, não por senha -- ver o comentário da própria rota.
+    pathname === "/api/captura" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||

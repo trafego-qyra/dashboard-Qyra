@@ -1,5 +1,6 @@
 import "server-only";
 
+import { buscarClique } from "@/server/captura/ponte";
 import {
   autorizacao,
   baseDaApi,
@@ -34,6 +35,14 @@ const NOMES_DE_CLIQUE = ["fbc", "_fbc", "fbclid", "click id", "clickid"];
 
 /** Onde o cookie do navegador pode ter sido gravado. */
 const NOMES_DE_NAVEGADOR = ["fbp", "_fbp"];
+
+/**
+ * Onde o identificador que o questionário grava no negócio pode estar.
+ *
+ * É a chave da ponte: o mesmo valor vive no `localStorage` do navegador, onde
+ * o `fbc` também está. Ver src/server/captura/ponte.ts.
+ */
+const NOMES_DE_CLIENTE = ["qyra_cliente_id", "cliente_id", "customer_id"];
 
 interface ContatoDoKommo extends ComCamposPersonalizados {
   id: number;
@@ -176,6 +185,35 @@ function montarIdentidade(lead: LeadComContatos, contato: ContatoDoKommo | null)
 }
 
 /**
+ * Completa o que faltou usando a ponte de captura.
+ *
+ * O campo do negócio vem **primeiro**, sempre: no dia em que o questionário
+ * gravar o `fbc` direto no Kommo, esta função para de fazer diferença sozinha,
+ * sem ninguém precisar desligar nada.
+ *
+ * Nunca lança. A ponte é um complemento — é melhor mandar a venda com telefone
+ * e e-mail do que não mandar venda nenhuma porque o banco demorou.
+ */
+async function completarPelaPonte(
+  lead: LeadComContatos,
+  identidade: IdentidadeDoLead,
+): Promise<IdentidadeDoLead> {
+  if (identidade.clique) return identidade;
+
+  const clienteId = campo(lead, NOMES_DE_CLIENTE);
+  if (!clienteId) return identidade;
+
+  const daPonte = await buscarClique(clienteId);
+  if (!daPonte) return identidade;
+
+  return {
+    ...identidade,
+    clique: daPonte.fbc ?? identidade.clique,
+    navegador: identidade.navegador ?? daPonte.fbp,
+  };
+}
+
+/**
  * Transforma as mudanças de etapa em eventos prontos para a fila.
  *
  * O `eventId` é `kommo-<negócio>-<etapa>`, e é estável de propósito: o Kommo
@@ -201,7 +239,7 @@ export async function eventosDaMudanca(mudancas: MudancaDeEtapa[]): Promise<Even
           // A etapa mudou agora: o webhook é o próprio carimbo de tempo.
           eventTime: Math.floor(Date.now() / 1_000),
           eventId: `kommo-${mudanca.leadId}-${mudanca.statusId}`,
-          identidade: montarIdentidade(lead, contato),
+          identidade: await completarPelaPonte(lead, montarIdentidade(lead, contato)),
           // Valor só na venda. Numa etapa intermediária o campo costuma estar
           // preenchido com a expectativa, não com o que foi pago.
           valor: eventName === COMPRA ? (lead.price ?? null) : null,

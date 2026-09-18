@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-
+import { resumoDaPonte } from "@/server/captura/ponte";
 import { autorizacao, baseDaApi } from "@/server/connectors/kommo";
 import { getCredentials, getEnv } from "@/server/env";
 import { conferirCaptura } from "@/server/kommo/captura";
@@ -64,6 +64,10 @@ export async function GET(request: Request) {
 
     // Enfeite: a lista de etapas continua útil se a amostra falhar.
     const captura = await conferirCaptura().catch(() => null);
+    // A ponte resolve o clique sem passar pelo campo do negócio, então o
+    // `captura` acima continua zerado enquanto ela trabalha. Ver
+    // docs/ponte-captura.md.
+    const ponte = await resumoDaPonte();
 
     return NextResponse.json(
       {
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
           },
           funis,
           captura,
+          ponte,
         ),
         configuradoHoje: {
           KOMMO_PIPELINE_ID: env.KOMMO_PIPELINE_ID ?? null,
@@ -84,6 +89,7 @@ export async function GET(request: Request) {
         // Quantos negócios recentes chegam com identificador de clique. É a
         // causa do que o placar da tela de Vendas mostra como resultado.
         captura,
+        ponte,
         funis,
       },
       { headers },
