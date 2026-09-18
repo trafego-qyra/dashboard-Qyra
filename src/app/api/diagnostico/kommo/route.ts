@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-
+import { resumoDaPonte } from "@/server/captura/ponte";
 import { autorizacao, baseDaApi } from "@/server/connectors/kommo";
 import { getCredentials, getEnv } from "@/server/env";
 import { conferirCaptura } from "@/server/kommo/captura";
+import { montarConclusao } from "@/server/kommo/conclusao";
 import { guard } from "@/server/lib/api";
 import { descreverFalha, httpJson } from "@/server/lib/http";
 
@@ -63,11 +64,23 @@ export async function GET(request: Request) {
 
     // Enfeite: a lista de etapas continua útil se a amostra falhar.
     const captura = await conferirCaptura().catch(() => null);
+    // A ponte resolve o clique sem passar pelo campo do negócio, então o
+    // `captura` acima continua zerado enquanto ela trabalha. Ver
+    // docs/ponte-captura.md.
+    const ponte = await resumoDaPonte();
 
     return NextResponse.json(
       {
-        conclusao:
-          "Escolha a etapa que representa lead qualificado e cadastre o id dela em KOMMO_ETAPA_QUALIFICADO.",
+        conclusao: montarConclusao(
+          {
+            pipelineId: env.KOMMO_PIPELINE_ID,
+            etapaQualificado: env.KOMMO_ETAPA_QUALIFICADO,
+            temSegredoDoWebhook: Boolean(env.KOMMO_WEBHOOK_SECRET),
+          },
+          funis,
+          captura,
+          ponte,
+        ),
         configuradoHoje: {
           KOMMO_PIPELINE_ID: env.KOMMO_PIPELINE_ID ?? null,
           KOMMO_ETAPA_QUALIFICADO: env.KOMMO_ETAPA_QUALIFICADO ?? null,
@@ -76,6 +89,7 @@ export async function GET(request: Request) {
         // Quantos negócios recentes chegam com identificador de clique. É a
         // causa do que o placar da tela de Vendas mostra como resultado.
         captura,
+        ponte,
         funis,
       },
       { headers },

@@ -147,6 +147,31 @@ justifica pressa.**
 
 **Correção:** cadastrar `QYRA_SENHA` e mergear o PR #35.
 
+### 🟡 S11 — A ponte de captura aceita escrita sem autenticação
+
+**Novo.** `/api/captura` é a segunda rota fora do porteiro. Quem chama é o
+navegador de quem está respondendo o questionário, em outro domínio, sem sessão
+— e, diferente do webhook do Kommo, aqui **não existe segredo possível**:
+qualquer valor embutido numa tag do Google Tag Manager é servido em texto puro
+para quem abrir a página.
+
+**O que ela aceita:** um par `cliente_id -> fbc`, e nada mais. O `cliente_id`
+precisa ser um UUID; `fbc` e `fbp` precisam ter o formato exato da Meta; o corpo
+tem teto de 4 KB; e a origem precisa ser um domínio da Qyra. Nada disso é
+leitura — a rota não devolve nenhum dado guardado, só `guardado: true`.
+
+**O que um abuso permite:** alterar a atribuição de um `cliente_id` que o
+atacante já conheça — na prática, o dele. Para envenenar atribuição alheia em
+escala seria preciso adivinhar UUIDs de terceiros, que é o que não dá.
+
+**O que não passa por aqui:** nome, telefone, e-mail, CPF, resposta de saúde.
+A ponte existe justamente para não precisar deles — ver `docs/ponte-captura.md`.
+
+**Correção:** nenhuma cabe enquanto a captura vier do navegador. O que encerra
+este achado é o caminho certo: o questionário gravando o `fbc` direto no negócio
+do Kommo, e a ponte sendo removida. O webhook já lê o campo do negócio primeiro,
+então essa remoção não exige coordenação de data.
+
 ### 🟠 S10 — O webhook do Kommo se autentica por um segredo na URL
 
 **Novo.** `/api/kommo/webhook/<segredo>` é a **única rota fora do porteiro** do

@@ -93,10 +93,13 @@ export async function atualizar(
 export async function contar(
   tabela: string,
   filtros: Record<string, string> = {},
+  coluna = "event_id",
 ): Promise<number> {
   const url = new URL(`${base()}/${tabela}`);
   for (const [chave, valor] of Object.entries(filtros)) url.searchParams.set(chave, valor);
-  url.searchParams.set("select", "event_id");
+  // Uma coluna qualquer serve: o corpo é descartado e só o cabeçalho importa.
+  // Precisa existir na tabela, por isso é parâmetro e não constante.
+  url.searchParams.set("select", coluna);
 
   const resposta = await fetch(url.toString(), {
     headers: cabecalhos({ prefer: "count=exact", range: "0-0" }),
