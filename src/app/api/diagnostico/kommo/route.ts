@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { autorizacao, baseDaApi } from "@/server/connectors/kommo";
 import { getCredentials, getEnv } from "@/server/env";
+import { conferirCaptura } from "@/server/kommo/captura";
 import { guard } from "@/server/lib/api";
 import { descreverFalha, httpJson } from "@/server/lib/http";
 
@@ -60,6 +61,9 @@ export async function GET(request: Request) {
         })),
     }));
 
+    // Enfeite: a lista de etapas continua útil se a amostra falhar.
+    const captura = await conferirCaptura().catch(() => null);
+
     return NextResponse.json(
       {
         conclusao:
@@ -69,6 +73,9 @@ export async function GET(request: Request) {
           KOMMO_ETAPA_QUALIFICADO: env.KOMMO_ETAPA_QUALIFICADO ?? null,
           webhookConfigurado: Boolean(env.KOMMO_WEBHOOK_SECRET),
         },
+        // Quantos negócios recentes chegam com identificador de clique. É a
+        // causa do que o placar da tela de Vendas mostra como resultado.
+        captura,
         funis,
       },
       { headers },

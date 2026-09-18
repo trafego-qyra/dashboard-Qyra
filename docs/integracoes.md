@@ -764,3 +764,12 @@ trabalho de gravar `fbc` no formulário e origem da conversa no WhatsApp.
 O placar **some** sem banco configurado, com a fila vazia, e se o banco não
 responder. Uma tabela de zeros sugere integração falhando quando o certo é que
 ela ainda não começou — e quem lê a tela de Vendas não acompanha o encanamento.
+
+### O teto da atribuição
+
+Tudo acima é encanamento, e ele está pronto. O que decide o resultado é se o
+identificador de clique chega ao negócio — sem ele, a Meta depende de casar
+telefone e e-mail, o que rende bem menos.
+
+O caminho completo, o trecho para colar na landing page e como conferir se
+funcionou estão em [`captura-fbc.md`](./captura-fbc.md).
