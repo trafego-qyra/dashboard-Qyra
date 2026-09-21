@@ -335,6 +335,45 @@ describe("vendas pelo Kommo", () => {
     expect(meta?.taxa).toBeCloseTo(0.5, 6);
   });
 
+  it("lê o campo com o nome que o Kommo mostra, e não só a chave da UTM", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        price: 2500,
+        status_id: GANHO,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        // Como o campo aparece no cartão do negócio: "Origem do lead: LP".
+        custom_fields_values: [{ field_name: "Origem do lead", values: [{ value: "LP" }] }],
+      },
+    ]);
+
+    const origens = report.tables.find((t) => t.title === "Vendas por origem");
+
+    // A busca casa por igualdade: "origem" não encontrava "Origem do lead", e o
+    // negócio caía em "Sem UTM" com o campo preenchido na tela do CRM. A tabela
+    // dizia que ninguém tem origem conhecida quando todos têm — e é por ela que
+    // se decide qual campanha recebe orçamento.
+    expect(origens?.rows.map((r) => r.origem)).toEqual(["LP"]);
+    expect(origens?.rows[0]).toMatchObject({ leads: 1, vendas: 1, receita: 2500 });
+  });
+
+  it("com a origem preenchida, não avisa que falta UTM", async () => {
+    const { report } = await relatorio([
+      {
+        id: 1,
+        status_id: 20,
+        created_at: emSegundos("2026-02-03T10:00:00Z"),
+        custom_fields_values: [{ field_name: "Origem do lead", values: [{ value: "LP" }] }],
+      },
+    ]);
+
+    // O aviso lia a mesma lista da tabela. Quando as duas cópias erravam
+    // juntas, uma confirmava a outra: a tabela mostrava "Sem UTM", o aviso
+    // dizia que o CRM não manda UTM, e ninguém desconfiava da leitura.
+    expect(report.notices.some((a) => /traz UTM/i.test(a.text))).toBe(false);
+  });
+
   it("sem UTM nenhuma, avisa em vez de inventar origem", async () => {
     const { report } = await relatorio([
       {

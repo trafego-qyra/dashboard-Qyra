@@ -503,17 +503,49 @@ function montarFunil(leads: LeadDoKommo[], etapas: EtapaDoFunil[], deEntrada: nu
 }
 
 /**
+ * Os nomes que a origem do negócio tem no Kommo.
+ *
+ * `campo` casa por **igualdade**, não por pedaço: `"origem"` não encontra um
+ * campo chamado `Origem do lead`, e o negócio inteiro cai em "Sem UTM" com o
+ * campo preenchido e visível na tela do CRM. Cada rótulo que a clínica usa de
+ * verdade precisa estar escrito aqui.
+ *
+ * Por que não casar por pedaço: `"origem"` apareceria dentro de "Cidade de
+ * origem" e de qualquer outro campo que mencione a palavra, e a tabela passaria
+ * a agrupar por um campo que não é a origem. A lista explícita erra para menos,
+ * e errar para menos aqui custa uma linha a acrescentar — errar para mais é
+ * número errado na tela, que ninguém percebe.
+ *
+ * A lista mora aqui, e não solta em cada chamada, porque ela é lida em dois
+ * lugares: a tabela e o aviso de "nenhum negócio traz UTM". Quando eram duas
+ * cópias, as duas erravam juntas — a tabela mostrava "Sem UTM", o aviso
+ * confirmava, e nada indicava que o problema era de leitura, não de
+ * preenchimento.
+ */
+const CAMPOS_DE_ORIGEM = [
+  "utm_source",
+  "utm source",
+  "origem",
+  // O rótulo que o formulário da landing page grava na conta da Qyra.
+  "origem do lead",
+  "origem_do_lead",
+];
+
+const CAMPOS_DE_CAMPANHA = ["utm_campaign", "utm campaign", "campanha"];
+
+/**
  * Vendas por origem — o cruzamento que justifica o painel inteiro.
  *
- * Só existe se o Kommo estiver recebendo a UTM no negócio. Quando não estiver,
- * a tabela sai vazia em vez de inventar origem, e o aviso diz o que configurar.
+ * Só existe se o Kommo estiver recebendo a origem no negócio. Quando não
+ * estiver, a tabela sai vazia em vez de inventar origem, e o aviso diz o que
+ * configurar.
  */
 function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBlock {
   const porOrigem = new Map<string, { leads: number; vendas: number; receita: number }>();
 
   const chaveDaOrigem = (lead: LeadDoKommo): string => {
-    const origem = campo(lead, ["utm_source", "utm source", "origem"]) ?? "Sem UTM";
-    const campanha = campo(lead, ["utm_campaign", "utm campaign", "campanha"]);
+    const origem = campo(lead, CAMPOS_DE_ORIGEM) ?? "Sem UTM";
+    const campanha = campo(lead, CAMPOS_DE_CAMPANHA);
     return campanha ? `${origem} · ${campanha}` : origem;
   };
 
@@ -880,7 +912,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const funil = montarFunilVisual(criados, etapas, ganhosDaSafra);
     const conversao = funil ? conversaoPorEtapa(funil) : undefined;
 
-    const semUtm = leads.every((l) => campo(l, ["utm_source", "utm source", "origem"]) === null);
+    const semUtm = leads.every((l) => campo(l, CAMPOS_DE_ORIGEM) === null);
 
     // Negócio ganho sem valor preenchido é o caso mais traiçoeiro deste
     // conector: receita e ticket saem R$ 0,00 sem estar errados, e quem olha
