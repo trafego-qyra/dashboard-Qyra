@@ -7,7 +7,14 @@
  */
 import { ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, ClarityResumo, DateRange, SeriesPoint } from "@/lib/types";
+import { conversaoPorEtapa } from "@/lib/funil";
+import type {
+  ChannelReport,
+  ClarityResumo,
+  DateRange,
+  FunnelBlock,
+  SeriesPoint,
+} from "@/lib/types";
 import { dailyValue, noise } from "./generator";
 
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -759,6 +766,46 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
   const vendas = sum(series, "vendas");
   const receita = sum(series, "receita");
 
+  const funil: FunnelBlock = (() => {
+    const perdidos = Math.round((leads - vendas) * 0.34);
+    const abertos = leads - vendas - perdidos;
+    const primeiro = Math.round(abertos * 0.52);
+    const avaliacao = Math.round(abertos * 0.31);
+    // Acumulado, como no conector: cada etapa soma quem está nela e quem já
+    // passou. A boca do funil é todo mundo que entrou no período.
+    const negociacao = abertos - primeiro - avaliacao + vendas;
+    return {
+      title: "Do primeiro contato ao pagamento",
+      description:
+        "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
+      caveat:
+        "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+      stages: [
+        { label: "Novo lead", value: leads, amount: Math.round(leads * 1_620 * 100) / 100 },
+        {
+          label: "Qualificação",
+          value: avaliacao + negociacao,
+          amount: Math.round((avaliacao + negociacao) * 1_620 * 100) / 100,
+        },
+        {
+          label: "Negociação",
+          value: negociacao,
+          amount: Math.round(negociacao * 1_620 * 100) / 100,
+        },
+        {
+          label: "Venda ganha",
+          value: vendas,
+          amount: receita,
+          outcome: "ganho" as const,
+        },
+      ],
+    };
+  })();
+
+  // Derivada do funil acima pela mesma função do conector: a demonstração não
+  // pode ensinar uma conta que o dado real não faz.
+  const conversao = conversaoPorEtapa(funil);
+
   return {
     channel: "vendas",
     label: "Vendas",
@@ -819,41 +866,7 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
       { key: "receita", label: "Receita", format: "currency", slot: 5 },
       { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
     ],
-    funnel: (() => {
-      const perdidos = Math.round((leads - vendas) * 0.34);
-      const abertos = leads - vendas - perdidos;
-      const primeiro = Math.round(abertos * 0.52);
-      const avaliacao = Math.round(abertos * 0.31);
-      // Acumulado, como no conector: cada etapa soma quem está nela e quem já
-      // passou. A boca do funil é todo mundo que entrou no período.
-      const negociacao = abertos - primeiro - avaliacao + vendas;
-      return {
-        title: "Do primeiro contato ao pagamento",
-        description:
-          "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
-        caveat:
-          "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
-        stages: [
-          { label: "Novo lead", value: leads, amount: Math.round(leads * 1_620 * 100) / 100 },
-          {
-            label: "Qualificação",
-            value: avaliacao + negociacao,
-            amount: Math.round((avaliacao + negociacao) * 1_620 * 100) / 100,
-          },
-          {
-            label: "Negociação",
-            value: negociacao,
-            amount: Math.round(negociacao * 1_620 * 100) / 100,
-          },
-          {
-            label: "Venda ganha",
-            value: vendas,
-            amount: receita,
-            outcome: "ganho" as const,
-          },
-        ],
-      };
-    })(),
+    funnel: funil,
     tables: [
       {
         title: "Negócios por etapa",
@@ -886,6 +899,8 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
           }));
         })(),
       },
+      // A figura em texto, na mesma ordem da tela real.
+      ...(conversao ? [conversao] : []),
       {
         title: "Motivos de perda",
         description:

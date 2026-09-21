@@ -52,11 +52,40 @@ describe("FunnelChart", () => {
     expect(screen.getAllByText("0")).toHaveLength(2);
   });
 
-  it("mostra a queda em relação à etapa anterior", () => {
+  it("mostra a conversão da etapa anterior para esta", () => {
     render(<FunnelChart block={BLOCO} />);
 
-    expect(screen.getByText("−50% da anterior")).toBeInTheDocument();
-    expect(screen.getByText("−100% da anterior")).toBeInTheDocument();
+    // A porcentagem do topo cai o funil inteiro sem dizer em que passo caiu.
+    // "Metade de quem chegou a Novo lead seguiu para Qualificação" é o número
+    // que localiza o gargalo — e é lido como passagem, não como perda.
+    expect(screen.getByText("50% da anterior")).toBeInTheDocument();
+    expect(screen.getByText("0% da anterior")).toBeInTheDocument();
+  });
+
+  it("a passagem sem perda nenhuma continua escrita", () => {
+    render(
+      <FunnelChart
+        block={{
+          title: "t",
+          stages: [
+            { label: "A", value: 40 },
+            { label: "B", value: 40 },
+          ],
+        }}
+      />,
+    );
+
+    // "Todo mundo que chegou aqui seguiu adiante" é informação, e some quando o
+    // número só aparece se houver queda: a etapa fica sem porcentagem nenhuma e
+    // quem lê não sabe se é 100% ou se o painel não calculou.
+    expect(screen.getByText("100% da anterior")).toBeInTheDocument();
+  });
+
+  it("a primeira etapa não inventa uma passagem", () => {
+    render(<FunnelChart block={BLOCO} />);
+
+    // Antes da boca do funil não há etapa: a conta seria sobre nada.
+    expect(screen.getAllByText(/da anterior$/)).toHaveLength(BLOCO.stages.length - 2);
   });
 
   it("a porcentagem do topo sai em número inteiro", () => {
