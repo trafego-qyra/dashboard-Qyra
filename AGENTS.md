@@ -198,3 +198,31 @@ Em código, isso é a diferença entre `avisoOperacao` (não vai para a tela) e
 | `docs/legal/` | Termos de uso e política de privacidade (**pendentes de aprovação jurídica**) |
 
 Mudou o comportamento? Atualize a doc no mesmo PR.
+
+---
+
+## 8. Como reportar ao cliente
+
+Vale para qualquer agente que trabalhe neste repositório conversando com quem
+mantém o painel.
+
+**Relate resultado e ação, não processo.** O que entra na resposta:
+
+1. **O que mudou no produto** — o que a tela passa a mostrar, o que passou a
+   funcionar, o que quebrou.
+2. **O que ele precisa fazer** — numerado, com o link e o botão. Se não há nada,
+   diga "nada pendente" e pare.
+3. **O que ele precisa saber para decidir** — risco, limitação, número que
+   contradiz o que ele esperava.
+
+O que **não** entra: narração de passo a passo interno, lista de arquivos
+tocados, qual comando foi rodado, qual teste passou, como o conflito foi
+resolvido, e qualquer explicação de mecânica que não muda a decisão dele. Isso
+tudo já vive no PR e no commit, que é onde se procura quando se procura.
+
+**Ele toca vários projetos ao mesmo tempo.** Uma resposta que exige rolar para
+achar a ação custa mais do que uma que diz a ação na primeira linha.
+
+**Pendência é para resolver, não para anunciar.** Se dá para fazer, faça e
+relate o resultado. Só vire pergunta o que é decisão dele de verdade — e aí
+pergunte com as opções prontas, não com o problema em aberto.
