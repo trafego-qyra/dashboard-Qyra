@@ -2,6 +2,7 @@ import "server-only";
 
 import { avisoOperacao } from "@/lib/avisos";
 import { eachDay } from "@/lib/date-range";
+import { conversaoPorEtapa } from "@/lib/funil";
 import type {
   ChannelReport,
   DateRange,
@@ -873,6 +874,12 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       };
     });
 
+    // O funil sai do literal de retorno porque a tabela de conversão é
+    // derivada dele: as duas leituras vêm da mesma contagem, e não de duas
+    // contas paralelas que podem discordar.
+    const funil = montarFunilVisual(criados, etapas, ganhosDaSafra);
+    const conversao = funil ? conversaoPorEtapa(funil) : undefined;
+
     const semUtm = leads.every((l) => campo(l, ["utm_source", "utm source", "origem"]) === null);
 
     // Negócio ganho sem valor preenchido é o caso mais traiçoeiro deste
@@ -1001,9 +1008,13 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
-      funnel: montarFunilVisual(criados, etapas, ganhosDaSafra),
+      funnel: funil,
       tables: [
         montarFunil(criados, etapas, deEntrada),
+        // A figura acima em texto. São perguntas diferentes: a tabela de cima
+        // conta quem está parado em cada etapa, esta conta quem passou de uma
+        // para a outra — e é a segunda que responde onde o funil aperta.
+        ...(conversao ? [conversao] : []),
         montarPerdas(perdidos),
         montarOrigens(criados, ganhos),
         // Fora da lista quando não há cidade nenhuma: uma tabela de uma linha

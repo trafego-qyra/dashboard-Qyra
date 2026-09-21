@@ -817,6 +817,73 @@ describe("vendas pelo Kommo", () => {
     expect(report.funnel).toBeUndefined();
   });
 
+  it("a conversão etapa a etapa sai em tabela, ao lado da figura", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        { id: 2, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 3, status_id: 30, created_at: emSegundos("2026-02-04T10:00:00Z") },
+        {
+          id: 4,
+          price: 900,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-05T10:00:00Z"),
+          closed_at: emSegundos("2026-02-07T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    const conversao = report.tables.find((t) => t.title === "Conversão etapa a etapa");
+
+    // A figura já aperta nesses dois pontos, mas ninguém mede trapézio com
+    // régua — e quem usa leitor de tela não vê figura nenhuma.
+    expect(conversao?.rows).toEqual([
+      { passagem: "Novo lead → Qualificação", chegaram: 4, seguiram: 2, conversao: 0.5 },
+      { passagem: "Qualificação → Venda ganha", chegaram: 2, seguiram: 1, conversao: 0.5 },
+    ]);
+  });
+
+  it("a tabela de conversão conta fluxo, e a de etapas conta ocupação", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        { id: 2, status_id: 40, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: 40, name: "Negociação", sort: 30 },
+      ],
+    );
+
+    const etapas = report.tables.find((t) => t.title === "Negócios por etapa");
+    const conversao = report.tables.find((t) => t.title === "Conversão etapa a etapa");
+
+    // Ninguém está parado em Qualificação — e ainda assim metade dos negócios
+    // passou por ela. São duas perguntas diferentes sobre o mesmo funil, e a
+    // tabela de ocupação sozinha faria a etapa do meio parecer um buraco.
+    expect(etapas?.rows).toContainEqual({ etapa: "Qualificação", negocios: 0, valor: 0 });
+    expect(conversao?.rows[0]).toMatchObject({
+      passagem: "Novo lead → Qualificação",
+      seguiram: 1,
+      conversao: 0.5,
+    });
+  });
+
+  it("sem esqueleto de etapas também não há tabela de conversão", async () => {
+    const { report } = await relatorio([
+      { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+    ]);
+
+    // A conversão é derivada da figura: sem ordem de etapas não há passagem
+    // para medir, e uma tabela de uma coluna só seria pior que nenhuma.
+    expect(report.tables.some((t) => t.title === "Conversão etapa a etapa")).toBe(false);
+  });
+
   it("agrupa os leads pela cidade do contato", async () => {
     const { report } = await relatorio(
       [leadComContato(1, 10), leadComContato(2, 11), leadComContato(3, 12)],

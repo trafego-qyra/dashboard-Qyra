@@ -9,7 +9,8 @@ import type { FunnelBlock, FunnelStage } from "@/lib/types";
  * O funil comercial, em figura.
  *
  * Faixas separadas, cada uma um trapézio: a aresta de cima é o número da etapa,
- * a de baixo é o da próxima, e o quanto ela estreita é a perda entre as duas.
+ * a de baixo é o da próxima, e o quanto ela estreita é a passagem entre as duas
+ * — escrita ao lado como a conversão da etapa anterior para esta.
  * Onde a forma aperta é onde o processo trava — que é a única coisa que um
  * funil desenhado faz melhor que a tabela ao lado.
  *
@@ -21,7 +22,7 @@ import type { FunnelBlock, FunnelStage } from "@/lib/types";
  *
  * **Sem tooltip, de propósito.** A regra da casa é que gráfico em HTML tem
  * camada de hover; a exceção aqui é que não há nada escondido para revelar —
- * etapa, contagem, porcentagem e queda estão todas escritas ao lado da forma.
+ * etapa, contagem e as duas porcentagens estão todas escritas ao lado da forma.
  * Um tooltip repetiria o visível e ainda esconderia o dado de quem navega por
  * teclado.
  *
@@ -219,8 +220,13 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
           const baixo = ultima ? cima * 0.78 : largura(proxima.value, topo);
           const doTopo = topo === 0 ? 0 : etapa.value / topo;
           const anterior = etapas[i - 1]?.value;
-          const queda =
-            anterior === undefined || anterior === 0 ? null : 1 - etapa.value / anterior;
+          // Duas leituras diferentes da mesma faixa. "Do topo" diz o tamanho da
+          // etapa; "da anterior" diz a passagem — quantos dos que chegaram à
+          // etapa de cima seguiram para esta. É a segunda que localiza o
+          // gargalo: a menor delas é onde o processo trava, e a do topo cai o
+          // funil inteiro sem apontar em que passo caiu.
+          const daAnterior =
+            anterior === undefined || anterior === 0 ? null : etapa.value / anterior;
           const cor =
             etapa.outcome === "ganho" ? "var(--qy-funnel-ganho)" : corDaEtapa(i, etapas.length);
 
@@ -253,7 +259,7 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
 
               {/* A forma. Some no telefone: com a tela estreita o trapézio fica
                   raso demais para dizer alguma coisa, e o que sobra — nome,
-                  contagem e queda — já é o funil em texto. */}
+                  contagem e porcentagens — já é o funil em texto. */}
               <div className="col-span-2 hidden h-16 sm:col-span-1 sm:block">
                 <Faixa
                   etapa={etapa}
@@ -276,9 +282,9 @@ export function FunnelChart({ block }: { block: FunnelBlock }) {
                       o número perde o rótulo. */}
                   <span className="text-right text-[11px] text-plum-200 leading-tight tabular-nums">
                     <span className="block whitespace-nowrap">{porcento(doTopo)} do topo</span>
-                    {queda !== null && queda > 0 ? (
+                    {daAnterior !== null ? (
                       <span className="block whitespace-nowrap text-plum-300">
-                        −{porcento(queda)} da anterior
+                        {porcento(daAnterior)} da anterior
                       </span>
                     ) : null}
                   </span>
