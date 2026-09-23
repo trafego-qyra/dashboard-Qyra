@@ -159,6 +159,38 @@ export interface EtapaDoStatus {
 }
 
 /**
+ * Quanto o lead espera até alguém responder.
+ *
+ * **Mediana, e não média.** Um negócio respondido dois dias depois puxa a
+ * média para cima sozinho, e o número deixa de descrever o dia normal — que é
+ * justamente o que a meta cobra.
+ *
+ * A base vem junto porque mediana de três conversas não é indicador, é
+ * anedota, e sem ela não dá para saber qual dos dois se está lendo.
+ */
+export interface TempoDeResposta {
+  /** Mediana em segundos. `null` quando não houve o que medir. */
+  mediana: number | null;
+  /** Negócios com as duas pontas — pergunta e resposta — no período. */
+  base: number;
+  /**
+   * Teto em segundos, não alvo a alcançar. Zero significa "não configurado".
+   *
+   * É a única meta do painel que se lê invertida: aqui embaixo é bom.
+   */
+  meta: number;
+  /**
+   * Por que não deu para medir, quando não deu.
+   *
+   * `sem-evento` é conversa que não passa pelo chat do Kommo — atendimento
+   * fora do CRM não deixa rastro para medir. `falhou` é a consulta que não
+   * voltou. Os dois precisam ser ditos: zero segundos na tela se leria como
+   * atendimento instantâneo.
+   */
+  motivo?: "sem-evento" | "falhou";
+}
+
+/**
  * O status comercial: o estado da base agora, e o do período contra a meta.
  *
  * Mistura duas janelas de propósito, porque a pergunta que a tela responde
@@ -183,6 +215,8 @@ export interface StatusDeVendas {
   etapas: EtapaDoStatus[];
   /** O alvo do ciclo. Zero significa "não configurada", e a tela não cobra. */
   metas: { vendas: number; receita: number };
+  /** Quanto o lead espera pela primeira resposta. */
+  tempoDeResposta: TempoDeResposta;
   notices: Notice[];
 }
 

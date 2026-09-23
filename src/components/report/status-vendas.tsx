@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 import { formatMetric } from "@/lib/format";
-import type { EtapaDoStatus, StatusDeVendas } from "@/lib/types";
+import type { EtapaDoStatus, StatusDeVendas, TempoDeResposta } from "@/lib/types";
 
 /**
  * O status comercial numa tela.
@@ -100,6 +100,59 @@ function Meta({
   );
 }
 
+/**
+ * Quanto o lead espera pela primeira resposta.
+ *
+ * O único bloco da tela cuja meta é **teto**, e não alvo: aqui embaixo é bom.
+ * Por isso ele não usa a barra dos outros — barra cheia significaria meta
+ * batida, e aqui encher a barra é o fracasso. Diz em texto se está dentro ou
+ * acima, porque a cor sozinha não informa quem não a distingue.
+ *
+ * Quando não há o que medir, o bloco diz o motivo em vez de mostrar zero.
+ * "0s" se leria como atendimento instantâneo — o oposto do que aconteceu.
+ */
+function TempoDeRespostaCartao({ tempo }: { tempo: TempoDeResposta }) {
+  if (tempo.mediana === null) {
+    return (
+      <Cartao
+        titulo="Tempo de resposta"
+        subtitulo={
+          tempo.motivo === "falhou"
+            ? "Não foi possível ler o registro de eventos do Kommo nesta leitura."
+            : "Nenhuma conversa do período passou pelo chat do Kommo."
+        }
+      >
+        <p className="mt-3 font-semibold text-[clamp(1.25rem,11cqw,2.25rem)] text-ink-muted tracking-tight">
+          —
+        </p>
+      </Cartao>
+    );
+  }
+
+  const dentro = tempo.meta > 0 && tempo.mediana <= tempo.meta;
+
+  return (
+    <Cartao
+      titulo="Tempo de resposta"
+      subtitulo={`Mediana de ${formatMetric(tempo.base, "integer")} negócio(s) com pergunta e resposta no período`}
+    >
+      <p className="mt-3 font-semibold text-[clamp(1.25rem,11cqw,2.25rem)] text-ink tracking-tight">
+        {formatMetric(tempo.mediana, "duration")}
+      </p>
+      {tempo.meta > 0 ? (
+        <p
+          className={cn(
+            "mt-3 text-[11px] leading-tight tabular-nums",
+            dentro ? "text-positive" : "text-warning",
+          )}
+        >
+          {dentro ? "Dentro da" : "Acima da"} meta de até {formatMetric(tempo.meta, "duration")}
+        </p>
+      ) : null}
+    </Cartao>
+  );
+}
+
 /** Ganho e perdido não são lugares onde o negócio espera: são o fim da linha. */
 function corDoDesfecho(desfecho: EtapaDoStatus["desfecho"]): string {
   if (desfecho === "ganho") return "var(--qy-funnel-ganho)";
@@ -126,7 +179,7 @@ export function StatusDeVendasView({ status }: { status: StatusDeVendas }) {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
           <Cartao titulo="Leads gerados" subtitulo="Negócios criados no período">
             <Numero valor={status.gerados} formato="integer" />
           </Cartao>
@@ -144,6 +197,8 @@ export function StatusDeVendasView({ status }: { status: StatusDeVendas }) {
           <Cartao titulo="Perdidos" subtitulo="Negócios encerrados sem venda no período">
             <Numero valor={status.perdidos} formato="integer" />
           </Cartao>
+
+          <TempoDeRespostaCartao tempo={status.tempoDeResposta} />
         </div>
       </section>
 

@@ -35,9 +35,30 @@ interface LeadFalso {
  * tela do relatório de canal: devolver o mesmo recorte para as três consultas
  * esconderia o dia em que o filtro voltasse a ser aplicado onde não deve.
  */
-function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string; sort?: number }>) {
+interface EventoFalso {
+  type: string;
+  entity_id: number;
+  entity_type?: string;
+  created_at: number;
+}
+
+function kommo(
+  leads: LeadFalso[],
+  etapas: Array<{ id: number; name: string; sort?: number }>,
+  eventos: EventoFalso[] | "falha" = [],
+) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/events")) {
+      if (eventos === "falha") return new Response("sem escopo", { status: 403 });
+      // Devolve tudo, de propósito: a API do Kommo ignora filtro que não
+      // reconhece em silêncio, e o conector precisa sobreviver a isso.
+      return new Response(JSON.stringify({ _embedded: { events: eventos } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
     if (url.includes("/leads/pipelines")) {
       return new Response(
@@ -79,8 +100,9 @@ function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string; sor
 async function status(
   leads: LeadFalso[],
   etapas: Array<{ id: number; name: string; sort?: number }> = [],
+  eventos: EventoFalso[] | "falha" = [],
 ) {
-  vi.stubGlobal("fetch", kommo(leads, etapas));
+  vi.stubGlobal("fetch", kommo(leads, etapas, eventos));
   const { fetchStatusDeVendas } = await import("@/server/connectors/kommo");
   return fetchStatusDeVendas(RANGE);
 }
@@ -256,6 +278,154 @@ describe("status de vendas", () => {
     );
 
     expect(resultado.metas.vendas).toBe(0);
+  });
+
+  it("mede a espera entre a pergunta e a primeira resposta de cada negócio", async () => {
+    const base = emSegundos("2026-02-10T09:00:00Z");
+    const resultado = await status([{ id: 1, status_id: 20, created_at: base }], ETAPAS, [
+      // Negócio 1: respondido em 60s.
+      { type: "incoming_chat_message", entity_id: 1, entity_type: "lead", created_at: base },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 1,
+        entity_type: "lead",
+        created_at: base + 60,
+      },
+      // Negócio 2: respondido em 200s.
+      { type: "incoming_chat_message", entity_id: 2, entity_type: "lead", created_at: base },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 2,
+        entity_type: "lead",
+        created_at: base + 200,
+      },
+      // Negócio 3: respondido em 3h. É o que uma média esconderia.
+      { type: "incoming_chat_message", entity_id: 3, entity_type: "lead", created_at: base },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 3,
+        entity_type: "lead",
+        created_at: base + 10_800,
+      },
+    ]);
+
+    // A média daria 3.687s — uma hora de espera que não descreve nenhum dos
+    // três atendimentos. A mediana é o do meio.
+    expect(resultado.tempoDeResposta.mediana).toBe(200);
+    expect(resultado.tempoDeResposta.base).toBe(3);
+  });
+
+  it("mensagem enviada antes da pergunta não conta como resposta", async () => {
+    const base = emSegundos("2026-02-10T09:00:00Z");
+    const resultado = await status([], ETAPAS, [
+      // A campanha que provocou o contato sai antes da pergunta.
+      { type: "outgoing_chat_message", entity_id: 1, entity_type: "lead", created_at: base },
+      {
+        type: "incoming_chat_message",
+        entity_id: 1,
+        entity_type: "lead",
+        created_at: base + 300,
+      },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 1,
+        entity_type: "lead",
+        created_at: base + 360,
+      },
+    ]);
+
+    // Contar a primeira saída daria tempo negativo, e um Math.min ingênuo daria
+    // "respondido antes de perguntar".
+    expect(resultado.tempoDeResposta.mediana).toBe(60);
+  });
+
+  it("negócio sem resposta fica de fora, em vez de entrar com zero", async () => {
+    const base = emSegundos("2026-02-10T09:00:00Z");
+    const resultado = await status([], ETAPAS, [
+      { type: "incoming_chat_message", entity_id: 1, entity_type: "lead", created_at: base },
+      { type: "incoming_chat_message", entity_id: 2, entity_type: "lead", created_at: base },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 2,
+        entity_type: "lead",
+        created_at: base + 120,
+      },
+    ]);
+
+    // Quem nunca foi respondido não tem tempo de resposta. Entrar com zero
+    // melhoraria a mediana justamente por causa de quem foi ignorado.
+    expect(resultado.tempoDeResposta.base).toBe(1);
+    expect(resultado.tempoDeResposta.mediana).toBe(120);
+  });
+
+  it("evento fora do período é descartado mesmo se a API ignorar o filtro", async () => {
+    const dentro = emSegundos("2026-02-10T09:00:00Z");
+    const fora = emSegundos("2025-08-10T09:00:00Z");
+    const resultado = await status([], ETAPAS, [
+      { type: "incoming_chat_message", entity_id: 1, entity_type: "lead", created_at: dentro },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 1,
+        entity_type: "lead",
+        created_at: dentro + 90,
+      },
+      { type: "incoming_chat_message", entity_id: 2, entity_type: "lead", created_at: fora },
+      { type: "outgoing_chat_message", entity_id: 2, entity_type: "lead", created_at: fora + 5 },
+    ]);
+
+    // O Kommo ignora filtro desconhecido em silêncio. Sem reconferir, a
+    // mediana sairia calculada sobre o histórico inteiro — plausível e errada.
+    expect(resultado.tempoDeResposta.base).toBe(1);
+    expect(resultado.tempoDeResposta.mediana).toBe(90);
+  });
+
+  it("evento que não é de negócio não entra na conta", async () => {
+    const base = emSegundos("2026-02-10T09:00:00Z");
+    const resultado = await status([], ETAPAS, [
+      { type: "incoming_chat_message", entity_id: 9, entity_type: "contact", created_at: base },
+      {
+        type: "outgoing_chat_message",
+        entity_id: 9,
+        entity_type: "contact",
+        created_at: base + 30,
+      },
+    ]);
+
+    expect(resultado.tempoDeResposta.motivo).toBe("sem-evento");
+  });
+
+  it("sem conversa nenhuma, diz que não houve o que medir — nunca zero", async () => {
+    const resultado = await status([], ETAPAS, []);
+
+    // Zero segundos na tela se leria como atendimento instantâneo, que é o
+    // oposto do que aconteceu.
+    expect(resultado.tempoDeResposta).toMatchObject({
+      mediana: null,
+      base: 0,
+      motivo: "sem-evento",
+    });
+  });
+
+  it("consulta de eventos negada não derruba a tela, e é dita como falha", async () => {
+    const resultado = await status(
+      [{ id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      ETAPAS,
+      "falha",
+    );
+
+    // Escopo do token sem acesso a eventos é o caso mais provável, e o resto
+    // da tela não depende disso.
+    expect(resultado.tempoDeResposta.motivo).toBe("falhou");
+    expect(resultado.gerados).toBe(1);
+    expect(resultado.notices.some((a) => /eventos/i.test(a.text))).toBe(true);
+  });
+
+  it("lê o teto de tempo de resposta do ambiente", async () => {
+    vi.stubEnv("QYRA_META_TEMPO_RESPOSTA", "600");
+
+    const resultado = await status([], ETAPAS, []);
+
+    expect(resultado.tempoDeResposta.meta).toBe(600);
   });
 
   it("sem credencial, devolve demonstração em vez de tela vazia", async () => {
