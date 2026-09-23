@@ -13,13 +13,14 @@ import type {
   Notice,
   OverviewReport,
   SeriesPoint,
+  StatusDeVendas,
 } from "@/lib/types";
 import { cached } from "@/server/lib/cache";
 import { descreverFalha } from "@/server/lib/http";
 import { fetchClarityResumo } from "./connectors/clarity";
 import { fetchGa4Report } from "./connectors/ga4";
 import { fetchGoogleAdsReport } from "./connectors/google-ads";
-import { fetchVendasReport } from "./connectors/kommo";
+import { fetchStatusDeVendas, fetchVendasReport } from "./connectors/kommo";
 import { fetchMetaAdsReport } from "./connectors/meta-ads";
 import { fetchOrganicoReport } from "./connectors/organico";
 
@@ -115,6 +116,18 @@ export async function getChannelReport(
     // Comparação é um enfeite útil, não requisito: sem ela a tela ainda serve.
     return report;
   }
+}
+
+/**
+ * O status comercial, com o mesmo cache dos relatórios de canal.
+ *
+ * Sem comparação com o período anterior, de propósito: a tela mede o estado da
+ * base agora e o ciclo contra a meta. "A base tinha 9% menos negócios no mês
+ * passado" não ajuda a decidir nada, e uma seta ao lado de cada etapa
+ * sugeriria que subir é bom — em reabordagem, subir é o problema.
+ */
+export function getStatusDeVendas(range: DateRange): Promise<StatusDeVendas> {
+  return cached(`status-vendas:${range.from}:${range.to}`, () => fetchStatusDeVendas(range));
 }
 
 export interface ChannelResult {

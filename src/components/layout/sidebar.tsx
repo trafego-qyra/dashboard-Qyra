@@ -2,6 +2,7 @@
 
 import {
   ChartLine,
+  Gauge,
   HandCoins,
   Heart,
   LayoutGrid,
@@ -45,6 +46,10 @@ const ICONE: Record<string, LucideIcon> = {
 const NAV = [
   { href: "/", label: "Visão geral", icon: LayoutGrid },
   ...RELATORIOS.map((c) => ({ href: c.href, label: c.label, icon: ICONE[c.id] })),
+  // Logo abaixo de Vendas, e fora de RELATORIOS: não é relatório de canal — é
+  // o estado da base comercial contra a meta do ciclo, e o dado de etapa que
+  // ele mostra não tem recorte de período.
+  { href: "/status", label: "Status de vendas", icon: Gauge },
   // Fora de CHANNELS de propósito: não é canal de aquisição e não produz
   // relatório de período — é o que acontece depois que a pessoa chega.
   { href: "/comportamento", label: "Comportamento", icon: MousePointerClick },

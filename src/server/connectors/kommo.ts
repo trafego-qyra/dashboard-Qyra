@@ -6,13 +6,15 @@ import { conversaoPorEtapa } from "@/lib/funil";
 import type {
   ChannelReport,
   DateRange,
+  EtapaDoStatus,
   FunnelBlock,
   FunnelStage,
   Notice,
   SeriesPoint,
+  StatusDeVendas,
   TableBlock,
 } from "@/lib/types";
-import { mockVendas } from "@/mocks/reports";
+import { mockStatusDeVendas, mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { montarPlacar } from "@/server/fila/placar";
 import { descreverFalha, httpJson } from "@/server/lib/http";
@@ -1066,4 +1068,141 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     ];
     return report;
   }
+}
+
+/**
+ * Todos os negócios do funil, sem recorte de data.
+ *
+ * A tela de status pergunta onde a base está **hoje**, e essa pergunta não tem
+ * período: um negócio criado em março que segue parado em reabordagem conta
+ * igual ao de ontem. Filtrar por data aqui esconderia justamente o que trava.
+ */
+async function buscarTodosOsLeads(): Promise<LeadDoKommo[]> {
+  const url = new URL(`${baseDaApi()}/leads`);
+  const funil = getEnv().KOMMO_PIPELINE_ID;
+  if (funil) url.searchParams.set("filter[pipeline_id]", funil);
+  url.searchParams.set("limit", String(POR_PAGINA));
+
+  const todos: LeadDoKommo[] = [];
+  let proxima: string | null = url.toString();
+
+  for (let pagina = 0; pagina < MAX_PAGINAS && proxima; pagina++) {
+    const resposta: RespostaDeLeads = await httpJson<RespostaDeLeads>(proxima, {
+      headers: autorizacao(),
+    });
+    const leads = resposta._embedded?.leads ?? [];
+    todos.push(...leads);
+    proxima = leads.length === POR_PAGINA ? (resposta._links?.next?.href ?? null) : null;
+  }
+
+  return todos;
+}
+
+/** Meta lida do ambiente. Vazia, ilegível ou negativa vira zero: sem meta. */
+function meta(valor: string | undefined): number {
+  const numero = Number(valor);
+  return Number.isFinite(numero) && numero > 0 ? numero : 0;
+}
+
+/**
+ * A base de hoje, repartida por etapa e na ordem do funil.
+ *
+ * Ganho e perdido saem marcados como desfecho onde quer que a conta os tenha
+ * batizado: `142` e `143` são fixos em todo Kommo, mas o nome é livre, e
+ * confiar no nome faria "Fechado - ganho" virar uma etapa de espera qualquer.
+ */
+function repartirPorEtapa(leads: LeadDoKommo[], etapas: EtapaDoFunil[]): EtapaDoStatus[] {
+  const porEtapa = new Map<number, number>();
+  for (const lead of leads) {
+    const id = lead.status_id ?? 0;
+    porEtapa.set(id, (porEtapa.get(id) ?? 0) + 1);
+  }
+
+  const desfecho = (id: number) =>
+    id === GANHO ? ("ganho" as const) : id === PERDIDO ? ("perdido" as const) : undefined;
+
+  const linhas: EtapaDoStatus[] = etapas.map((etapa) => ({
+    nome: etapa.nome,
+    negocios: porEtapa.get(etapa.id) ?? 0,
+    ...(desfecho(etapa.id) ? { desfecho: desfecho(etapa.id) } : {}),
+  }));
+
+  // Etapa que apareceu nos negócios mas não está no esqueleto: outro funil, ou
+  // etapa apagada com negócio dentro. Vai ao fim em vez de sumir da conta — a
+  // soma das etapas precisa fechar com o total da base.
+  const conhecidas = new Set(etapas.map((e) => e.id));
+  for (const [id, negocios] of porEtapa) {
+    if (conhecidas.has(id)) continue;
+    const nome = id === GANHO ? "Venda ganha" : id === PERDIDO ? "Perdido" : `Etapa ${id}`;
+    linhas.push({ nome, negocios, ...(desfecho(id) ? { desfecho: desfecho(id) } : {}) });
+  }
+
+  return linhas;
+}
+
+/**
+ * O status comercial: o ciclo contra a meta, e onde a base está agora.
+ *
+ * Três consultas, porque são três perguntas com recortes diferentes: quantos
+ * entraram no período, o que se decidiu no período, e onde está tudo que
+ * existe. A terceira é a que o relatório de canal não sabe responder — ele é
+ * inteiro recortado por data.
+ */
+export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVendas> {
+  const env = getEnv();
+  const metas = { vendas: meta(env.QYRA_META_VENDAS), receita: meta(env.QYRA_META_RECEITA) };
+
+  if (isForceMock() || !getCredentials().vendas) {
+    const status = mockStatusDeVendas(range, new Date().toISOString());
+    status.metas = metas.vendas > 0 || metas.receita > 0 ? metas : status.metas;
+    status.notices = [
+      avisoOperacao(
+        isForceMock()
+          ? "Modo mock forçado por QYRA_FORCE_MOCK."
+          : "Sem credencial do Kommo — exibindo dados de demonstração.",
+      ),
+    ];
+    return status;
+  }
+
+  const [criados, fechados, base, etapas] = await Promise.all([
+    buscarLeads(range, "created_at"),
+    buscarLeads(range, "closed_at"),
+    buscarTodosOsLeads(),
+    buscarEtapas(),
+  ]);
+
+  const ganhos = fechados.filter((l) => l.status_id === GANHO);
+  const perdidos = fechados.filter((l) => l.status_id === PERDIDO);
+  const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
+
+  const avisos: Notice[] = [];
+  if (metas.vendas === 0 && metas.receita === 0) {
+    avisos.push(
+      avisoOperacao(
+        "Nenhuma meta configurada: a tela mostra o resultado do ciclo sem o alvo. Preencha QYRA_META_VENDAS e QYRA_META_RECEITA para a barra de meta aparecer.",
+      ),
+    );
+  }
+  if (ganhos.length > 0 && receita === 0) {
+    avisos.push(
+      avisoOperacao(
+        `${ganhos.length} negócio(s) ganho(s) no período estão sem valor preenchido no Kommo. A receita fica em zero até o campo de valor ser preenchido ao fechar a venda.`,
+      ),
+    );
+  }
+
+  return {
+    range,
+    source: "live",
+    fetchedAt: new Date().toISOString(),
+    gerados: criados.length,
+    ganhos: ganhos.length,
+    perdidos: perdidos.length,
+    receita: Math.round(receita * 100) / 100,
+    baseTotal: base.length,
+    etapas: repartirPorEtapa(base, etapas),
+    metas,
+    notices: avisos,
+  };
 }

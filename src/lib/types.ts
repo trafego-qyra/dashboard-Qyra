@@ -140,6 +140,53 @@ export interface FunnelBlock {
 }
 
 /**
+ * Uma etapa do funil, com quantos negócios estão parados nela agora.
+ *
+ * É ocupação, não fluxo: a pergunta desta tela é "onde está a base hoje", e
+ * não "quantos passaram por aqui no período". As duas convivem no painel — a
+ * tela de Vendas responde a segunda — e é por isso que cada bloco diz a que se
+ * refere.
+ */
+export interface EtapaDoStatus {
+  nome: string;
+  negocios: number;
+  /**
+   * Etapa de desfecho. Ganho e perdido não são lugares onde o negócio espera:
+   * são o fim da linha, e somá-los às etapas de passagem inflaria o "quanto
+   * ainda está em jogo".
+   */
+  desfecho?: "ganho" | "perdido";
+}
+
+/**
+ * O status comercial: o estado da base agora, e o do período contra a meta.
+ *
+ * Mistura duas janelas de propósito, porque a pergunta que a tela responde
+ * mistura: "quantos entraram e quanto fechamos neste ciclo" é período, "onde
+ * estão os negócios que existem" é agora. O que não pode é o rótulo omitir
+ * qual é qual — foi o que obrigou o slide feito à mão a ter asterisco.
+ */
+export interface StatusDeVendas {
+  range: DateRange;
+  source: DataSource;
+  fetchedAt: string;
+  /** Negócios criados no período. */
+  gerados: number;
+  /** Negócios ganhos e perdidos no período, pela data de fechamento. */
+  ganhos: number;
+  perdidos: number;
+  /** Receita dos ganhos do período. */
+  receita: number;
+  /** Quantos negócios existem no funil hoje, somando todas as etapas. */
+  baseTotal: number;
+  /** A base de hoje repartida por etapa, na ordem do funil. */
+  etapas: EtapaDoStatus[];
+  /** O alvo do ciclo. Zero significa "não configurada", e a tela não cobra. */
+  metas: { vendas: number; receita: number };
+  notices: Notice[];
+}
+
+/**
  * Uma peça de conteúdo com a arte e alguns números — anúncio ou publicação.
  *
  * É modelo de tela, não de domínio: cada conector calcula as métricas que
