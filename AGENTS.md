@@ -145,7 +145,41 @@ recuperação, e funcionamento em tema claro e escuro.
 
 ---
 
-## 6. Segurança e operação
+## 6. Relatórios de dados
+
+Relatório é tabela, não texto corrido. Quem lê já pediu o dado — o relatório
+entrega o número, não convence ninguém dele.
+
+**Obrigatório**
+
+- Título neutro: o recorte, nunca a conclusão. `Mídia paga — 1/ago a 21/set/26`,
+  e não `O funil consertou em setembro`.
+- O dado vive em tabela. Prosa só onde tabela não cabe.
+- Todo número traz fonte, janela e unidade.
+- O total confere com a soma das linhas. Quando não confere, a diferença vira
+  uma linha da própria tabela.
+
+**Proibido**
+
+- Manchete com veredito, lide, abertura narrativa, pergunta retórica.
+- Parágrafo que argumenta, contextualiza ou antecipa objeção.
+- Repetir em texto o que a tabela ao lado já diz.
+- Negrito como ênfase retórica — negrito marca rótulo, não opinião.
+
+**Insight** entra como `Observação:` — uma linha, logo abaixo da tabela, e só
+quando o número engana sem ela: amostra pequena, janela de atribuição
+diferente, soma que não fecha, métrica otimizada para outro evento. Não é
+espaço para recomendação desenvolvida.
+
+**Recomendação**, quando pedida, é lista curta: a ação e o número que a
+sustenta. Sem justificativa em prosa.
+
+Ordem padrão das seções: recorte e fontes → consolidado → um bloco por canal →
+comparação com a meta → notas técnicas.
+
+---
+
+## 7. Segurança e operação
 
 - Segredo só em `src/server/**`, que importa `server-only`. Se um módulo de
   `components/` precisar de dado de API, ele recebe por props.
@@ -160,7 +194,7 @@ recuperação, e funcionamento em tema claro e escuro.
 
 ---
 
-## 7. Documentação
+## 8. Documentação
 
 | Arquivo | Conteúdo |
 |---|---|

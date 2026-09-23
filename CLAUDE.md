@@ -14,5 +14,8 @@ Resumo do que ele exige — os detalhes estão lá:
 4. **O contrato de arquitetura é cravado na CI**: `components/` nunca importa
    `server/`.
 5. **O visual segue `docs/design-system.md`** — tokens da marca, nada inventado.
+6. **Relatório é tabela, não texto corrido.** Título neutro, insight só como
+   `Observação:` de uma linha. Sem manchete, sem lide, sem parágrafo que
+   argumenta.
 
 Este arquivo existe só para apontar. Regra nova vai no `AGENTS.md`.
