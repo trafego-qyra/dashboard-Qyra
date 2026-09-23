@@ -219,9 +219,10 @@ Kommo diz quanto daquilo virou dinheiro.
    para esta conta e não passa por revisão do Kommo.
 2. Preencha nome e descrição. O campo de **redirect URI** é obrigatório mesmo
    sem usar OAuth; pode ser `https://dashboard.qyra.com.br/api/kommo/callback`.
-3. Nos **escopos**, marque leitura de negócios (leads), contatos e funis. O
-   painel **nunca escreve** no Kommo — se houver opção de somente leitura, é
-   ela que deve ficar marcada.
+3. Nos **escopos**, marque leitura de negócios (leads), contatos, funis e
+   **eventos** (a fonte do tempo de primeira resposta). O painel **nunca
+   escreve** no Kommo — se houver opção de somente leitura, é ela que deve
+   ficar marcada.
 4. Salve. Abra a integração e vá em **Chaves e escopos**: ali fica a **chave de
    longa duração**. É esse valor que vai em `KOMMO_ACCESS_TOKEN`.
 5. Cadastre as duas variáveis na Vercel e faça um novo deploy.
@@ -230,14 +231,34 @@ Kommo diz quanto daquilo virou dinheiro.
 
 Só leitura, e só o necessário:
 
-- **negócios** (`/api/v4/leads`) criados no período, com valor, etapa e datas de
-  criação e fechamento;
+- **negócios** (`/api/v4/leads`) criados no período, com valor, etapa, motivo de
+  perda e datas de criação e fechamento;
 - **funis e etapas** (`/api/v4/leads/pipelines`), para o funil sair com o nome
-  das etapas em vez de números.
+  das etapas em vez de números;
+- **motivos de perda** (`/api/v4/leads/loss_reasons`), para a tabela de perdas
+  sair com o texto do motivo em vez do id;
+- **eventos de mensagem** (`/api/v4/events`), para medir o tempo entre a
+  primeira mensagem do lead e a primeira resposta de um atendente.
 
 O Kommo herdou do amoCRM dois identificadores fixos, iguais em toda conta:
 **142 é venda ganha, 143 é perdido**. As demais etapas são as que a clínica
 criou.
+
+### As etapas de qualificação, agendamento e proposta
+
+O plano de vendas cobra três etapas do meio do funil que variam de conta para
+conta. O painel reconhece cada uma pelo **nome** — "Avaliação agendada" vira
+agendamento, "Proposta enviada" vira proposta, e assim por diante. Quando o
+nome foge do padrão, o painel mostra um aviso de operação dizendo qual etapa
+não reconheceu, e aí você aponta o `status_id` na variável correspondente
+(`KOMMO_ETAPA_QUALIFICADO`, `KOMMO_ETAPA_AGENDAMENTO`, `KOMMO_ETAPA_PROPOSTA` —
+listas separadas por vírgula). O id aparece na URL ao abrir a etapa no Kommo.
+
+O tempo de primeira resposta conta **só resposta de gente**: mensagem de
+automação (salesbot) nasce como saída e é descartada pelo autor do evento. A
+métrica sai como **mediana** — uma conversa esquecida por dias não desloca o
+número do dia a dia. Um negócio sem mensagem de entrada usa a criação do
+negócio como ponto de partida.
 
 ### A UTM é o que liga venda a campanha
 

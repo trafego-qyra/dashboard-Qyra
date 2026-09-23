@@ -97,6 +97,15 @@ const schema = z.object({
   /** Chave de longa duração da integração privada. */
   KOMMO_ACCESS_TOKEN: optionalString,
 
+  // Quais `status_id` do funil contam como qualificação, agendamento e
+  // proposta. Listas separadas por vírgula. Opcionais: quando em branco, o
+  // conector reconhece a etapa pelo nome (ex.: "Avaliação agendada" →
+  // agendamento). Preencha só quando os nomes do funil fogem do esperado e o
+  // painel avisa que não reconheceu as etapas.
+  KOMMO_ETAPA_QUALIFICADO: optionalString,
+  KOMMO_ETAPA_AGENDAMENTO: optionalString,
+  KOMMO_ETAPA_PROPOSTA: optionalString,
+
   /** Janela e teto do rate limit das rotas de API. */
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),

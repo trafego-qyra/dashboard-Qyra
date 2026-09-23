@@ -805,6 +805,38 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
       },
       { key: "emAberto", label: "Em aberto", value: Math.round(leads * 0.34), format: "integer" },
+      {
+        key: "qualificados",
+        label: "Leads qualificados",
+        value: Math.round(leads * 0.58),
+        format: "integer",
+        hint: "58,0% dos negócios criados no período estão na etapa de qualificação.",
+      },
+      {
+        key: "agendamentos",
+        label: "Agendamentos",
+        value: Math.round(leads * 0.24),
+        format: "integer",
+        hint: "Negócios na etapa de agendamento no fim do período.",
+      },
+      {
+        key: "propostas",
+        label: "Propostas",
+        value: Math.round(leads * 0.12),
+        format: "integer",
+        hint: "Negócios na etapa de proposta no fim do período.",
+      },
+      {
+        key: "primeiraResposta",
+        label: "1ª resposta (mediana)",
+        // Segundos: ~3h, a faixa típica de um atendimento que responde no
+        // mesmo turno mas não em minutos.
+        value: Math.round(9_000 + noise("vendas:resp") * 7_200),
+        previousValue: Math.round(9_000 + noise("vendas:resp") * 7_200) * 1.18,
+        format: "duration",
+        lowerIsBetter: true,
+        hint: "Tempo entre a primeira mensagem do lead e a primeira resposta de um atendente, na mediana dos negócios com as duas pontas registradas.",
+      },
     ],
     series,
     seriesDefs: [
@@ -869,6 +901,29 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
             receita: Math.round(ganhos * 1_640 * 100) / 100,
           };
         }),
+      },
+      {
+        title: "Motivos de perda",
+        description: "Por que os negócios perdidos no período não avançaram.",
+        columns: [
+          { key: "motivo", label: "Motivo", align: "left" },
+          { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+          { key: "fatia", label: "Fatia", format: "percent", align: "right" },
+        ],
+        // Mesma disciplina do funil: as fatias somam o total de perdidos.
+        rows: (() => {
+          const perdidos = Math.round((leads - vendas) * 0.34);
+          return [
+            ["Preço", 0.34],
+            ["Sem retorno", 0.27],
+            ["Comprou de concorrente", 0.16],
+            ["Fora do perfil", 0.13],
+            ["Sem motivo registrado", 0.1],
+          ].map(([motivo, fatia]) => {
+            const negocios = Math.round(perdidos * (fatia as number));
+            return { motivo: motivo as string, negocios, fatia: fatia as number };
+          });
+        })(),
       },
     ],
     notices: [],

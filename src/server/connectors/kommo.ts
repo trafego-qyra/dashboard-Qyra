@@ -2,7 +2,7 @@ import "server-only";
 
 import { avisoOperacao } from "@/lib/avisos";
 import { eachDay } from "@/lib/date-range";
-import type { ChannelReport, DateRange, Notice, SeriesPoint, TableBlock } from "@/lib/types";
+import type { ChannelReport, DateRange, Kpi, Notice, SeriesPoint, TableBlock } from "@/lib/types";
 import { mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { descreverFalha, httpJson } from "@/server/lib/http";
@@ -26,8 +26,28 @@ const PERDIDO = 143;
 /** Teto da API por página. Acima disso ela ignora o valor e devolve 250. */
 const POR_PAGINA = 250;
 
+/** `/events` tem teto próprio: acima de 100 por página ela recusa. */
+const EVENTOS_POR_PAGINA = 100;
+
 /** Trava de segurança: 20 páginas são 5.000 negócios num período. */
 const MAX_PAGINAS = 20;
+
+/**
+ * Papéis do funil que o plano de vendas mede.
+ *
+ * O Kommo fixa só 142 (ganho) e 143 (perdido); as etapas do meio são criadas
+ * por cada conta. Estes três papéis são o que o painel precisa reconhecer para
+ * contar qualificação, agendamento e proposta — por nome da etapa, ou pela
+ * lista de ids em `KOMMO_ETAPA_*` quando os nomes fogem do padrão.
+ */
+type PapelEtapa = "qualificado" | "agendamento" | "proposta";
+
+/** Como reconhecer cada papel pelo nome da etapa, quando não há override. */
+const PALAVRAS_DE_ETAPA: Array<{ papel: PapelEtapa; regex: RegExp }> = [
+  { papel: "agendamento", regex: /agendad|agenda|marcad/i },
+  { papel: "proposta", regex: /proposta|or[çc]ament/i },
+  { papel: "qualificado", regex: /qualificad/i },
+];
 
 interface LeadDoKommo {
   id: number;
@@ -39,6 +59,8 @@ interface LeadDoKommo {
   created_at?: number;
   closed_at?: number;
   responsible_user_id?: number;
+  /** Preenchido só quando o negócio está em 143 (perdido) com motivo marcado. */
+  loss_reason_id?: number;
   custom_fields_values?: Array<{
     field_name?: string;
     field_code?: string;
@@ -59,6 +81,25 @@ interface RespostaDeFunis {
       _embedded?: { statuses?: Array<{ id: number; name?: string; sort?: number }> };
     }>;
   };
+}
+
+interface EventoDoKommo {
+  type?: string;
+  entity_id?: number;
+  entity_type?: string;
+  /** Unix em segundos. */
+  created_at?: number;
+  /** Id do usuário que gerou o evento. `0` = sistema/automação, não humano. */
+  created_by?: number;
+}
+
+interface RespostaDeEventos {
+  _embedded?: { events?: EventoDoKommo[] };
+  _links?: { next?: { href?: string } };
+}
+
+interface RespostaDeMotivos {
+  _embedded?: { loss_reasons?: Array<{ id: number; name?: string }> };
 }
 
 function baseDaApi(): string {
@@ -177,6 +218,200 @@ async function buscarEtapas(): Promise<Map<number, string>> {
   return nomes;
 }
 
+/** `"32, 45 ,x,50"` → `[32, 45, 50]`. Ignora o que não é número. */
+function idsDaLista(bruto: string | undefined): number[] {
+  if (!bruto) return [];
+  return bruto
+    .split(",")
+    .map((p) => Number.parseInt(p.trim(), 10))
+    .filter((n) => Number.isFinite(n));
+}
+
+/**
+ * Qual papel do plano cada `status_id` representa.
+ *
+ * Override por id em `KOMMO_ETAPA_*` vence; o resto é reconhecido pelo nome da
+ * etapa. Uma etapa que não casa com nenhum papel simplesmente não entra — o
+ * conector prefere não contar a contar errado.
+ */
+function classificarEtapas(nomes: Map<number, string>): Map<number, PapelEtapa> {
+  const env = getEnv();
+  const mapa = new Map<number, PapelEtapa>();
+
+  const overrides: Array<{ papel: PapelEtapa; ids: number[] }> = [
+    { papel: "qualificado", ids: idsDaLista(env.KOMMO_ETAPA_QUALIFICADO) },
+    { papel: "agendamento", ids: idsDaLista(env.KOMMO_ETAPA_AGENDAMENTO) },
+    { papel: "proposta", ids: idsDaLista(env.KOMMO_ETAPA_PROPOSTA) },
+  ];
+  for (const { papel, ids } of overrides) {
+    for (const id of ids) mapa.set(id, papel);
+  }
+
+  for (const [id, nome] of nomes) {
+    if (mapa.has(id)) continue;
+    const achado = PALAVRAS_DE_ETAPA.find((p) => p.regex.test(nome));
+    if (achado) mapa.set(id, achado.papel);
+  }
+  return mapa;
+}
+
+/** Quantos negócios estão hoje em cada papel do funil. */
+function contarPorPapel(
+  leads: LeadDoKommo[],
+  papeis: Map<number, PapelEtapa>,
+): Record<PapelEtapa, number> {
+  const contagem: Record<PapelEtapa, number> = { qualificado: 0, agendamento: 0, proposta: 0 };
+  for (const lead of leads) {
+    const papel = lead.status_id === undefined ? undefined : papeis.get(lead.status_id);
+    if (papel) contagem[papel] += 1;
+  }
+  return contagem;
+}
+
+/**
+ * Eventos de mensagem do período, para medir tempo de resposta.
+ *
+ * Degrada como `contarLeadsDeEntrada`: se o escopo do token não cobrir
+ * `/events`, ou a área vier vazia, devolve lista vazia em vez de derrubar o
+ * relatório inteiro — o KPI apenas não aparece.
+ */
+async function buscarEventos(range: DateRange): Promise<EventoDoKommo[]> {
+  try {
+    const url = new URL(`${baseDaApi()}/events`);
+    url.searchParams.set(
+      "filter[created_at][from]",
+      String(Date.parse(`${range.from}T00:00:00Z`) / 1000),
+    );
+    url.searchParams.set(
+      "filter[created_at][to]",
+      String(Date.parse(`${range.to}T23:59:59Z`) / 1000),
+    );
+    url.searchParams.append("filter[type][]", "incoming_chat_message");
+    url.searchParams.append("filter[type][]", "outgoing_chat_message");
+    url.searchParams.append("filter[entity][]", "lead");
+    url.searchParams.set("limit", String(EVENTOS_POR_PAGINA));
+
+    const todos: EventoDoKommo[] = [];
+    let proxima: string | null = url.toString();
+    for (let pagina = 0; pagina < MAX_PAGINAS && proxima; pagina++) {
+      const resposta: RespostaDeEventos = await httpJson<RespostaDeEventos>(proxima, {
+        headers: autorizacao(),
+      });
+      const eventos = resposta._embedded?.events ?? [];
+      todos.push(...eventos);
+      proxima =
+        eventos.length === EVENTOS_POR_PAGINA ? (resposta._links?.next?.href ?? null) : null;
+    }
+    return todos;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Mediana do tempo entre a primeira mensagem do lead e a primeira resposta
+ * humana, em segundos. `null` quando nenhum lead tem as duas pontas.
+ *
+ * Mediana, não média: uma conversa esquecida por três dias destrói a média de
+ * cinquenta leads e faz o painel mentir sobre o atendimento. Só conta resposta
+ * de gente (`created_by > 0`): mensagem automática nasce como saída e, contada,
+ * viraria "respondemos em 12 segundos" — ficção.
+ */
+function medianaPrimeiraResposta(eventos: EventoDoKommo[], leads: LeadDoKommo[]): number | null {
+  const criadoEm = new Map<number, number | undefined>();
+  for (const lead of leads) criadoEm.set(lead.id, lead.created_at);
+
+  const entrada = new Map<number, number>();
+  const saidas = new Map<number, number[]>();
+  for (const ev of eventos) {
+    if (ev.entity_type !== "lead" || ev.entity_id === undefined || ev.created_at === undefined)
+      continue;
+    if (!criadoEm.has(ev.entity_id)) continue;
+    if (ev.type === "incoming_chat_message") {
+      const atual = entrada.get(ev.entity_id);
+      entrada.set(
+        ev.entity_id,
+        atual === undefined ? ev.created_at : Math.min(atual, ev.created_at),
+      );
+    } else if (ev.type === "outgoing_chat_message" && (ev.created_by ?? 0) > 0) {
+      const lista = saidas.get(ev.entity_id) ?? [];
+      lista.push(ev.created_at);
+      saidas.set(ev.entity_id, lista);
+    }
+  }
+
+  const duracoes: number[] = [];
+  for (const [id, saidasDoLead] of saidas) {
+    // Sem mensagem de entrada, a criação do negócio é o t0 de fallback.
+    const t0 = entrada.get(id) ?? criadoEm.get(id);
+    if (t0 === undefined) continue;
+    // A resposta que conta é a primeira DEPOIS da mensagem do lead; uma saída
+    // anterior é de outra conversa e produziria duração negativa.
+    const primeira = saidasDoLead.filter((s) => s >= t0).sort((a, b) => a - b)[0];
+    if (primeira !== undefined) duracoes.push(primeira - t0);
+  }
+
+  if (duracoes.length === 0) return null;
+  duracoes.sort((a, b) => a - b);
+  const meio = Math.floor(duracoes.length / 2);
+  return duracoes.length % 2 === 1 ? duracoes[meio] : (duracoes[meio - 1] + duracoes[meio]) / 2;
+}
+
+/** Motivo de perda por id. Sem isso a tabela sairia como números. */
+async function buscarMotivosDePerda(): Promise<Map<number, string>> {
+  const nomes = new Map<number, string>();
+  try {
+    const resposta = await httpJson<RespostaDeMotivos>(
+      `${baseDaApi()}/leads/loss_reasons?limit=${POR_PAGINA}`,
+      { headers: autorizacao() },
+    );
+    for (const motivo of resposta._embedded?.loss_reasons ?? []) {
+      if (motivo.name) nomes.set(motivo.id, motivo.name);
+    }
+  } catch {
+    // Escopo pode não cobrir, ou a conta não usa motivos: a tabela cai para
+    // "Sem motivo registrado" em vez de sumir.
+  }
+  return nomes;
+}
+
+/**
+ * Por que os negócios do período foram perdidos.
+ *
+ * `null` quando não houve perda no período — uma tabela vazia de motivos lê
+ * como erro, não como "ninguém perdeu".
+ */
+function montarMotivos(leads: LeadDoKommo[], nomes: Map<number, string>): TableBlock | null {
+  const perdidos = leads.filter((l) => l.status_id === PERDIDO);
+  if (perdidos.length === 0) return null;
+
+  const porMotivo = new Map<string, number>();
+  for (const lead of perdidos) {
+    const nome =
+      lead.loss_reason_id && nomes.get(lead.loss_reason_id)
+        ? (nomes.get(lead.loss_reason_id) as string)
+        : "Sem motivo registrado";
+    porMotivo.set(nome, (porMotivo.get(nome) ?? 0) + 1);
+  }
+
+  return {
+    title: "Motivos de perda",
+    description: "Por que os negócios perdidos no período não avançaram.",
+    columns: [
+      { key: "motivo", label: "Motivo", align: "left" },
+      { key: "negocios", label: "Negócios", format: "integer", align: "right" },
+      { key: "fatia", label: "Fatia", format: "percent", align: "right" },
+    ],
+    rows: [...porMotivo.entries()]
+      .map(([motivo, negocios]) => ({
+        motivo,
+        negocios,
+        fatia: negocios / perdidos.length,
+      }))
+      .sort((a, b) => b.negocios - a.negocios),
+  };
+}
+
 function montarFunil(
   leads: LeadDoKommo[],
   nomes: Map<number, string>,
@@ -281,10 +516,12 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
   }
 
   try {
-    const [leads, etapas, deEntrada] = await Promise.all([
+    const [leads, etapas, deEntrada, eventos, motivos] = await Promise.all([
       buscarLeads(range),
       buscarEtapas(),
       contarLeadsDeEntrada(),
+      buscarEventos(range),
+      buscarMotivosDePerda(),
     ]);
 
     const ganhos = leads.filter((l) => l.status_id === GANHO);
@@ -335,6 +572,20 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     // lê "não vendemos nada" quando o certo é "ninguém preencheu o valor".
     const semValor = ganhos.length > 0 && receita === 0;
 
+    // Etapas do funil que o plano de vendas mede: qualificação, agendamento,
+    // proposta. Contagem por etapa atual, o mesmo recorte da tabela "Negócios
+    // por etapa" — um negócio conta onde está hoje, não onde já passou.
+    const papeisDeEtapa = classificarEtapas(etapas);
+    const papeisPresentes = new Set(papeisDeEtapa.values());
+    const porPapel = contarPorPapel(leads, papeisDeEtapa);
+
+    // Tempo de primeira resposta humana, mediana. `null` some da tela em vez de
+    // virar um zero que ninguém sabe ler.
+    const primeiraResposta = medianaPrimeiraResposta(eventos, leads);
+
+    // Só entra na tela quando houve perda no período.
+    const tabelaMotivos = montarMotivos(leads, motivos);
+
     const avisos: Notice[] = [];
     if (semValor) {
       avisos.push(
@@ -347,6 +598,37 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       avisos.push(
         avisoOperacao(
           "Nenhum negócio do Kommo traz UTM. Sem isso não dá para ligar venda a campanha — é preciso o formulário ou a automação gravar utm_source e utm_campaign no negócio.",
+        ),
+      );
+    }
+
+    // Um papel do plano que nenhuma etapa do funil preenche fica de fora dos
+    // indicadores: melhor ausente do que zero silencioso. O aviso diz como
+    // religar — renomear a etapa ou apontar o id em KOMMO_ETAPA_*.
+    const papeisFaltando = (["qualificado", "agendamento", "proposta"] as PapelEtapa[]).filter(
+      (p) => !papeisPresentes.has(p),
+    );
+    if (papeisFaltando.length > 0 && leads.length > 0) {
+      const rotulo: Record<PapelEtapa, string> = {
+        qualificado: "qualificação",
+        agendamento: "agendamento",
+        proposta: "proposta",
+      };
+      avisos.push(
+        avisoOperacao(
+          `Não reconheci no funil do Kommo a etapa de ${papeisFaltando
+            .map((p) => rotulo[p])
+            .join(
+              ", ",
+            )}. Renomeie a etapa (ex.: "Avaliação agendada") ou aponte o id em KOMMO_ETAPA_${papeisFaltando[0].toUpperCase()} para o indicador aparecer.`,
+        ),
+      );
+    }
+
+    if (primeiraResposta === null && leads.length > 0) {
+      avisos.push(
+        avisoOperacao(
+          "Sem tempo de primeira resposta: nenhum negócio do período tem mensagem de entrada e resposta humana registradas no Kommo. Confirme se o escopo do token cobre eventos e se o atendimento acontece pelo chat do Kommo.",
         ),
       );
     }
@@ -390,13 +672,67 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           hint: "Dias entre a criação do negócio e o fechamento, na média dos que fecharam.",
         },
         { key: "emAberto", label: "Em aberto", value: emAberto.length, format: "integer" },
+        ...(papeisPresentes.has("qualificado")
+          ? ([
+              {
+                key: "qualificados",
+                label: "Leads qualificados",
+                value: porPapel.qualificado,
+                format: "integer",
+                hint:
+                  leads.length > 0
+                    ? `${((porPapel.qualificado / leads.length) * 100).toLocaleString("pt-BR", {
+                        maximumFractionDigits: 1,
+                      })}% dos negócios criados no período estão na etapa de qualificação.`
+                    : undefined,
+              },
+            ] satisfies Kpi[])
+          : []),
+        ...(papeisPresentes.has("agendamento")
+          ? ([
+              {
+                key: "agendamentos",
+                label: "Agendamentos",
+                value: porPapel.agendamento,
+                format: "integer",
+                hint: "Negócios na etapa de agendamento no fim do período.",
+              },
+            ] satisfies Kpi[])
+          : []),
+        ...(papeisPresentes.has("proposta")
+          ? ([
+              {
+                key: "propostas",
+                label: "Propostas",
+                value: porPapel.proposta,
+                format: "integer",
+                hint: "Negócios na etapa de proposta no fim do período.",
+              },
+            ] satisfies Kpi[])
+          : []),
+        ...(primeiraResposta !== null
+          ? ([
+              {
+                key: "primeiraResposta",
+                label: "1ª resposta (mediana)",
+                value: primeiraResposta,
+                format: "duration",
+                lowerIsBetter: true,
+                hint: "Tempo entre a primeira mensagem do lead e a primeira resposta de um atendente, na mediana dos negócios com as duas pontas registradas.",
+              },
+            ] satisfies Kpi[])
+          : []),
       ],
       series,
       seriesDefs: [
         { key: "receita", label: "Receita", format: "currency", slot: 5 },
         { key: "vendas", label: "Vendas", format: "integer", slot: 2 },
       ],
-      tables: [montarFunil(leads, etapas, deEntrada), montarOrigens(leads)],
+      tables: [
+        montarFunil(leads, etapas, deEntrada),
+        montarOrigens(leads),
+        ...(tabelaMotivos ? [tabelaMotivos] : []),
+      ],
       notices: avisos,
     };
   } catch (erro) {

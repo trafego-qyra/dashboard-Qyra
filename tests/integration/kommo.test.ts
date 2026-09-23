@@ -25,29 +25,61 @@ interface LeadFalso {
   status_id?: number;
   created_at?: number;
   closed_at?: number;
+  loss_reason_id?: number;
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
 }
 
-function kommo(leads: LeadFalso[], etapas: Array<{ id: number; name: string }> = []) {
+interface EventoFalso {
+  type?: string;
+  entity_id?: number;
+  entity_type?: string;
+  created_at?: number;
+  created_by?: number;
+}
+
+interface Extras {
+  eventos?: EventoFalso[];
+  motivos?: Array<{ id: number; name: string }>;
+}
+
+function kommo(
+  leads: LeadFalso[],
+  etapas: Array<{ id: number; name: string }> = [],
+  extras: Extras = {},
+) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
 
+    // Rotas específicas antes da genérica `/leads`: `/leads/loss_reasons` e
+    // `/leads/unsorted` também contêm "/leads".
     if (url.includes("/leads/pipelines")) {
-      return new Response(
-        JSON.stringify({ _embedded: { pipelines: [{ id: 1, _embedded: { statuses: etapas } }] } }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return json({ _embedded: { pipelines: [{ id: 1, _embedded: { statuses: etapas } }] } });
+    }
+    if (url.includes("/leads/loss_reasons")) {
+      return json({ _embedded: { loss_reasons: extras.motivos ?? [] } });
+    }
+    if (url.includes("/leads/unsorted")) {
+      return json({ _embedded: { unsorted: [] } });
+    }
+    if (url.includes("/events")) {
+      return json({ _embedded: { events: extras.eventos ?? [] } });
     }
 
-    return new Response(JSON.stringify({ _embedded: { leads } }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return json({ _embedded: { leads } });
   });
 }
 
-async function relatorio(leads: LeadFalso[], etapas?: Array<{ id: number; name: string }>) {
-  const chamadas = kommo(leads, etapas);
+async function relatorio(
+  leads: LeadFalso[],
+  etapas?: Array<{ id: number; name: string }>,
+  extras?: Extras,
+) {
+  const chamadas = kommo(leads, etapas, extras);
   vi.stubGlobal("fetch", chamadas);
   const { fetchVendasReport } = await import("@/server/connectors/kommo");
   return { report: await fetchVendasReport(RANGE), chamadas };
@@ -252,6 +284,167 @@ describe("vendas pelo Kommo", () => {
 
     const funil = report.tables.find((t) => t.title === "Negócios por etapa");
     expect(funil?.rows[0]?.etapa).toBe("Avaliação agendada");
+  });
+
+  it("mede a primeira resposta pela mediana e ignora mensagem de robô", async () => {
+    const at = (iso: string) => emSegundos(iso);
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: at("2026-02-03T09:00:00Z") },
+        { id: 2, status_id: 20, created_at: at("2026-02-04T09:00:00Z") },
+      ],
+      [],
+      {
+        eventos: [
+          // Lead 1: robô responde em 30s (created_by 0, deve ser ignorado);
+          // atendente humano responde em 5 min. Uma saída anterior à mensagem
+          // do lead (08:00) é de outra conversa e não pode contar.
+          {
+            type: "outgoing_chat_message",
+            entity_type: "lead",
+            entity_id: 1,
+            created_by: 7,
+            created_at: at("2026-02-03T08:00:00Z"),
+          },
+          {
+            type: "incoming_chat_message",
+            entity_type: "lead",
+            entity_id: 1,
+            created_at: at("2026-02-03T10:00:00Z"),
+          },
+          {
+            type: "outgoing_chat_message",
+            entity_type: "lead",
+            entity_id: 1,
+            created_by: 0,
+            created_at: at("2026-02-03T10:00:30Z"),
+          },
+          {
+            type: "outgoing_chat_message",
+            entity_type: "lead",
+            entity_id: 1,
+            created_by: 7,
+            created_at: at("2026-02-03T10:05:00Z"),
+          },
+          // Lead 2: resposta humana em 10 min.
+          {
+            type: "incoming_chat_message",
+            entity_type: "lead",
+            entity_id: 2,
+            created_at: at("2026-02-04T09:00:00Z"),
+          },
+          {
+            type: "outgoing_chat_message",
+            entity_type: "lead",
+            entity_id: 2,
+            created_by: 7,
+            created_at: at("2026-02-04T09:10:00Z"),
+          },
+        ],
+      },
+    );
+
+    // Respostas de 300s e 600s → mediana 450. O robô (30s) não entra.
+    expect(kpi(report, "primeiraResposta")).toBe(450);
+  });
+
+  it("sem evento de resposta, o KPI de primeira resposta não aparece e avisa", async () => {
+    const { report } = await relatorio([
+      { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+    ]);
+
+    expect(report.kpis.some((k) => k.key === "primeiraResposta")).toBe(false);
+    expect(report.notices.some((n) => /primeira resposta/i.test(n.text))).toBe(true);
+  });
+
+  it("agrupa os motivos de perda pelo nome, com fatia do total perdido", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          status_id: PERDIDO,
+          loss_reason_id: 10,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+        },
+        {
+          id: 2,
+          status_id: PERDIDO,
+          loss_reason_id: 10,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+        },
+        {
+          id: 3,
+          status_id: PERDIDO,
+          loss_reason_id: 20,
+          created_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+        { id: 4, status_id: PERDIDO, created_at: emSegundos("2026-02-06T10:00:00Z") },
+      ],
+      [],
+      {
+        motivos: [
+          { id: 10, name: "Preço" },
+          { id: 20, name: "Sem retorno" },
+        ],
+      },
+    );
+
+    const tabela = report.tables.find((t) => t.title === "Motivos de perda");
+    const preco = tabela?.rows.find((r) => r.motivo === "Preço");
+    const semMotivo = tabela?.rows.find((r) => r.motivo === "Sem motivo registrado");
+
+    expect(preco?.negocios).toBe(2);
+    expect(preco?.fatia).toBeCloseTo(0.5, 6);
+    expect(semMotivo?.negocios).toBe(1);
+  });
+
+  it("sem perda no período, a tabela de motivos não aparece", async () => {
+    const { report } = await relatorio([
+      { id: 1, price: 100, status_id: GANHO, created_at: emSegundos("2026-02-03T10:00:00Z") },
+    ]);
+
+    expect(report.tables.some((t) => t.title === "Motivos de perda")).toBe(false);
+  });
+
+  it("conta qualificação, agendamento e proposta pelo nome da etapa", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 3, status_id: 31, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 4, status_id: 32, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      ],
+      [
+        { id: 30, name: "Lead qualificado" },
+        { id: 31, name: "Avaliação agendada" },
+        { id: 32, name: "Proposta enviada" },
+      ],
+    );
+
+    expect(kpi(report, "qualificados")).toBe(2);
+    expect(kpi(report, "agendamentos")).toBe(1);
+    expect(kpi(report, "propostas")).toBe(1);
+  });
+
+  it("o id em KOMMO_ETAPA_* vence o nome da etapa", async () => {
+    // A etapa 55 tem nome que não casaria com nenhum papel; o override manda.
+    vi.stubEnv("KOMMO_ETAPA_AGENDAMENTO", "55");
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 55, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [{ id: 55, name: "Etapa X" }],
+    );
+
+    expect(kpi(report, "agendamentos")).toBe(1);
+  });
+
+  it("etapa de funil não reconhecida vira aviso, não KPI zerado", async () => {
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 90, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [{ id: 90, name: "Etapa sem nome padrão" }],
+    );
+
+    expect(report.kpis.some((k) => k.key === "agendamentos")).toBe(false);
+    expect(report.notices.some((n) => /não reconheci/i.test(n.text))).toBe(true);
   });
 
   it("sem credencial, cai em demonstração em vez de quebrar", async () => {
