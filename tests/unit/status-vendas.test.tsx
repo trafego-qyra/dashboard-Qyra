@@ -31,6 +31,7 @@ const STATUS: StatusDeVendas = {
     { nome: "Perdido", negocios: 28, desfecho: "perdido" },
   ],
   metas: { vendas: 30, receita: 56_970 },
+  tempoDeResposta: { mediana: 64, base: 47, meta: 600 },
   notices: [],
 };
 
@@ -53,7 +54,15 @@ describe("StatusDeVendasView", () => {
   });
 
   it("sem meta configurada, não desenha barra nem cobra alvo", () => {
-    render(<StatusDeVendasView status={{ ...STATUS, metas: { vendas: 0, receita: 0 } }} />);
+    render(
+      <StatusDeVendasView
+        status={{
+          ...STATUS,
+          metas: { vendas: 0, receita: 0 },
+          tempoDeResposta: { ...STATUS.tempoDeResposta, meta: 0 },
+        }}
+      />,
+    );
 
     // Meta zero é "não configurada", não "alvo zero": cobrar 0 faria a tela
     // declarar meta batida com nenhuma venda.
@@ -78,6 +87,58 @@ describe("StatusDeVendasView", () => {
     // fechar com o total da base sem nenhum sinal.
     expect(screen.getByText("Reabordagem")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("o tempo de resposta diz a base e se está dentro do teto", () => {
+    render(<StatusDeVendasView status={STATUS} />);
+
+    // Mediana de três conversas não é indicador, é anedota: sem a base ao lado
+    // ninguém sabe qual dos dois está lendo.
+    expect(screen.getByText("1m 04s")).toBeInTheDocument();
+    expect(screen.getByText(/47 negócio/)).toBeInTheDocument();
+    expect(screen.getByText(/Dentro da meta de até 10m 00s/)).toBeInTheDocument();
+  });
+
+  it("acima do teto, diz que está acima — não só muda de cor", () => {
+    render(
+      <StatusDeVendasView
+        status={{ ...STATUS, tempoDeResposta: { mediana: 1_800, base: 12, meta: 600 } }}
+      />,
+    );
+
+    // Cor sozinha não informa quem não a distingue, e a regra da casa é que
+    // identidade nunca depende só de cor.
+    expect(screen.getByText(/Acima da meta de até 10m 00s/)).toBeInTheDocument();
+  });
+
+  it("sem o que medir, mostra traço e o motivo — nunca zero", () => {
+    render(
+      <StatusDeVendasView
+        status={{
+          ...STATUS,
+          tempoDeResposta: { mediana: null, base: 0, meta: 600, motivo: "sem-evento" },
+        }}
+      />,
+    );
+
+    // "0s" na tela se leria como atendimento instantâneo, que é o oposto do
+    // que aconteceu.
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText(/passou pelo chat do Kommo/)).toBeInTheDocument();
+    expect(screen.queryByText("0s")).not.toBeInTheDocument();
+  });
+
+  it("quando a leitura falha, diz que falhou — e não que ninguém demorou", () => {
+    render(
+      <StatusDeVendasView
+        status={{
+          ...STATUS,
+          tempoDeResposta: { mediana: null, base: 0, meta: 600, motivo: "falhou" },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/registro de eventos/)).toBeInTheDocument();
   });
 
   it("os números do período aparecem escritos", () => {

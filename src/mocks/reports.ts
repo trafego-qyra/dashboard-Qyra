@@ -1049,6 +1049,9 @@ export function mockStatusDeVendas(range: DateRange, fetchedAt = NOW): StatusDeV
     // Alvo fictício acima do resultado: uma barra de meta já batida não mostra
     // como a peça se comporta faltando chegar lá, que é o estado normal dela.
     metas: { vendas: Math.max(1, Math.round(ganhos * 1.6)), receita: Math.round(receita * 1.6) },
+    // Dentro da meta, mas não por muito: uma demonstração sempre folgada não
+    // mostra como a peça se comporta perto do limite.
+    tempoDeResposta: { mediana: 418, base: Math.max(1, Math.round(leads * 0.6)), meta: 600 },
     notices: [],
   };
 }

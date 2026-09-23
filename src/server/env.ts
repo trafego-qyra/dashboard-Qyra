@@ -183,6 +183,13 @@ const schema = z.object({
   QYRA_META_VENDAS: optionalString,
   /** Meta de receita do ciclo, em reais. Mesma regra da meta de vendas. */
   QYRA_META_RECEITA: optionalString,
+  /**
+   * Teto de tempo de primeira resposta, em segundos. `600` são dez minutos.
+   *
+   * É teto, e não alvo: a única meta do painel que se lê invertida, porque
+   * abaixo dela é bom.
+   */
+  QYRA_META_TEMPO_RESPOSTA: optionalString,
 
   /**
    * Segredo da varredura diária, mandado pela Vercel em `Authorization`.

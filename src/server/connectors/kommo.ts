@@ -13,6 +13,7 @@ import type {
   SeriesPoint,
   StatusDeVendas,
   TableBlock,
+  TempoDeResposta,
 } from "@/lib/types";
 import { mockStatusDeVendas, mockVendas } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
@@ -1098,6 +1099,108 @@ async function buscarTodosOsLeads(): Promise<LeadDoKommo[]> {
   return todos;
 }
 
+/**
+ * Quanto o lead espera pela primeira resposta, pelo registro de eventos.
+ *
+ * `/api/v4/events` é **um endereço em lote**, paginado e filtrável por tipo e
+ * por data: uma varredura cobre a conta inteira no período. A primeira versão
+ * desta tela deixou o indicador de fora por supor que só daria varrendo as
+ * anotações negócio a negócio — uma requisição por lead — e a suposição estava
+ * errada.
+ *
+ * Mede por negócio: a primeira mensagem recebida, e a primeira enviada **depois
+ * dela**. Quem só tem uma das pontas fica de fora em vez de entrar com zero.
+ *
+ * O tipo e a data são reconferidos em memória. A API do Kommo ignora filtro que
+ * não reconhece **em silêncio**, e num indicador de atendimento isso viraria
+ * uma mediana calculada sobre o histórico inteiro, plausível e errada.
+ */
+const TIPOS_DE_MENSAGEM = ["incoming_chat_message", "outgoing_chat_message"] as const;
+
+/** Teto da API de eventos por página. Não é o mesmo de `/leads`. */
+const EVENTOS_POR_PAGINA = 100;
+
+interface EventoDoKommo {
+  type?: string;
+  entity_id?: number;
+  entity_type?: string;
+  created_at?: number;
+}
+
+interface RespostaDeEventos {
+  _embedded?: { events?: EventoDoKommo[] };
+  _links?: { next?: { href?: string } };
+}
+
+async function medirTempoDeResposta(range: DateRange, meta: number): Promise<TempoDeResposta> {
+  const url = new URL(`${baseDaApi()}/events`);
+  for (const tipo of TIPOS_DE_MENSAGEM) url.searchParams.append("filter[type][]", tipo);
+  url.searchParams.set("filter[created_at][from]", String(inicioDoDia(range.from)));
+  url.searchParams.set("filter[created_at][to]", String(fimDoDia(range.to)));
+  url.searchParams.set("limit", String(EVENTOS_POR_PAGINA));
+
+  const eventos: EventoDoKommo[] = [];
+  let proxima: string | null = url.toString();
+
+  try {
+    for (let pagina = 0; pagina < MAX_PAGINAS && proxima; pagina++) {
+      const resposta: RespostaDeEventos = await httpJson<RespostaDeEventos>(proxima, {
+        headers: autorizacao(),
+      });
+      const pagina_ = resposta._embedded?.events ?? [];
+      eventos.push(...pagina_);
+      proxima =
+        pagina_.length === EVENTOS_POR_PAGINA ? (resposta._links?.next?.href ?? null) : null;
+    }
+  } catch {
+    // Escopo do token sem acesso a eventos, ou a API fora do ar. Dizer que
+    // falhou é diferente de dizer que ninguém demorou.
+    return { mediana: null, base: 0, meta, motivo: "falhou" };
+  }
+
+  const de = inicioDoDia(range.from);
+  const ate = fimDoDia(range.to);
+
+  // Primeira pergunta e primeira resposta de cada negócio.
+  const perguntou = new Map<number, number>();
+  const respondeu = new Map<number, number[]>();
+
+  for (const evento of eventos) {
+    const quando = evento.created_at;
+    const lead = evento.entity_id;
+    if (typeof quando !== "number" || typeof lead !== "number") continue;
+    if (quando < de || quando > ate) continue;
+    if (evento.entity_type !== undefined && evento.entity_type !== "lead") continue;
+
+    if (evento.type === "incoming_chat_message") {
+      const atual = perguntou.get(lead);
+      if (atual === undefined || quando < atual) perguntou.set(lead, quando);
+    } else if (evento.type === "outgoing_chat_message") {
+      respondeu.set(lead, [...(respondeu.get(lead) ?? []), quando]);
+    }
+  }
+
+  const esperas: number[] = [];
+  for (const [lead, pergunta] of perguntou) {
+    // A resposta que conta é a primeira **depois** da pergunta: mensagem
+    // enviada antes é a campanha que provocou o contato, não o atendimento.
+    const depois = (respondeu.get(lead) ?? []).filter((quando) => quando >= pergunta);
+    if (depois.length === 0) continue;
+    esperas.push(Math.min(...depois) - pergunta);
+  }
+
+  if (esperas.length === 0) {
+    return { mediana: null, base: 0, meta, motivo: "sem-evento" };
+  }
+
+  esperas.sort((a, b) => a - b);
+  const meio = Math.floor(esperas.length / 2);
+  const mediana =
+    esperas.length % 2 === 0 ? Math.round((esperas[meio - 1] + esperas[meio]) / 2) : esperas[meio];
+
+  return { mediana, base: esperas.length, meta };
+}
+
 /** Meta lida do ambiente. Vazia, ilegível ou negativa vira zero: sem meta. */
 function meta(valor: string | undefined): number {
   const numero = Number(valor);
@@ -1151,6 +1254,7 @@ function repartirPorEtapa(leads: LeadDoKommo[], etapas: EtapaDoFunil[]): EtapaDo
 export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVendas> {
   const env = getEnv();
   const metas = { vendas: meta(env.QYRA_META_VENDAS), receita: meta(env.QYRA_META_RECEITA) };
+  const metaDeResposta = meta(env.QYRA_META_TEMPO_RESPOSTA);
 
   if (isForceMock() || !getCredentials().vendas) {
     const status = mockStatusDeVendas(range, new Date().toISOString());
@@ -1165,11 +1269,12 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
     return status;
   }
 
-  const [criados, fechados, base, etapas] = await Promise.all([
+  const [criados, fechados, base, etapas, tempoDeResposta] = await Promise.all([
     buscarLeads(range, "created_at"),
     buscarLeads(range, "closed_at"),
     buscarTodosOsLeads(),
     buscarEtapas(),
+    medirTempoDeResposta(range, metaDeResposta),
   ]);
 
   const ganhos = fechados.filter((l) => l.status_id === GANHO);
@@ -1181,6 +1286,20 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
     avisos.push(
       avisoOperacao(
         "Nenhuma meta configurada: a tela mostra o resultado do ciclo sem o alvo. Preencha QYRA_META_VENDAS e QYRA_META_RECEITA para a barra de meta aparecer.",
+      ),
+    );
+  }
+  if (tempoDeResposta.motivo === "falhou") {
+    avisos.push(
+      avisoOperacao(
+        "Não foi possível ler o registro de eventos do Kommo, então o tempo de resposta ficou de fora desta leitura. Costuma ser escopo da chave: a integração privada precisa de acesso a eventos.",
+      ),
+    );
+  }
+  if (tempoDeResposta.motivo === "sem-evento") {
+    avisos.push(
+      avisoOperacao(
+        "Nenhuma conversa do período passou pelo chat do Kommo, então não há o que medir de tempo de resposta. Atendimento feito fora do CRM não deixa registro de primeira resposta.",
       ),
     );
   }
@@ -1203,6 +1322,7 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
     baseTotal: base.length,
     etapas: repartirPorEtapa(base, etapas),
     metas,
+    tempoDeResposta,
     notices: avisos,
   };
 }
