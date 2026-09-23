@@ -173,6 +173,16 @@ const schema = z.object({
    * URL é o único lugar possível. Vazio deixa a rota fechada, não aberta.
    */
   KOMMO_WEBHOOK_SECRET: optionalString,
+  /**
+   * Meta de vendas do ciclo, em número de negócios ganhos.
+   *
+   * Mora em variável de ambiente, e não no código, porque meta muda por
+   * decisão comercial e não por deploy. Vazia deixa a tela sem barra de meta —
+   * que é melhor que cobrar um alvo inventado.
+   */
+  QYRA_META_VENDAS: optionalString,
+  /** Meta de receita do ciclo, em reais. Mesma regra da meta de vendas. */
+  QYRA_META_RECEITA: optionalString,
 
   /**
    * Segredo da varredura diária, mandado pela Vercel em `Authorization`.

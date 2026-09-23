@@ -14,6 +14,7 @@ import type {
   DateRange,
   FunnelBlock,
   SeriesPoint,
+  StatusDeVendas,
 } from "@/lib/types";
 import { dailyValue, noise } from "./generator";
 
@@ -1008,6 +1009,46 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         })),
       },
     ],
+    notices: [],
+  };
+}
+
+/**
+ * Status comercial de demonstração.
+ *
+ * Sai dos mesmos totais do relatório de vendas fictício: números soltos aqui
+ * fariam a aba de status contradizer a de vendas na mesma tela, e num painel
+ * de demonstração isso lê como erro de cálculo, não como dado inventado.
+ */
+export function mockStatusDeVendas(range: DateRange, fetchedAt = NOW): StatusDeVendas {
+  const vendas = mockVendas(range, fetchedAt);
+  const ganhos = Number(vendas.kpis.find((k) => k.key === "vendas")?.value ?? 0);
+  const receita = Number(vendas.kpis.find((k) => k.key === "receita")?.value ?? 0);
+  const leads = vendas.funnel?.stages[0]?.value ?? 0;
+  const perdidos = Math.round((leads - ganhos) * 0.34);
+  const abertos = leads - ganhos - perdidos;
+  const primeiro = Math.round(abertos * 0.52);
+  const avaliacao = Math.round(abertos * 0.31);
+
+  return {
+    range,
+    source: "mock",
+    fetchedAt,
+    gerados: leads,
+    ganhos,
+    perdidos,
+    receita,
+    baseTotal: leads,
+    etapas: [
+      { nome: "Novo lead", negocios: primeiro },
+      { nome: "Qualificação", negocios: avaliacao },
+      { nome: "Negociação", negocios: abertos - primeiro - avaliacao },
+      { nome: "Venda ganha", negocios: ganhos, desfecho: "ganho" },
+      { nome: "Perdido", negocios: perdidos, desfecho: "perdido" },
+    ],
+    // Alvo fictício acima do resultado: uma barra de meta já batida não mostra
+    // como a peça se comporta faltando chegar lá, que é o estado normal dela.
+    metas: { vendas: Math.max(1, Math.round(ganhos * 1.6)), receita: Math.round(receita * 1.6) },
     notices: [],
   };
 }

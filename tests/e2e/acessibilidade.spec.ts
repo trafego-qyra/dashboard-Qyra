@@ -8,7 +8,7 @@ import { blocoDeDetalhe, ehCelular } from "./responsivo";
  * identidade que depende só de cor.
  */
 
-const ROTAS = ["/", "/meta-ads", "/analytics"];
+const ROTAS = ["/", "/meta-ads", "/analytics", "/status"];
 
 for (const rota of ROTAS) {
   test(`${rota} tem um h1 único e link de pular conteúdo`, async ({ page }) => {
