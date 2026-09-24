@@ -7,6 +7,7 @@ import {
   type ComCamposPersonalizados,
   campo,
   GANHO,
+  idsDeEtapa,
 } from "@/server/connectors/kommo";
 import type { EventoDeCrm, IdentidadeDoLead } from "@/server/connectors/meta-capi";
 import { getEnv } from "@/server/env";
@@ -129,8 +130,11 @@ export function nomeDoEvento(mudanca: MudancaDeEtapa): string | null {
 
   if (mudanca.statusId === GANHO) return COMPRA;
 
-  const qualificado = Number(getEnv().KOMMO_ETAPA_QUALIFICADO);
-  if (Number.isFinite(qualificado) && qualificado > 0 && mudanca.statusId === qualificado) {
+  // Lista, e não um número: `KOMMO_ETAPA_QUALIFICADO` passou a aceitar mais de
+  // uma etapa, porque uma conta pode ter duas que significam qualificado. Lido
+  // com `Number(...)`, "20,30" viraria NaN e o evento de qualificação pararia
+  // de sair para a Meta em silêncio — um id só continua funcionando igual.
+  if (idsDeEtapa(getEnv().KOMMO_ETAPA_QUALIFICADO).includes(mudanca.statusId)) {
     return QUALIFICADO;
   }
 

@@ -159,13 +159,27 @@ const schema = z.object({
    */
   KOMMO_PIPELINE_ID: optionalString,
   /**
-   * Id da etapa que representa lead qualificado.
+   * Id da etapa que representa lead qualificado. Aceita lista, separada por
+   * vírgula, quando mais de uma etapa cumpre esse papel.
    *
    * `142` (ganho) e `143` (perdido) são fixos em toda conta do Kommo, mas a
    * etapa de qualificação é criada por cada uma — e o id dela não aparece em
    * nenhuma tela. `/api/diagnostico/kommo` lista todos.
+   *
+   * Duas coisas leem esta variável: o webhook, que dispara o evento de
+   * qualificação para a Meta, e os indicadores da tela de Vendas.
    */
   KOMMO_ETAPA_QUALIFICADO: optionalString,
+  /**
+   * Etapas de agendamento e de proposta, para os indicadores do plano.
+   *
+   * Aceitam lista separada por vírgula: um papel costuma ter mais de uma etapa
+   * — "Proposta enviada" e "Proposta em revisão" são as duas proposta. Em
+   * branco, o conector reconhece a etapa pelo nome, e só avisa quando não
+   * reconhece nenhuma.
+   */
+  KOMMO_ETAPA_AGENDAMENTO: optionalString,
+  KOMMO_ETAPA_PROPOSTA: optionalString,
   /**
    * Segredo que autentica o webhook, no caminho da URL.
    *

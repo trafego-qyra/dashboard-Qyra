@@ -374,6 +374,95 @@ describe("vendas pelo Kommo", () => {
     expect(report.notices.some((a) => /traz UTM/i.test(a.text))).toBe(false);
   });
 
+  it("reconhece qualificação, agendamento e proposta pelo nome da etapa", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-04T10:00:00Z") },
+        { id: 3, status_id: 40, created_at: emSegundos("2026-02-05T10:00:00Z") },
+        { id: 4, status_id: 50, created_at: emSegundos("2026-02-06T10:00:00Z") },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificado", sort: 20 },
+        { id: 40, name: "Avaliação agendada", sort: 30 },
+        { id: 50, name: "Proposta enviada", sort: 40 },
+      ],
+    );
+
+    // Exigir configuração erra sempre, porque ninguém preenche o que não sabe
+    // que existe. O nome acerta o caso comum sozinho.
+    expect(kpi(report, "qualificados")).toBe(2);
+    expect(kpi(report, "agendamentos")).toBe(1);
+    expect(kpi(report, "propostas")).toBe(1);
+  });
+
+  it('"Avaliação agendada" é agendamento, e não qualificação', async () => {
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 40, created_at: emSegundos("2026-02-05T10:00:00Z") }],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 40, name: "Avaliação agendada", sort: 30 },
+      ],
+    );
+
+    // O nome casa com mais de um papel; o mais específico tem que ganhar, ou o
+    // mesmo negócio apareceria em dois indicadores.
+    expect(kpi(report, "agendamentos")).toBe(1);
+    expect(report.kpis.some((k) => k.key === "qualificados")).toBe(false);
+  });
+
+  it("o id configurado vence o nome da etapa", async () => {
+    vi.stubEnv("KOMMO_ETAPA_PROPOSTA", "30");
+
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        // O nome diria qualificação; quem apontou o id sabe mais.
+        { id: 30, name: "Qualificado", sort: 20 },
+      ],
+    );
+
+    expect(kpi(report, "propostas")).toBe(1);
+    expect(report.kpis.some((k) => k.key === "qualificados")).toBe(false);
+  });
+
+  it("a variável de etapa aceita lista", async () => {
+    vi.stubEnv("KOMMO_ETAPA_AGENDAMENTO", "30, 40");
+
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: 40, created_at: emSegundos("2026-02-04T10:00:00Z") },
+      ],
+      [
+        { id: 30, name: "Primeiro contato", sort: 10 },
+        { id: 40, name: "Retorno", sort: 20 },
+      ],
+    );
+
+    // Uma conta separa "Agendado" de "Agendado - confirmado", e as duas são
+    // agendamento. Um id só continua valendo: é uma lista de um.
+    expect(kpi(report, "agendamentos")).toBe(2);
+  });
+
+  it("papel que o funil não tem fica de fora dos indicadores, com aviso", async () => {
+    const { report } = await relatorio(
+      [{ id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificado", sort: 20 },
+      ],
+    );
+
+    // KPI zerado se leria como "ninguém agendou neste mês", que é diferente de
+    // "o painel não sabe qual etapa é agendamento".
+    expect(report.kpis.some((k) => k.key === "agendamentos")).toBe(false);
+    expect(report.kpis.some((k) => k.key === "propostas")).toBe(false);
+    expect(report.notices.some((a) => /agendamento, proposta/i.test(a.text))).toBe(true);
+  });
+
   it("sem UTM nenhuma, avisa em vez de inventar origem", async () => {
     const { report } = await relatorio([
       {
