@@ -17,7 +17,14 @@ export function PageHeader({
   className,
 }: {
   title: string;
-  description: string;
+  /**
+   * A linha que explica a tela.
+   *
+   * Opcional porque nem toda tela precisa dela: quando os próprios blocos já
+   * dizem o que é cada número, a frase acima só repete o que vem abaixo — e
+   * empurra o conteúdo para baixo da dobra sem acrescentar nada.
+   */
+  description?: string;
   source?: DataSource;
   actions?: React.ReactNode;
   className?: string;
@@ -35,7 +42,7 @@ export function PageHeader({
             </Badge>
           ) : null}
         </div>
-        <p className="max-w-2xl text-sm text-ink-muted">{description}</p>
+        {description ? <p className="max-w-2xl text-sm text-ink-muted">{description}</p> : null}
       </div>
       {actions ? (
         <div className="flex w-full items-center gap-2 sm:w-auto [&>*]:w-full sm:[&>*]:w-auto">

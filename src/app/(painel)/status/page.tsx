@@ -33,7 +33,6 @@ export default async function Page({
     <div className="space-y-6">
       <PageHeader
         title="Status de vendas"
-        description="O ciclo contra a meta, e onde a base está agora — direto do Kommo."
         source={status.source}
         actions={<DateRangePicker range={range} preset={preset} />}
       />

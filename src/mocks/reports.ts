@@ -963,7 +963,8 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
       },
       {
         title: "Vendas por origem",
-        description: "De onde vieram os negócios que fecharam, pela UTM registrada no Kommo.",
+        description:
+          "De onde vieram os negócios que fecharam. A UTM vem primeiro; sem ela, o canal de entrada do Kommo, marcado como tal.",
         columns: [
           { key: "origem", label: "Origem", align: "left" },
           { key: "leads", label: "Negócios", format: "integer", align: "right" },
@@ -978,7 +979,10 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
           ["google · Search | Marca", 0.18, 0.27],
           ["instagram · Bio", 0.15, 0.08],
           ["indicação", 0.11, 0.17],
-          ["Sem UTM", 0.14, 0.04],
+          // O canal de entrada entra na mesma coluna, marcado como tal: é a
+          // resposta que a demonstração precisa mostrar no lugar de um balde.
+          ["WhatsApp · canal do Kommo", 0.08, 0.04],
+          ["Sem origem registrada", 0.06, 0.0],
         ].map(([origem, fatiaLeads, fatiaVendas]) => {
           const n = Math.round(leads * (fatiaLeads as number));
           const ganhos = Math.round(vendas * (fatiaVendas as number));

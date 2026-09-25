@@ -36,6 +36,15 @@ import { descreverFalha, httpJson } from "@/server/lib/http";
 export const GANHO = 142;
 const PERDIDO = 143;
 
+/**
+ * O rótulo de quem não traz origem nenhuma.
+ *
+ * Era "Sem UTM", que acusava o time de não marcar a campanha. Mas tráfego
+ * direto e busca orgânica não têm UTM por definição — e chamar isso de falha
+ * de marcação manda procurar defeito onde não há.
+ */
+const SEM_ORIGEM = "Sem origem registrada";
+
 /** Teto da API por página. Acima disso ela ignora o valor e devolve 250. */
 const POR_PAGINA = 250;
 
@@ -189,6 +198,13 @@ interface LeadDoKommo extends ComCamposPersonalizados {
   price?: number;
   status_id?: number;
   pipeline_id?: number;
+  /**
+   * Por onde o negócio entrou, quando veio de integração.
+   *
+   * É o que sobra quando não há UTM: WhatsApp, Instagram e afins registram a
+   * própria origem aqui, e o número só vira nome pela lista de `/sources`.
+   */
+  source_id?: number;
   /** Unix em segundos, não milissegundos. */
   created_at?: number;
   closed_at?: number;
@@ -541,6 +557,33 @@ function contarPorPapel(
   return contagem;
 }
 
+/**
+ * Os canais de entrada registrados pelas integrações da conta.
+ *
+ * O negócio guarda `source_id`, que é um número sem significado fora desta
+ * lista. É o que permite dizer "WhatsApp" em vez de "Sem UTM" para o lead que
+ * chegou pelo chat — e "Sem UTM" era um balde onde cabia coisa demais para
+ * responder de onde o negócio veio.
+ *
+ * Mapa vazio quando a conta não tem integração de canal, ou quando o escopo da
+ * chave não cobre: a tabela volta a agrupar como antes, sem quebrar.
+ */
+async function buscarCanais(): Promise<Map<number, string>> {
+  try {
+    const resposta = await httpJson<{
+      _embedded?: { sources?: Array<{ id?: number; name?: string }> };
+    }>(`${baseDaApi()}/sources`, { headers: autorizacao() });
+
+    const canais = new Map<number, string>();
+    for (const canal of resposta._embedded?.sources ?? []) {
+      if (typeof canal.id === "number" && canal.name) canais.set(canal.id, canal.name);
+    }
+    return canais;
+  } catch {
+    return new Map();
+  }
+}
+
 function montarFunil(leads: LeadDoKommo[], etapas: EtapaDoFunil[], deEntrada: number): TableBlock {
   const porEtapa = new Map<number, { negocios: number; valor: number }>();
   for (const lead of leads) {
@@ -626,13 +669,34 @@ const CAMPOS_DE_CAMPANHA = ["utm_campaign", "utm campaign", "campanha"];
  * estiver, a tabela sai vazia em vez de inventar origem, e o aviso diz o que
  * configurar.
  */
-function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBlock {
+function montarOrigens(
+  criados: LeadDoKommo[],
+  ganhos: LeadDoKommo[],
+  canais: Map<number, string>,
+): TableBlock {
   const porOrigem = new Map<string, { leads: number; vendas: number; receita: number }>();
 
+  /**
+   * Três respostas possíveis, em ordem de confiança.
+   *
+   * A UTM primeiro: é o dado que a própria campanha carimbou. Sem ela, o canal
+   * de entrada do Kommo — quem chegou pelo WhatsApp veio do WhatsApp, e dizer
+   * isso é melhor que empilhar num balde. Sem os dois, "Sem origem registrada",
+   * que é a verdade: o negócio não traz de onde veio.
+   *
+   * O canal vem marcado como tal. Misturá-lo com as linhas de UTM sem aviso
+   * faria "WhatsApp" parecer uma campanha, e a soma da coluna deixaria de
+   * significar uma coisa só.
+   */
   const chaveDaOrigem = (lead: LeadDoKommo): string => {
-    const origem = campo(lead, CAMPOS_DE_ORIGEM) ?? "Sem UTM";
-    const campanha = campo(lead, CAMPOS_DE_CAMPANHA);
-    return campanha ? `${origem} · ${campanha}` : origem;
+    const origem = campo(lead, CAMPOS_DE_ORIGEM);
+    if (origem) {
+      const campanha = campo(lead, CAMPOS_DE_CAMPANHA);
+      return campanha ? `${origem} · ${campanha}` : origem;
+    }
+
+    const canal = lead.source_id === undefined ? undefined : canais.get(lead.source_id);
+    return canal ? `${canal} · canal do Kommo` : SEM_ORIGEM;
   };
 
   const linha = (chave: string) => {
@@ -655,7 +719,7 @@ function montarOrigens(criados: LeadDoKommo[], ganhos: LeadDoKommo[]): TableBloc
   return {
     title: "Vendas por origem",
     description:
-      "De onde vieram os negócios, pela UTM registrada no Kommo. Negócios contam por criação e vendas por fechamento, então a conversão é aproximada quando o ciclo passa do período.",
+      'De onde vieram os negócios. A UTM vem primeiro; sem ela, entra o canal de entrada do Kommo, marcado como tal. "Sem origem registrada" é o negócio que não traz nem um nem outro — inclusive quem chegou por tráfego direto ou busca orgânica, que não carregam UTM por definição. Negócios contam por criação e vendas por fechamento, então a conversão é aproximada quando o ciclo passa do período.',
     columns: [
       { key: "origem", label: "Origem", align: "left" },
       { key: "leads", label: "Negócios", format: "integer", align: "right" },
@@ -963,11 +1027,12 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     // Antes o indicador contava criado-e-ganho e o gráfico creditava no dia do
     // fechamento — bases diferentes na mesma tela, e os dois números não
     // batiam.
-    const [criados, fechados, etapas, deEntrada] = await Promise.all([
+    const [criados, fechados, etapas, deEntrada, canais] = await Promise.all([
       buscarLeads(range, "created_at"),
       buscarLeads(range, "closed_at"),
       buscarEtapas(),
       contarLeadsDeEntrada(range),
+      buscarCanais(),
     ]);
 
     // Depois dos negócios, e não junto deles: os ids dos contatos só existem
@@ -1034,14 +1099,20 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const funil = montarFunilVisual(safra, ganhos, etapas);
     const conversao = funil ? conversaoPorEtapa(funil) : undefined;
 
-    // As etapas que o plano comercial cobra, contadas pela etapa atual — o
-    // mesmo recorte da tabela "Negócios por etapa". Um negócio conta onde está
-    // hoje, não por onde passou: o Kommo não guarda a trilha.
+    // As etapas que o plano comercial cobra, contadas pela etapa atual — a
+    // mesma safra da tabela "Negócios por etapa" e da figura. Um negócio conta
+    // onde está hoje, não por onde passou: o Kommo não guarda a trilha.
     const papeis = classificarEtapas(etapas);
     const presentes = new Set(papeis.values());
-    const porPapel = contarPorPapel(criados, papeis);
+    const porPapel = contarPorPapel(safra, papeis);
 
-    const semUtm = leads.every((l) => campo(l, CAMPOS_DE_ORIGEM) === null);
+    // Sem UTM **e** sem canal: é o caso em que a tabela de origem não responde
+    // nada. Com canal, ela responde em parte, e o aviso seria alarme falso.
+    const semUtm = leads.every(
+      (l) =>
+        campo(l, CAMPOS_DE_ORIGEM) === null &&
+        (l.source_id === undefined || !canais.has(l.source_id)),
+    );
 
     // Negócio ganho sem valor preenchido é o caso mais traiçoeiro deste
     // conector: receita e ticket saem R$ 0,00 sem estar errados, e quem olha
@@ -1114,7 +1185,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     if (semUtm && leads.length > 0) {
       avisos.push(
         avisoOperacao(
-          "Nenhum negócio do Kommo traz UTM. Sem isso não dá para ligar venda a campanha — é preciso o formulário ou a automação gravar utm_source e utm_campaign no negócio.",
+          "Nenhum negócio do Kommo traz UTM nem canal de entrada registrado. Sem um dos dois não dá para ligar venda a campanha — é preciso o formulário ou a automação gravar utm_source e utm_campaign no negócio.",
         ),
       );
     }
@@ -1235,7 +1306,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         // para a outra — e é a segunda que responde onde o funil aperta.
         ...(conversao ? [conversao] : []),
         montarPerdas(perdidos),
-        montarOrigens(criados, ganhos),
+        montarOrigens(criados, ganhos, canais),
         // Fora da lista quando não há cidade nenhuma: uma tabela de uma linha
         // dizendo "Sem cidade registrada" ocupa a tela sem informar nada, e o
         // aviso de operação já diz o que configurar.

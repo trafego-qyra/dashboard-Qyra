@@ -23,6 +23,7 @@ interface LeadFalso {
   id: number;
   price?: number;
   status_id?: number;
+  source_id?: number;
   created_at?: number;
   closed_at?: number;
   custom_fields_values?: Array<{ field_name?: string; values?: Array<{ value?: string }> }>;
@@ -83,6 +84,7 @@ function kommo(
   etapas: Array<{ id: number; name: string; sort?: number }> = [],
   contatos: ContatoFalso[] = [],
   contatosFalham = false,
+  canais: Array<{ id: number; name: string }> = [],
 ) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -98,6 +100,13 @@ function kommo(
         JSON.stringify({ _embedded: { contacts: contatos.filter((c) => pedidos.has(c.id)) } }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
+    }
+
+    if (url.includes("/sources")) {
+      return new Response(JSON.stringify({ _embedded: { sources: canais } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     if (url.includes("/leads/pipelines")) {
@@ -131,8 +140,9 @@ async function relatorio(
   etapas?: Array<{ id: number; name: string; sort?: number }>,
   contatos?: ContatoFalso[],
   contatosFalham?: boolean,
+  canais?: Array<{ id: number; name: string }>,
 ) {
-  const chamadas = kommo(leads, etapas, contatos, contatosFalham);
+  const chamadas = kommo(leads, etapas, contatos, contatosFalham, canais);
   vi.stubGlobal("fetch", chamadas);
   const { fetchVendasReport } = await import("@/server/connectors/kommo");
   return { report: await fetchVendasReport(RANGE), chamadas };
@@ -461,6 +471,101 @@ describe("vendas pelo Kommo", () => {
     expect(report.kpis.some((k) => k.key === "agendamentos")).toBe(false);
     expect(report.kpis.some((k) => k.key === "propostas")).toBe(false);
     expect(report.notices.some((a) => /agendamento, proposta/i.test(a.text))).toBe(true);
+  });
+
+  it("sem UTM, usa o canal de entrada do Kommo em vez do balde único", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          price: 800,
+          status_id: GANHO,
+          source_id: 77,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+        { id: 2, source_id: 88, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      ],
+      undefined,
+      undefined,
+      undefined,
+      [
+        { id: 77, name: "WhatsApp" },
+        { id: 88, name: "Instagram" },
+      ],
+    );
+
+    const origens = report.tables.find((t) => t.title === "Vendas por origem");
+
+    // "Sem UTM" empilhava WhatsApp, Instagram e lead cadastrado à mão na mesma
+    // linha, e a pergunta "de onde veio?" ficava sem resposta possível.
+    expect(origens?.rows.map((r) => r.origem)).toEqual([
+      "WhatsApp · canal do Kommo",
+      "Instagram · canal do Kommo",
+    ]);
+    expect(origens?.rows[0]).toMatchObject({ leads: 1, vendas: 1, receita: 800 });
+  });
+
+  it("a UTM ganha do canal quando as duas existem", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          source_id: 77,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+          custom_fields_values: [{ field_name: "utm_source", values: [{ value: "google" }] }],
+        },
+      ],
+      undefined,
+      undefined,
+      undefined,
+      [{ id: 77, name: "WhatsApp" }],
+    );
+
+    const origens = report.tables.find((t) => t.title === "Vendas por origem");
+
+    // A UTM é o que a campanha carimbou; o canal é por onde a conversa passou.
+    // Quem clicou no anúncio e caiu no WhatsApp veio do anúncio.
+    expect(origens?.rows.map((r) => r.origem)).toEqual(["google"]);
+  });
+
+  it("sem UTM e sem canal conhecido, diz que não há origem registrada", async () => {
+    const { report } = await relatorio([
+      { id: 1, created_at: emSegundos("2026-02-03T10:00:00Z") },
+      // Canal que a conta não tem na lista: número sem significado.
+      { id: 2, source_id: 999, created_at: emSegundos("2026-02-03T10:00:00Z") },
+    ]);
+
+    const origens = report.tables.find((t) => t.title === "Vendas por origem");
+
+    // "Sem UTM" acusava o time de não marcar a campanha. Tráfego direto e busca
+    // orgânica não têm UTM por definição — o rótulo não pode culpar ninguém.
+    expect(origens?.rows.map((r) => r.origem)).toEqual(["Sem origem registrada"]);
+    expect(origens?.rows[0]).toMatchObject({ leads: 2 });
+  });
+
+  it("com canal registrado, não avisa que falta UTM", async () => {
+    const { report } = await relatorio(
+      [{ id: 1, source_id: 77, created_at: emSegundos("2026-02-03T10:00:00Z") }],
+      undefined,
+      undefined,
+      undefined,
+      [{ id: 77, name: "WhatsApp" }],
+    );
+
+    // A tabela responde em parte: cobrar UTM aqui seria alarme falso.
+    expect(report.notices.some((a) => /traz UTM/i.test(a.text))).toBe(false);
+  });
+
+  it("lista de canais indisponível não quebra a tabela de origem", async () => {
+    const { report } = await relatorio([
+      { id: 1, source_id: 77, created_at: emSegundos("2026-02-03T10:00:00Z") },
+    ]);
+
+    // Escopo da chave sem acesso a `/sources` é o caso provável. A tabela
+    // volta a agrupar como antes em vez de sumir.
+    const origens = report.tables.find((t) => t.title === "Vendas por origem");
+    expect(origens?.rows.map((r) => r.origem)).toEqual(["Sem origem registrada"]);
   });
 
   it("sem UTM nenhuma, avisa em vez de inventar origem", async () => {
