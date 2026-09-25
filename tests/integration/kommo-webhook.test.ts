@@ -84,6 +84,17 @@ describe("nomeDoEvento", () => {
     expect(nomeDoEvento(mudanca(QUALIFICADO))).toBe("Qualificado");
   });
 
+  it("a variável aceita lista, e um id só continua valendo", () => {
+    vi.stubEnv("KOMMO_ETAPA_QUALIFICADO", `${QUALIFICADO}, 77`);
+
+    // A variável passou a aceitar lista para os indicadores da tela de Vendas.
+    // Lida aqui com `Number(...)`, "20, 77" viraria NaN e o evento de
+    // qualificação pararia de sair para a Meta sem nenhum sinal.
+    expect(nomeDoEvento(mudanca(QUALIFICADO))).toBe("Qualificado");
+    expect(nomeDoEvento(mudanca(77))).toBe("Qualificado");
+    expect(nomeDoEvento(mudanca(78))).toBeNull();
+  });
+
   it("as demais etapas não viram evento", () => {
     // Inclusive 143 (perdido): a Meta não tem o que fazer com uma perda.
     expect(nomeDoEvento(mudanca(143))).toBeNull();

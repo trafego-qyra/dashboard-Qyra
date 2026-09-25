@@ -475,6 +475,89 @@ async function buscarEtapas(): Promise<EtapaDoFunil[]> {
 }
 
 /**
+ * Os papéis que o plano comercial mede, além das etapas fixas do Kommo.
+ *
+ * `142` (ganho) e `143` (perdido) são iguais em toda conta; o meio do funil é
+ * criado por quem monta o CRM, e o nome varia. Estes três são o que o plano
+ * cobra — quantos qualificaram, quantos agendaram, quantos receberam proposta.
+ */
+type PapelEtapa = "qualificado" | "agendamento" | "proposta";
+
+/**
+ * Como reconhecer cada papel pelo nome da etapa.
+ *
+ * Reconhecer por nome erra de vez em quando; exigir configuração erra sempre,
+ * porque ninguém preenche o que não sabe que existe. O nome acerta o caso
+ * comum sozinho, e `KOMMO_ETAPA_*` está lá para o que fugir do padrão.
+ *
+ * A ordem importa: "Avaliação agendada" casaria com agendamento e, se a
+ * clínica chamasse de "Qualificado agendado", com os dois — o mais específico
+ * vem antes.
+ */
+const PALAVRAS_DE_ETAPA: Array<{ papel: PapelEtapa; regex: RegExp }> = [
+  { papel: "agendamento", regex: /agendad|agenda|marcad/i },
+  { papel: "proposta", regex: /proposta|or[çc]ament/i },
+  { papel: "qualificado", regex: /qualificad/i },
+];
+
+/**
+ * Os ids de etapa de uma variável de ambiente, como lista.
+ *
+ * Aceita lista porque um papel do plano costuma ter mais de uma etapa — uma
+ * conta separa "Proposta enviada" de "Proposta em revisão", e as duas são
+ * proposta. Um id só continua valendo: é uma lista de um.
+ */
+export function idsDeEtapa(bruto: string | undefined): number[] {
+  if (!bruto) return [];
+  return bruto
+    .split(",")
+    .map((parte) => Number.parseInt(parte.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
+/**
+ * Qual papel do plano cada etapa representa.
+ *
+ * O id configurado vence o nome: quem se deu ao trabalho de apontar a etapa
+ * sabe mais que uma expressão regular. Etapa que não casa com papel nenhum
+ * simplesmente não entra — o funil tem etapas que o plano não mede.
+ */
+function classificarEtapas(etapas: EtapaDoFunil[]): Map<number, PapelEtapa> {
+  const env = getEnv();
+  const mapa = new Map<number, PapelEtapa>();
+
+  const configurados: Array<{ papel: PapelEtapa; ids: number[] }> = [
+    { papel: "qualificado", ids: idsDeEtapa(env.KOMMO_ETAPA_QUALIFICADO) },
+    { papel: "agendamento", ids: idsDeEtapa(env.KOMMO_ETAPA_AGENDAMENTO) },
+    { papel: "proposta", ids: idsDeEtapa(env.KOMMO_ETAPA_PROPOSTA) },
+  ];
+  for (const { papel, ids } of configurados) {
+    for (const id of ids) mapa.set(id, papel);
+  }
+
+  for (const etapa of etapas) {
+    if (mapa.has(etapa.id)) continue;
+    const achado = PALAVRAS_DE_ETAPA.find((p) => p.regex.test(etapa.nome));
+    if (achado) mapa.set(etapa.id, achado.papel);
+  }
+
+  return mapa;
+}
+
+/** Quantos negócios estão hoje em cada papel. Etapa atual, não passagem. */
+function contarPorPapel(
+  leads: LeadDoKommo[],
+  papeis: Map<number, PapelEtapa>,
+): Record<PapelEtapa, number> {
+  const contagem: Record<PapelEtapa, number> = { qualificado: 0, agendamento: 0, proposta: 0 };
+  for (const lead of leads) {
+    const papel = lead.status_id === undefined ? undefined : papeis.get(lead.status_id);
+    if (papel) contagem[papel] += 1;
+  }
+  return contagem;
+}
+
+/**
  * Os canais de entrada registrados pelas integrações da conta.
  *
  * O negócio guarda `source_id`, que é um número sem significado fora desta
@@ -1016,6 +1099,13 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const funil = montarFunilVisual(safra, ganhos, etapas);
     const conversao = funil ? conversaoPorEtapa(funil) : undefined;
 
+    // As etapas que o plano comercial cobra, contadas pela etapa atual — a
+    // mesma safra da tabela "Negócios por etapa" e da figura. Um negócio conta
+    // onde está hoje, não por onde passou: o Kommo não guarda a trilha.
+    const papeis = classificarEtapas(etapas);
+    const presentes = new Set(papeis.values());
+    const porPapel = contarPorPapel(safra, papeis);
+
     // Sem UTM **e** sem canal: é o caso em que a tabela de origem não responde
     // nada. Com canal, ela responde em parte, e o aviso seria alarme falso.
     const semUtm = leads.every(
@@ -1074,6 +1164,24 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         ),
       );
     }
+    // Papel que nenhuma etapa preenche fica de fora dos indicadores, e o aviso
+    // diz como religar. KPI zerado seria pior: leria como "ninguém agendou".
+    const ROTULO: Record<PapelEtapa, string> = {
+      qualificado: "qualificação",
+      agendamento: "agendamento",
+      proposta: "proposta",
+    };
+    const semPapel = (["qualificado", "agendamento", "proposta"] as PapelEtapa[]).filter(
+      (papel) => !presentes.has(papel),
+    );
+    if (semPapel.length > 0 && etapas.length > 0) {
+      avisos.push(
+        avisoOperacao(
+          `Nenhuma etapa do funil foi reconhecida como ${semPapel.map((p) => ROTULO[p]).join(", ")}. O indicador correspondente fica de fora até a etapa ser renomeada no Kommo ou o id dela ser apontado em KOMMO_ETAPA_QUALIFICADO, KOMMO_ETAPA_AGENDAMENTO ou KOMMO_ETAPA_PROPOSTA.`,
+        ),
+      );
+    }
+
     if (semUtm && leads.length > 0) {
       avisos.push(
         avisoOperacao(
@@ -1131,6 +1239,44 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
           hint: "Dias entre a criação do negócio e a etapa de venda ganha, que é quando o pagamento entra. Média dos que fecharam no período.",
         },
         { key: "emAberto", label: "Em aberto", value: emAberto.length, format: "integer" },
+        // Só entram os papéis que o funil tem. Um KPI zerado porque a etapa
+        // não foi reconhecida se leria como "ninguém agendou neste mês".
+        ...(presentes.has("qualificado")
+          ? [
+              {
+                key: "qualificados",
+                label: "Qualificados",
+                value: porPapel.qualificado,
+                format: "integer" as const,
+                semComparacao: true,
+                hint: "Negócios criados no período que estão hoje numa etapa de qualificação. Conta onde o negócio está agora, não por onde passou — o Kommo guarda só a etapa atual.",
+              },
+            ]
+          : []),
+        ...(presentes.has("agendamento")
+          ? [
+              {
+                key: "agendamentos",
+                label: "Agendamentos",
+                value: porPapel.agendamento,
+                format: "integer" as const,
+                semComparacao: true,
+                hint: "Negócios criados no período que estão hoje numa etapa de agendamento.",
+              },
+            ]
+          : []),
+        ...(presentes.has("proposta")
+          ? [
+              {
+                key: "propostas",
+                label: "Propostas",
+                value: porPapel.proposta,
+                format: "integer" as const,
+                semComparacao: true,
+                hint: "Negócios criados no período que estão hoje numa etapa de proposta ou orçamento.",
+              },
+            ]
+          : []),
         ...(placar ? [placar.kpi] : []),
         {
           key: "recuperaveis",
