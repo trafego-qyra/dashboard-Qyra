@@ -62,6 +62,21 @@ export async function GET(request: Request) {
         })),
     }));
 
+    /**
+     * Os canais de entrada que a conta tem registrados.
+     *
+     * É o que a tabela "Vendas por origem" usa quando o negócio não traz UTM.
+     * Lista vazia aqui explica, sem adivinhação, por que a tabela continua
+     * dizendo "Sem origem registrada": não há canal para consultar.
+     */
+    const canais = await httpJson<{
+      _embedded?: { sources?: Array<{ id?: number; name?: string }> };
+    }>(`${baseDaApi()}/sources`, { headers: autorizacao() })
+      .then((r) =>
+        (r._embedded?.sources ?? []).map((c) => ({ id: c.id ?? null, nome: c.name ?? "—" })),
+      )
+      .catch(() => null);
+
     // Enfeite: a lista de etapas continua útil se a amostra falhar.
     const captura = await conferirCaptura().catch(() => null);
     // A ponte resolve o clique sem passar pelo campo do negócio, então o
@@ -91,6 +106,9 @@ export async function GET(request: Request) {
         captura,
         ponte,
         funis,
+        // `null` significa que a consulta falhou — escopo da chave, em geral.
+        // Lista vazia significa conta sem integração de canal.
+        canais,
       },
       { headers },
     );
