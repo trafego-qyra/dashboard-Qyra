@@ -767,32 +767,48 @@ function montarPerdas(perdidos: LeadDoKommo[]): TableBlock {
  * por Qualificação, e a etapa do meio pareceria um gargalo que não existe. Aqui
  * cada etapa soma quem está nela e quem já foi adiante.
  *
+ * **Ganho e perdido não são etapas de passagem, e saem daqui pelo id.** O Kommo
+ * devolve os dois dentro das etapas do funil, e deixa renomeá-los à vontade —
+ * na conta da clínica eles se chamam "GANHO" e "PERDIDO". Tratados como etapa,
+ * o negócio ganho era contado dentro da faixa de perdido e o perdido dentro da
+ * faixa de ganho: as duas últimas faixas saíam com o mesmo número e todas as de
+ * cima inflavam. Reconhecê-los pelo nome quebraria na primeira conta que os
+ * chamasse de outra coisa; 142 e 143 são fixos em toda conta do Kommo.
+ *
  * **O negócio perdido conta só na boca do funil.** O Kommo guarda apenas a
  * etapa atual, e a etapa atual de um perdido é "perdido" — quem morreu em
  * Negociação não deixa rastro de onde estava. Creditá-lo à última etapa
  * conhecida seria inventar; contá-lo só na entrada subestima o meio do funil, e
  * é o erro que dá para admitir em voz alta. A ressalva vai junto da figura.
+ *
+ * **O desfecho é o mesmo número do indicador "Vendas ganhas".** Contar só os
+ * negócios criados dentro do recorte fazia a última faixa sair zero num mês em
+ * que houve venda — a venda entrou no CRM antes do período e fechou dentro
+ * dele. Zero ali não lê como corte de safra: lê como venda não registrada, e
+ * foi exatamente assim que foi lido. Duas contagens de venda na mesma tela
+ * fazem quem olha duvidar das duas.
  */
 function montarFunilVisual(
-  leads: LeadDoKommo[],
+  safra: LeadDoKommo[],
+  ganhos: LeadDoKommo[],
   etapas: EtapaDoFunil[],
-  ganhos: number,
 ): FunnelBlock | undefined {
-  if (etapas.length === 0) return undefined;
+  // Ganho e perdido vêm junto das etapas e não são passagem: o desfecho é a
+  // faixa de baixo, e a perda tem tabela própria.
+  const passagem = etapas.filter((etapa) => etapa.id !== GANHO && etapa.id !== PERDIDO);
+  if (passagem.length === 0) return undefined;
 
-  const posicao = new Map(etapas.map((etapa, i) => [etapa.id, i]));
+  const posicao = new Map(passagem.map((etapa, i) => [etapa.id, i]));
 
   // Quantos chegaram a cada etapa, e o valor que veio junto.
-  const chegaram = etapas.map(() => ({ negocios: 0, valor: 0 }));
-  let valorGanho = 0;
+  const chegaram = passagem.map(() => ({ negocios: 0, valor: 0 }));
 
-  for (const lead of leads) {
+  for (const lead of safra) {
     const valor = lead.price ?? 0;
     // Ganho passou por tudo. Perdido, e etapa que não está no funil, contam só
     // na entrada — é o que dá para afirmar sem inventar.
     const ate =
-      lead.status_id === GANHO ? etapas.length - 1 : (posicao.get(lead.status_id ?? 0) ?? 0);
-    if (lead.status_id === GANHO) valorGanho += valor;
+      lead.status_id === GANHO ? passagem.length - 1 : (posicao.get(lead.status_id ?? 0) ?? 0);
 
     for (let i = 0; i <= ate; i++) {
       chegaram[i].negocios += 1;
@@ -800,7 +816,7 @@ function montarFunilVisual(
     }
   }
 
-  const stages: FunnelStage[] = etapas.map((etapa, i) => ({
+  const stages: FunnelStage[] = passagem.map((etapa, i) => ({
     label: etapa.nome,
     value: chegaram[i].negocios,
     amount: Math.round(chegaram[i].valor * 100) / 100,
@@ -808,21 +824,39 @@ function montarFunilVisual(
 
   // O desfecho fecha a figura. Sem ele o funil termina numa etapa de passagem,
   // e a tela de vendas não mostra a venda.
+  const receita = ganhos.reduce((acc, lead) => acc + (lead.price ?? 0), 0);
   stages.push({
     label: "Venda ganha",
-    value: ganhos,
-    amount: Math.round(valorGanho * 100) / 100,
+    value: ganhos.length,
+    amount: Math.round(receita * 100) / 100,
     outcome: "ganho",
   });
 
   return {
     title: "Do primeiro contato ao pagamento",
     description:
-      "Quantos negócios do período chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
+      "Quantos negócios chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
     caveat:
-      "Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+      "A última faixa conta as vendas fechadas no período, inclusive as de negócios que entraram no CRM antes dele — é o mesmo número do indicador Vendas ganhas. Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
     stages,
   };
+}
+
+/**
+ * A safra da figura: os negócios criados no período mais as vendas fechadas
+ * nele.
+ *
+ * O Kommo é consultado duas vezes — uma por criação, outra por fechamento —, e
+ * a venda de ciclo longo só aparece na segunda. Unir pelo id é o que faz cada
+ * venda do desfecho ter passado pelas faixas de cima: sem isso o funil alargava
+ * na base, o que não é funil, ou omitia a venda, o que é pior.
+ */
+function unirNegocios(...listas: LeadDoKommo[][]): LeadDoKommo[] {
+  const porId = new Map<number, LeadDoKommo>();
+  for (const lista of listas) {
+    for (const lead of lista) porId.set(lead.id, lead);
+  }
+  return [...porId.values()];
 }
 
 export async function fetchVendasReport(range: DateRange): Promise<ChannelReport> {
@@ -868,10 +902,12 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       const motivo = motivoDaPerda(l);
       return motivo !== null && ehRecuperavel(motivo);
     });
-    // Cortada entre os criados, não entre os fechados: é a fatia daquela safra
-    // que já virou venda. Misturar "fechados no mês" com "criados no mês"
-    // produziria uma taxa que pode passar de 100%.
-    const ganhosDaSafra = criados.filter((l) => l.status_id === GANHO).length;
+    // A safra do funil: criados no período mais as vendas fechadas nele. A
+    // venda de ciclo longo entra no CRM num mês e fecha em outro — contar só os
+    // criados fazia a figura e a taxa saírem zero num mês em que houve venda.
+    // Toda venda somada aqui passou pelas etapas de cima, então a figura
+    // continua estreitando para baixo e a taxa continua sem passar de 100%.
+    const safra = unirNegocios(criados, ganhos);
 
     // Ciclo médio só considera quem fechou e tem as duas pontas: sem
     // `closed_at`, incluir o negócio arrastaria a média para baixo.
@@ -912,7 +948,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     // O funil sai do literal de retorno porque a tabela de conversão é
     // derivada dele: as duas leituras vêm da mesma contagem, e não de duas
     // contas paralelas que podem discordar.
-    const funil = montarFunilVisual(criados, etapas, ganhosDaSafra);
+    const funil = montarFunilVisual(safra, ganhos, etapas);
     const conversao = funil ? conversaoPorEtapa(funil) : undefined;
 
     const semUtm = leads.every((l) => campo(l, CAMPOS_DE_ORIGEM) === null);
@@ -1007,10 +1043,10 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
         {
           key: "conversao",
           label: "Lead vira venda",
-          value: criados.length === 0 ? 0 : ganhosDaSafra / criados.length,
+          value: safra.length === 0 ? 0 : ganhos.length / safra.length,
           format: "percent",
-          semComparacao: criados.length === 0,
-          hint: "Dos negócios criados no período, quantos já viraram venda. Conta a mesma safra dos dois lados, então não se compara com as vendas fechadas acima.",
+          semComparacao: safra.length === 0,
+          hint: "Quantos negócios do funil do período viraram venda. Mesma safra da figura — criados no período mais as vendas fechadas nele —, então bate com a última faixa dela.",
         },
         {
           key: "ciclo",
@@ -1045,7 +1081,9 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       ],
       funnel: funil,
       tables: [
-        montarFunil(criados, etapas, deEntrada),
+        // Mesma safra da figura: a tabela ao lado dizer "GANHO 0" enquanto a
+        // figura diz o número da venda é o que faz a tela parecer errada.
+        montarFunil(safra, etapas, deEntrada),
         // A figura acima em texto. São perguntas diferentes: a tabela de cima
         // conta quem está parado em cada etapa, esta conta quem passou de uma
         // para a outra — e é a segunda que responde onde o funil aperta.
