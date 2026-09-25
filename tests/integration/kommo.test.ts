@@ -935,6 +935,93 @@ describe("vendas pelo Kommo", () => {
     expect(ultima).toMatchObject({ label: "Venda ganha", value: 1, outcome: "ganho", amount: 500 });
   });
 
+  it("ganho e perdido não são faixas do funil, mesmo vindo dentro das etapas", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        { id: 2, status_id: 30, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        {
+          id: 3,
+          price: 900,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-04T10:00:00Z"),
+          closed_at: emSegundos("2026-02-06T10:00:00Z"),
+        },
+        {
+          id: 4,
+          status_id: PERDIDO,
+          created_at: emSegundos("2026-02-05T10:00:00Z"),
+          closed_at: emSegundos("2026-02-07T10:00:00Z"),
+        },
+      ],
+      // Como a conta real devolve: o Kommo manda ganho e perdido dentro das
+      // etapas do funil, com o nome que a clínica deu a eles.
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: GANHO, name: "GANHO", sort: 30 },
+        { id: PERDIDO, name: "PERDIDO", sort: 40 },
+      ],
+    );
+
+    // Tratados como etapa de passagem, o ganho entrava na faixa de perdido e o
+    // perdido na de ganho: as duas saíam com o mesmo número, somando o mesmo
+    // negócio duas vezes, e as faixas de cima inflavam junto.
+    expect(report.funnel?.stages.map((e) => [e.label, e.value])).toEqual([
+      ["Novo lead", 4],
+      ["Qualificação", 2],
+      ["Venda ganha", 1],
+    ]);
+  });
+
+  it("a venda que entrou antes do período aparece no desfecho", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
+        // Ciclo longo: entrou no CRM em janeiro, fechou em fevereiro. Só a
+        // consulta por fechamento a devolve.
+        {
+          id: 2,
+          price: 2658,
+          status_id: GANHO,
+          created_at: emSegundos("2026-01-10T10:00:00Z"),
+          closed_at: emSegundos("2026-02-20T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+        { id: GANHO, name: "GANHO", sort: 30 },
+        { id: PERDIDO, name: "PERDIDO", sort: 40 },
+      ],
+    );
+
+    // Contando só os criados no período, esta faixa saía zero ao lado de um
+    // indicador dizendo "Vendas ganhas 1" — e zero ali não lê como corte de
+    // safra, lê como venda não registrada.
+    expect(report.funnel?.stages.at(-1)).toMatchObject({
+      label: "Venda ganha",
+      value: 1,
+      amount: 2658,
+    });
+    expect(report.funnel?.stages.at(-1)?.value).toBe(kpi(report, "vendas"));
+
+    // E a venda passou pelas etapas de cima — antes do recorte, mas passou. Sem
+    // isso a figura alargaria na base.
+    const valores = report.funnel?.stages.map((e) => e.value) ?? [];
+    for (let i = 1; i < valores.length; i++) {
+      expect(valores[i]).toBeLessThanOrEqual(valores[i - 1]);
+    }
+
+    // A tabela de ocupação conta a mesma safra: "GANHO 0" ao lado da figura
+    // mostrando a venda faria a tela inteira parecer errada.
+    const etapas = report.tables.find((t) => t.title === "Negócios por etapa");
+    expect(etapas?.rows).toContainEqual({ etapa: "GANHO", negocios: 1, valor: 2658 });
+
+    // Dois negócios na safra, um virou venda.
+    expect(kpi(report, "conversao")).toBeCloseTo(0.5, 6);
+  });
+
   it("sem esqueleto de etapas não desenha funil nenhum", async () => {
     const { report } = await relatorio([
       { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },
