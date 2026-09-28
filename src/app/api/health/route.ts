@@ -48,6 +48,9 @@ const CONFIGURAVEIS = [
   // aparecer em "ausentes" é resultado legítimo.
   "KOMMO_PIPELINE_ID",
   "KOMMO_ETAPA_QUALIFICADO",
+  // Pela quinta vez a mesma armadilha: quem cadastra precisa conferir se pegou.
+  "KOMMO_ETAPA_AGENDAMENTO",
+  "KOMMO_ETAPA_PROPOSTA",
   "KOMMO_WEBHOOK_SECRET",
   "CRON_SECRET",
   // API de Conversões. Pela quarta vez a mesma armadilha desta lista mantida à

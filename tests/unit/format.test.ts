@@ -20,6 +20,16 @@ describe("formatMetric", () => {
     expect(formatMetric(45, "duration")).toBe("45s");
   });
 
+  it("acima de uma hora, a duração troca o segundo pela hora", () => {
+    // `247m 30s` não se lê num relance, e nessa escala o segundo é precisão
+    // que ninguém usa. Tempo de resposta de CRM passa de uma hora com
+    // facilidade — era o formato que a tela de status ia encontrar.
+    expect(formatMetric(4_350, "duration")).toBe("1h 12m");
+    expect(formatMetric(3_600, "duration")).toBe("1h 00m");
+    // Um segundo antes da virada, continua em minuto e segundo.
+    expect(formatMetric(3_599, "duration")).toBe("59m 59s");
+  });
+
   it("devolve travessão para valores ausentes ou inválidos", () => {
     expect(formatMetric(null, "currency")).toBe("—");
     expect(formatMetric(Number.NaN, "integer")).toBe("—");

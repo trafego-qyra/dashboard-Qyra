@@ -853,6 +853,32 @@ export function mockVendas(range: DateRange, fetchedAt = NOW): ChannelReport {
         hint: "Dias entre a criação do negócio e a etapa de venda ganha, que é quando o pagamento entra. Média dos que fecharam no período.",
       },
       { key: "emAberto", label: "Em aberto", value: Math.round(leads * 0.34), format: "integer" },
+      // Em ordem decrescente, como um funil que não alarga para baixo: mais
+      // qualificados que agendamentos, mais agendamentos que propostas.
+      {
+        key: "qualificados",
+        label: "Qualificados",
+        value: Math.round(leads * 0.28),
+        format: "integer",
+        semComparacao: true,
+        hint: "Negócios criados no período que estão hoje numa etapa de qualificação. Conta onde o negócio está agora, não por onde passou — o Kommo guarda só a etapa atual.",
+      },
+      {
+        key: "agendamentos",
+        label: "Agendamentos",
+        value: Math.round(leads * 0.16),
+        format: "integer",
+        semComparacao: true,
+        hint: "Negócios criados no período que estão hoje numa etapa de agendamento.",
+      },
+      {
+        key: "propostas",
+        label: "Propostas",
+        value: Math.round(leads * 0.09),
+        format: "integer",
+        semComparacao: true,
+        hint: "Negócios criados no período que estão hoje numa etapa de proposta ou orçamento.",
+      },
       {
         key: "recuperaveis",
         label: "Perdas recuperáveis",

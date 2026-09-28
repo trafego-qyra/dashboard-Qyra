@@ -30,10 +30,21 @@ const PERCENT = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 2,
 });
 
-/** `duration` chega em segundos e sai como `2m 13s`. */
+/**
+ * `duration` chega em segundos e sai como `2m 13s`.
+ *
+ * Acima de uma hora a leitura vira `1h 12m`. Tempo de primeira resposta de CRM
+ * passa de uma hora com facilidade, e `247m 30s` não se lê num relance — o
+ * segundo, nessa escala, é precisão que ninguém usa.
+ */
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
   const total = Math.round(seconds);
+  if (total >= 3600) {
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+  }
   const m = Math.floor(total / 60);
   const s = total % 60;
   return m > 0 ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
