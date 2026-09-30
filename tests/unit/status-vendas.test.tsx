@@ -44,6 +44,36 @@ describe("StatusDeVendasView", () => {
     expect(screen.getByText(/01\/02\/2026 a 28\/02\/2026/)).toBeInTheDocument();
   });
 
+  it("zero de vendas diz quando foi a última, colado no número", () => {
+    render(
+      <StatusDeVendasView
+        status={{ ...STATUS, ganhos: 0, receita: 0, ultimaVenda: { em: "2026-01-20", semData: 0 } }}
+      />,
+    );
+
+    // O cartão marca 0 e, três cartões adiante, "A base agora" marca GANHO 2.
+    // Sem esta linha os dois juntos leem como venda que sumiu do painel.
+    expect(screen.getByText(/A última fechou em 20\/01\/2026/)).toBeInTheDocument();
+  });
+
+  it("ganho sem data de fechamento aparece na legenda do zero", () => {
+    render(
+      <StatusDeVendasView
+        status={{ ...STATUS, ganhos: 0, receita: 0, ultimaVenda: { semData: 2 } }}
+      />,
+    );
+
+    // Este não é recorte de janela: é dado faltando no CRM, e o negócio não
+    // entra em período nenhum enquanto a data não existir.
+    expect(screen.getByText(/sem data de fechamento/i)).toBeInTheDocument();
+  });
+
+  it("com venda no período, a legenda segue a de sempre", () => {
+    render(<StatusDeVendasView status={STATUS} />);
+
+    expect(screen.getByText("Fechadas no período")).toBeInTheDocument();
+  });
+
   it("mostra o quanto falta para a meta, em texto", () => {
     render(<StatusDeVendasView status={STATUS} />);
 
