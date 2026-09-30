@@ -217,6 +217,13 @@ export interface StatusDeVendas {
   metas: { vendas: number; receita: number };
   /** Quanto o lead espera pela primeira resposta. */
   tempoDeResposta: TempoDeResposta;
+  /**
+   * O que o zero do período precisa para não ser lido como venda sumida:
+   * quando a última venda da base fechou (ISO) e quantas ganhas estão sem data
+   * de fechamento. Ausente quando houve venda no período — aí o número se
+   * explica sozinho.
+   */
+  ultimaVenda?: { em?: string; semData: number };
   notices: Notice[];
 }
 

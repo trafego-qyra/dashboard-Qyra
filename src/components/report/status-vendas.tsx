@@ -52,6 +52,30 @@ function Cartao({
   );
 }
 
+/**
+ * O que vai embaixo do número de vendas ganhas.
+ *
+ * Zero aqui é o caso que engana: o cartão diz "0" e, três cartões adiante,
+ * "A base agora" diz "GANHO 2" — e quem lê conclui que a venda sumiu do
+ * painel. São recortes diferentes (fechou no período × está ganho hoje), e a
+ * legenda é o lugar de dizer isso, porque é a linha que está colada no zero.
+ *
+ * Ganho sem data de fechamento vem primeiro quando existe: aquele não é
+ * recorte de janela, é dado faltando no CRM, e não aparece em período nenhum.
+ */
+function legendaDasVendas(status: StatusDeVendas): string {
+  if (status.ganhos > 0) return "Fechadas no período";
+
+  const ultima = status.ultimaVenda;
+  if (ultima?.semData) {
+    return `Nenhuma fechou neste período. ${ultima.semData} negócio(s) estão ganhos no Kommo sem data de fechamento e não entram em período nenhum.`;
+  }
+  if (ultima?.em) {
+    return `Nenhuma fechou neste período. A última fechou em ${ultima.em.split("-").reverse().join("/")}.`;
+  }
+  return "Fechadas no período";
+}
+
 function Numero({ valor, formato }: { valor: number; formato: "integer" | "currency" }) {
   return (
     <p className="mt-3 font-semibold text-[clamp(1.25rem,11cqw,2.25rem)] text-ink tracking-tight">
@@ -184,7 +208,7 @@ export function StatusDeVendasView({ status }: { status: StatusDeVendas }) {
             <Numero valor={status.gerados} formato="integer" />
           </Cartao>
 
-          <Cartao titulo="Vendas ganhas" subtitulo="Fechadas no período" destaque>
+          <Cartao titulo="Vendas ganhas" subtitulo={legendaDasVendas(status)} destaque>
             <Numero valor={status.ganhos} formato="integer" />
             <Meta feito={status.ganhos} alvo={metas.vendas} formato="integer" />
           </Cartao>

@@ -1127,6 +1127,78 @@ describe("vendas pelo Kommo", () => {
     expect(kpi(report, "conversao")).toBeCloseTo(0.5, 6);
   });
 
+  it("período sem venda diz quando foi a última, em vez de só marcar zero", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Ganha e fechada **antes** do período: não entra em nenhuma das duas
+        // consultas da janela, mas continua na base — é o negócio que a tela
+        // mostra como "GANHO 2" enquanto o período marca zero.
+        {
+          id: 2,
+          price: 2658,
+          status_id: GANHO,
+          created_at: emSegundos("2026-01-05T10:00:00Z"),
+          closed_at: emSegundos("2026-01-20T10:00:00Z"),
+        },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    // O número não muda: nada fechou no período, e dizer outra coisa seria
+    // inventar receita.
+    expect(kpi(report, "vendas")).toBe(0);
+
+    // O que muda é o zero deixar de ser mudo. Sem esta frase, "0" ao lado de
+    // uma base com venda ganha lê como venda que sumiu do painel.
+    const vendas = report.kpis.find((k) => k.key === "vendas");
+    expect(vendas?.hint).toMatch(/20\/01\/2026/);
+    expect(report.funnel?.caveat).toMatch(/última fechou em 20\/01\/2026/i);
+  });
+
+  it("negócio ganho sem data de fechamento vira aviso, não sumiço", async () => {
+    const { report } = await relatorio(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Ganho no Kommo e sem `closed_at`: não entra em período nenhum, em
+        // tela nenhuma, e não dá erro. É o caso que some sem deixar rastro.
+        { id: 2, price: 900, status_id: GANHO, created_at: emSegundos("2026-01-05T10:00:00Z") },
+      ],
+      [
+        { id: 20, name: "Novo lead", sort: 10 },
+        { id: 30, name: "Qualificação", sort: 20 },
+      ],
+    );
+
+    expect(kpi(report, "vendas")).toBe(0);
+    expect(report.notices.some((a) => /sem data de fechamento/i.test(a.text))).toBe(true);
+    expect(report.kpis.find((k) => k.key === "vendas")?.hint).toMatch(/sem data de fechamento/i);
+  });
+
+  it("com venda no período, o indicador não ganha explicação nenhuma", async () => {
+    const { report } = await relatorio(
+      [
+        {
+          id: 1,
+          price: 500,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+      ],
+      [{ id: 20, name: "Novo lead", sort: 10 }],
+    );
+
+    // Número que se explica sozinho não precisa de frase: a ressalva só
+    // aparece onde o zero engana.
+    expect(kpi(report, "vendas")).toBe(1);
+    expect(report.kpis.find((k) => k.key === "vendas")?.hint).toBeUndefined();
+    expect(report.funnel?.caveat).not.toMatch(/última fechou em/i);
+  });
+
   it("sem esqueleto de etapas não desenha funil nenhum", async () => {
     const { report } = await relatorio([
       { id: 1, status_id: 20, created_at: emSegundos("2026-02-02T10:00:00Z") },

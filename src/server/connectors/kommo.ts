@@ -939,6 +939,7 @@ function montarFunilVisual(
   safra: LeadDoKommo[],
   ganhos: LeadDoKommo[],
   etapas: EtapaDoFunil[],
+  notaDoZero?: string,
 ): FunnelBlock | undefined {
   // Ganho e perdido vêm junto das etapas e não são passagem: o desfecho é a
   // faixa de baixo, e a perda tem tabela própria.
@@ -983,8 +984,9 @@ function montarFunilVisual(
     title: "Do primeiro contato ao pagamento",
     description:
       "Quantos negócios chegaram a cada etapa — não quantos estão parados nela. A largura é a contagem; onde a figura aperta é onde o processo trava.",
-    caveat:
-      "A última faixa conta as vendas fechadas no período, inclusive as de negócios que entraram no CRM antes dele — é o mesmo número do indicador Vendas ganhas. Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.",
+    // A explicação do zero vem primeiro: é a única linha que alguém lê quando
+    // a bica do funil está em zero, e é exatamente aí que a figura engana.
+    caveat: `${notaDoZero ? `${notaDoZero} ` : ""}A última faixa conta as vendas fechadas no período, inclusive as de negócios que entraram no CRM antes dele — é o mesmo número do indicador Vendas ganhas. Negócio perdido conta apenas na primeira etapa: o Kommo guarda só a etapa atual do negócio, então não dá para saber em que ponto do funil ele foi perdido. Os motivos estão na tabela de perdas.`,
     stages,
   };
 }
@@ -1004,6 +1006,59 @@ function unirNegocios(...listas: LeadDoKommo[][]): LeadDoKommo[] {
     for (const lead of lista) porId.set(lead.id, lead);
   }
   return [...porId.values()];
+}
+
+/**
+ * A última venda da base, e quantas ganhas estão sem data de fechamento.
+ *
+ * Existe por causa de um zero. "Vendas ganhas 0" a três cartões de distância
+ * de "GANHO 2" lê como venda que sumiu do painel — e foi lido assim duas
+ * vezes, a segunda já com a figura do funil corrigida. O período conta o que
+ * **fechou** dentro dele; a base conta onde o negócio **está**. As duas contas
+ * estão certas e mesmo assim a tela engana, porque o zero não diz por quê.
+ *
+ * O negócio ganho **sem `closed_at`** é o outro caso, e é pior: não entra em
+ * período nenhum, em tela nenhuma, e não dá erro. Some. Contá-lo aqui é o que
+ * permite avisar em vez de deixar quem olha concluir sozinho.
+ */
+function ultimaVendaDaBase(base: LeadDoKommo[]): { quando: number | null; semData: number } {
+  let quando: number | null = null;
+  let semData = 0;
+
+  for (const lead of base) {
+    if (lead.status_id !== GANHO) continue;
+    const fechou = lead.closed_at;
+    // Zero é o que o Kommo devolve para "não fechou", e não uma data de 1970.
+    if (typeof fechou !== "number" || fechou <= 0) {
+      semData += 1;
+      continue;
+    }
+    if (quando === null || fechou > quando) quando = fechou;
+  }
+
+  return { quando, semData };
+}
+
+/** Uma data unix como a tela escreve: dia/mês/ano. */
+function comoNaTela(unix: number): string {
+  const dia = paraDia(unix);
+  return dia ? dia.split("-").reverse().join("/") : "";
+}
+
+/**
+ * A frase que transforma "nenhuma venda no período" em informação.
+ *
+ * `undefined` quando não há o que explicar — base sem venda nenhuma é um zero
+ * que já se entende sozinho, e frase nesse caso seria ruído.
+ */
+function explicacaoDoZero(ultima: { quando: number | null; semData: number }): string | undefined {
+  if (ultima.semData > 0) {
+    return `Nenhuma venda fechou neste período. Atenção: ${ultima.semData} negócio(s) estão em venda ganha no Kommo sem data de fechamento, então não entram em nenhum período desta tela — aparecem apenas na contagem da base de hoje.`;
+  }
+  if (ultima.quando !== null) {
+    return `Nenhuma venda fechou neste período. A última fechou em ${comoNaTela(ultima.quando)} — escolha um período que inclua essa data para vê-la.`;
+  }
+  return undefined;
 }
 
 export async function fetchVendasReport(range: DateRange): Promise<ChannelReport> {
@@ -1057,6 +1112,11 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     // continua estreitando para baixo e a taxa continua sem passar de 100%.
     const safra = unirNegocios(criados, ganhos);
 
+    // Só quando o período fecha em zero: é a única hora em que a tela precisa
+    // explicar o número, e a consulta da base inteira não se paga nas outras.
+    const ultima = ganhos.length === 0 ? ultimaVendaDaBase(await buscarTodosOsLeads()) : null;
+    const notaDoZero = ultima ? explicacaoDoZero(ultima) : undefined;
+
     // Ciclo médio só considera quem fechou e tem as duas pontas: sem
     // `closed_at`, incluir o negócio arrastaria a média para baixo.
     const ciclos = ganhos
@@ -1096,7 +1156,7 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     // O funil sai do literal de retorno porque a tabela de conversão é
     // derivada dele: as duas leituras vêm da mesma contagem, e não de duas
     // contas paralelas que podem discordar.
-    const funil = montarFunilVisual(safra, ganhos, etapas);
+    const funil = montarFunilVisual(safra, ganhos, etapas, notaDoZero);
     const conversao = funil ? conversaoPorEtapa(funil) : undefined;
 
     // As etapas que o plano comercial cobra, contadas pela etapa atual — a
@@ -1120,6 +1180,16 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
     const semValor = ganhos.length > 0 && receita === 0;
 
     const avisos: Notice[] = [];
+    // Ganho sem data de fechamento não entra em período nenhum e não dá erro:
+    // some da tela e reaparece só na contagem da base, que é o sintoma de
+    // "a venda não está no painel".
+    if (ultima && ultima.semData > 0) {
+      avisos.push(
+        avisoOperacao(
+          `${ultima.semData} negócio(s) estão em venda ganha no Kommo sem data de fechamento. Sem ela a venda não entra em nenhum período desta tela — aparece apenas na contagem da base, na aba Status de vendas.`,
+        ),
+      );
+    }
     if (semValor) {
       avisos.push(
         avisoOperacao(
@@ -1202,7 +1272,13 @@ export async function fetchVendasReport(range: DateRange): Promise<ChannelReport
       range,
       fetchedAt: new Date().toISOString(),
       kpis: [
-        { key: "vendas", label: "Vendas ganhas", value: ganhos.length, format: "integer" },
+        {
+          key: "vendas",
+          label: "Vendas ganhas",
+          value: ganhos.length,
+          format: "integer",
+          hint: notaDoZero,
+        },
         {
           key: "receita",
           label: "Receita",
@@ -1536,6 +1612,11 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
   const perdidos = fechados.filter((l) => l.status_id === PERDIDO);
   const receita = ganhos.reduce((acc, l) => acc + (l.price ?? 0), 0);
 
+  // A base já está carregada aqui, então a explicação do zero sai de graça: o
+  // cartão diz quando foi a última venda em vez de só marcar zero ao lado de
+  // um "GANHO 2" três cartões adiante.
+  const ultima = ganhos.length === 0 ? ultimaVendaDaBase(base) : null;
+
   const avisos: Notice[] = [];
   if (metas.vendas === 0 && metas.receita === 0) {
     avisos.push(
@@ -1555,6 +1636,13 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
     avisos.push(
       avisoOperacao(
         "Nenhuma conversa do período passou pelo chat do Kommo, então não há o que medir de tempo de resposta. Atendimento feito fora do CRM não deixa registro de primeira resposta.",
+      ),
+    );
+  }
+  if (ultima && ultima.semData > 0) {
+    avisos.push(
+      avisoOperacao(
+        `${ultima.semData} negócio(s) estão em venda ganha no Kommo sem data de fechamento. Sem ela a venda não entra em nenhum período — conta em "A base agora" e em lugar nenhum do bloco do período.`,
       ),
     );
   }
@@ -1578,6 +1666,14 @@ export async function fetchStatusDeVendas(range: DateRange): Promise<StatusDeVen
     etapas: repartirPorEtapa(base, etapas),
     metas,
     tempoDeResposta,
+    ...(ultima
+      ? {
+          ultimaVenda: {
+            ...(ultima.quando !== null ? { em: paraDia(ultima.quando) ?? undefined } : {}),
+            semData: ultima.semData,
+          },
+        }
+      : {}),
     notices: avisos,
   };
 }

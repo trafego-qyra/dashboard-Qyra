@@ -428,6 +428,60 @@ describe("status de vendas", () => {
     expect(resultado.tempoDeResposta.meta).toBe(600);
   });
 
+  it("período sem venda carrega a data da última, que está na base", async () => {
+    const resultado = await status(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        // Fechou em janeiro: fora do período, dentro da base. É o negócio que
+        // a tela mostra em "GANHO" enquanto o bloco do período marca zero.
+        {
+          id: 2,
+          price: 2658,
+          status_id: GANHO,
+          created_at: emSegundos("2026-01-05T10:00:00Z"),
+          closed_at: emSegundos("2026-01-20T10:00:00Z"),
+        },
+      ],
+      ETAPAS,
+    );
+
+    expect(resultado.ganhos).toBe(0);
+    expect(resultado.ultimaVenda).toEqual({ em: "2026-01-20", semData: 0 });
+  });
+
+  it("ganho sem data de fechamento é contado e avisado", async () => {
+    const resultado = await status(
+      [
+        { id: 1, status_id: 20, created_at: emSegundos("2026-02-03T10:00:00Z") },
+        { id: 2, status_id: GANHO, created_at: emSegundos("2026-01-05T10:00:00Z") },
+      ],
+      ETAPAS,
+    );
+
+    // Sem `closed_at` o negócio não entra em período nenhum. Ficar calado
+    // sobre isso é o que faz a venda parecer perdida pelo painel.
+    expect(resultado.ultimaVenda).toEqual({ semData: 1 });
+    expect(resultado.notices.some((a) => /sem data de fechamento/i.test(a.text))).toBe(true);
+  });
+
+  it("com venda no período, não carrega explicação nenhuma", async () => {
+    const resultado = await status(
+      [
+        {
+          id: 1,
+          price: 500,
+          status_id: GANHO,
+          created_at: emSegundos("2026-02-03T10:00:00Z"),
+          closed_at: emSegundos("2026-02-05T10:00:00Z"),
+        },
+      ],
+      ETAPAS,
+    );
+
+    expect(resultado.ganhos).toBe(1);
+    expect(resultado.ultimaVenda).toBeUndefined();
+  });
+
   it("sem credencial, devolve demonstração em vez de tela vazia", async () => {
     vi.stubEnv("KOMMO_ACCESS_TOKEN", "");
     vi.stubEnv("KOMMO_SUBDOMAIN", "");
