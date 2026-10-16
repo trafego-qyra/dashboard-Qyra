@@ -102,6 +102,7 @@ contrato de contribuição — para pessoas e para agentes:
 | Documento | Conteúdo |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Contrato de contribuição |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Mapa técnico: stack, pastas, módulos, integrações e diagramas |
 | [`docs/design-system.md`](docs/design-system.md) | Tokens da marca, componentes, regras de gráfico |
 | [`docs/arquitetura.md`](docs/arquitetura.md) | Camadas, fluxo de dados, decisões |
 | [`docs/integracoes.md`](docs/integracoes.md) | Credenciais de cada plataforma |
