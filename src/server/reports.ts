@@ -23,6 +23,7 @@ import { fetchGoogleAdsReport } from "./connectors/google-ads";
 import { fetchStatusDeVendas, fetchVendasReport } from "./connectors/kommo";
 import { fetchMetaAdsReport } from "./connectors/meta-ads";
 import { fetchOrganicoReport } from "./connectors/organico";
+import { type FunilDaLpEstado, resumoDoFunil } from "./funil/lp";
 
 /**
  * Ponto único de acesso a dados de canal. As telas chamam daqui — nunca um
@@ -56,6 +57,16 @@ const TTL_CLARITY_SEGUNDOS = 6 * 60 * 60;
 
 export function getClarityResumo(): Promise<ClarityEstado> {
   return cached("clarity:resumo", fetchClarityResumo, TTL_CLARITY_SEGUNDOS);
+}
+
+/**
+ * Um minuto. O dado é nosso, sem cota a poupar: o cache só evita refazer a
+ * consulta a cada recarga de quem está olhando o funil encher.
+ */
+const TTL_FUNIL_SEGUNDOS = 60;
+
+export function getFunilDaLp(): Promise<FunilDaLpEstado> {
+  return cached("funil:lp", resumoDoFunil, TTL_FUNIL_SEGUNDOS);
 }
 
 const FETCHERS: Record<ChannelId, (range: DateRange) => Promise<ChannelReport>> = {

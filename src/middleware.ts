@@ -40,6 +40,9 @@ function ehPublico(pathname: string): boolean {
     // questionário, em outro domínio e sem sessão nenhuma. Ela se defende pelo
     // formato do que aceita, não por senha -- ver o comentário da própria rota.
     pathname === "/api/captura" ||
+    // O funil das LPs de planos. Mesmo caso da ponte: o navegador de um
+    // visitante, sem sessão, que se defende pelo formato do que aceita.
+    pathname === "/api/funil" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/brand/") ||
     pathname === "/favicon.ico" ||
