@@ -189,6 +189,7 @@ Em código, isso é a diferença entre `avisoOperacao` (não vai para a tela) e
 | `docs/utm.md` | Padrão de UTM — o que a tabela de origem do Analytics lê |
 | `docs/captura-fbc.md` | Como o identificador de clique chega ao negócio — o teto da atribuição na Meta |
 | `docs/ponte-captura.md` | O desvio que liga clique e venda pelo `cliente_id`, sem depender do questionário |
+| `docs/funil-lp.md` | O funil do questionário das LPs de planos: o que a LP manda e o que a tela de Comportamento mostra |
 | `docs/arquitetura.md` | Camadas, fluxo de dados, decisões |
 | `docs/integracoes.md` | Como obter credencial de cada plataforma |
 | `docs/qualidade.md` | Esteira, observabilidade, orçamento de performance |

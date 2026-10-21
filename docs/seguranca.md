@@ -172,6 +172,29 @@ este achado é o caminho certo: o questionário gravando o `fbc` direto no negó
 do Kommo, e a ponte sendo removida. O webhook já lê o campo do negócio primeiro,
 então essa remoção não exige coordenação de data.
 
+### 🟡 S12 — O funil das LPs aceita escrita sem autenticação
+
+**Novo.** `/api/funil` é a terceira rota fora do porteiro, pelo mesmo motivo da
+ponte de captura: quem chama é o navegador de um visitante das LPs de planos,
+em outro domínio, sem sessão, e uma página pública não guarda segredo.
+
+**O que ela aceita:** uma etapa de lista fechada, de uma das três LPs, com uma
+sessão em formato de UUID e UTMs de até 200 caracteres. O corpo tem teto de
+2 KB, a origem precisa ser `planos.qyra.com.br` ou um preview de
+`qyra-lp.pages.dev`, e vale o rate limit de sempre. A rota não devolve nada
+guardado.
+
+**O que um abuso permite:** inflar o funil com sessões inventadas — distorce o
+gráfico da tela de Comportamento, não expõe dado de ninguém e não chega à Meta
+nem ao Kommo.
+
+**O que não passa por aqui:** nome, contato, CEP, respostas e o resultado das
+perguntas de saúde — ver `docs/funil-lp.md`.
+
+**Correção:** nenhuma cabe enquanto a contagem vier do navegador. Se o funil
+for distorcido de propósito, o próximo passo é exigir que a etapa `visita` já
+exista para a sessão antes de aceitar as seguintes.
+
 ### 🟠 S10 — O webhook do Kommo se autentica por um segredo na URL
 
 **Novo.** `/api/kommo/webhook/<segredo>` é a **única rota fora do porteiro** do

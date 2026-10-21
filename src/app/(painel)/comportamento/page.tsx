@@ -1,10 +1,14 @@
 import { TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
 
+import { FunnelChart } from "@/components/charts/funnel-chart";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClarityPanel } from "@/components/report/clarity-panel";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getClarityResumo } from "@/server/reports";
+import { formatRange } from "@/lib/date-range";
+import type { FunilDaLpEstado } from "@/server/funil/lp";
+import { getClarityResumo, getFunilDaLp } from "@/server/reports";
 
 export const metadata: Metadata = { title: "Comportamento" };
 
@@ -46,14 +50,80 @@ function Aviso({ texto }: { texto: string }) {
  * chegar. Juntas na mesma tela, a segunda ficava no rodapé da primeira — o
  * lugar que ninguém rola até.
  */
+/**
+ * O funil do questionário das LPs de planos.
+ *
+ * Mora aqui, e não em Vendas, pela mesma pergunta que abre esta tela: o que as
+ * pessoas fazem depois de chegar. Vendas começa quando o negócio já existe no
+ * Kommo; este funil é o caminho até ele.
+ */
+function FunilDaLp({ funil }: { funil: FunilDaLpEstado }) {
+  if (funil.estado === "sem-banco") {
+    return (
+      <EmptyState
+        title="Funil das LPs sem banco"
+        description="Cadastre SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY para o painel guardar as etapas que as LPs de planos mandam."
+      />
+    );
+  }
+
+  if (funil.estado === "falhou") {
+    return (
+      <EmptyState
+        title="O banco não respondeu ao funil das LPs"
+        description={`Se a tabela ainda não existe, rode docs/sql/funil-lp.sql no SQL Editor do Supabase. Detalhe técnico: ${funil.motivo}`}
+      />
+    );
+  }
+
+  if (funil.estado === "vazio") {
+    return (
+      <EmptyState
+        title="Nenhuma visita às LPs de planos ainda"
+        description={`Nada chegou entre ${formatRange(funil.periodo)}. O funil enche sozinho assim que as LPs de planos.qyra.com.br começarem a mandar as etapas.`}
+      />
+    );
+  }
+
+  const { bloco, periodo, saidas, pagos } = funil.funil;
+  const encerrados = saidas.imcBaixo + saidas.imcAdequado + saidas.reprovado;
+
+  return (
+    <Card className="qy-rise">
+      <CardHeader>
+        <div>
+          <CardTitle>{bloco.title}</CardTitle>
+          <CardDescription>
+            {bloco.description}, de {formatRange(periodo)}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <FunnelChart block={bloco} />
+        {pagos > 0 ? (
+          <p className="text-ink-secondary text-xs leading-relaxed">
+            Pagamentos aprovados na própria LP: {pagos}.
+          </p>
+        ) : null}
+        {encerrados > 0 ? (
+          <p className="text-ink-secondary text-xs leading-relaxed">
+            Encerrados pelo próprio questionário: {saidas.imcBaixo} com IMC abaixo de 18,5,{" "}
+            {saidas.imcAdequado} com IMC adequado e {saidas.reprovado} pelas condições de saúde.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function Page() {
-  const clarity = await getClarityResumo();
+  const [clarity, funil] = await Promise.all([getClarityResumo(), getFunilDaLp()]);
 
   return (
     <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title="Comportamento"
-        description="Até onde as pessoas leem e onde a página não responde — pelo Microsoft Clarity"
+        description="Até onde as pessoas leem, onde a página não responde e em qual pergunta do questionário das LPs elas desistem"
       />
 
       {/* Dado velho rotulado como velho vale mais que tela de erro. A cota da
@@ -84,6 +154,8 @@ export default async function Page() {
           description={`A credencial está cadastrada — o que falhou foi a consulta. A causa mais comum é a cota diária da API do Clarity, que é de poucas chamadas por dia e se recompõe sozinha no dia seguinte. Detalhe técnico: ${clarity.motivo}`}
         />
       ) : null}
+
+      <FunilDaLp funil={funil} />
     </div>
   );
 }

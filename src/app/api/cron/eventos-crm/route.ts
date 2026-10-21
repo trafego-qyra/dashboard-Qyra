@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { expurgar as expurgarPonte } from "@/server/captura/ponte";
 import { getCredentials, getEnv } from "@/server/env";
 import { despachar, expurgar, resumo } from "@/server/fila/eventos-crm";
+import { expurgarFunil } from "@/server/funil/lp";
 import { apiError } from "@/server/lib/api";
 import { descreverFalha } from "@/server/lib/http";
 
@@ -59,6 +60,8 @@ export async function GET(request: Request) {
     // a janela de atribuição da Meta já fechou e a linha virou dado sem
     // finalidade. Falhar aqui não pode derrubar a varredura das vendas.
     await expurgarPonte().catch(() => undefined);
+    // O funil das LPs segue o mesmo prazo, pela mesma razão.
+    await expurgarFunil().catch(() => undefined);
     const fila = await resumo();
 
     return NextResponse.json({
