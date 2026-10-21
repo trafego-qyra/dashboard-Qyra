@@ -181,6 +181,14 @@ describe("montarFunil", () => {
     expect(funil?.saidas).toEqual({ imcBaixo: 0, imcAdequado: 2, reprovado: 1 });
   });
 
+  it("aceita as etapas da contratação e conta os pagamentos aprovados", () => {
+    for (const etapa of ["dados", "pagamento", "pago"])
+      expect(lerEtapa(corpo({ etapa }))).not.toBeNull();
+    const funil = montarFunil([linha("visita", 10), linha("pago", 2)], periodo);
+    expect(funil?.pagos).toBe(2);
+    expect(funil?.bloco.stages.some((s) => s.label.toLowerCase().includes("pag"))).toBe(false);
+  });
+
   it("devolve null sem nenhuma etapa do funil", () => {
     expect(montarFunil([], periodo)).toBeNull();
     expect(montarFunil([linha("prontidao", 5)], periodo)).toBeNull();

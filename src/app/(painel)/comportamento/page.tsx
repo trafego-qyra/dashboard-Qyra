@@ -85,7 +85,7 @@ function FunilDaLp({ funil }: { funil: FunilDaLpEstado }) {
     );
   }
 
-  const { bloco, periodo, saidas } = funil.funil;
+  const { bloco, periodo, saidas, pagos } = funil.funil;
   const encerrados = saidas.imcBaixo + saidas.imcAdequado + saidas.reprovado;
 
   return (
@@ -100,6 +100,11 @@ function FunilDaLp({ funil }: { funil: FunilDaLpEstado }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <FunnelChart block={bloco} />
+        {pagos > 0 ? (
+          <p className="text-ink-secondary text-xs leading-relaxed">
+            Pagamentos aprovados na própria LP: {pagos}.
+          </p>
+        ) : null}
         {encerrados > 0 ? (
           <p className="text-ink-secondary text-xs leading-relaxed">
             Encerrados pelo próprio questionário: {saidas.imcBaixo} com IMC abaixo de 18,5,{" "}

@@ -56,7 +56,17 @@ const FUNIL = [
 const SAIDAS = ["saida_imc_baixo", "saida_imc_adequado", "saida_reprovado"] as const;
 
 /** Telas guardadas mas fora da figura (ver `FUNIL`). */
-const FORA_DA_FIGURA = ["intro", "prontidao", "consent", "exclusao", "liberado"] as const;
+const FORA_DA_FIGURA = [
+  "intro",
+  "prontidao",
+  "consent",
+  "exclusao",
+  "liberado",
+  // A contratação na própria LP: dados, cartão e pagamento aprovado.
+  "dados",
+  "pagamento",
+  "pago",
+] as const;
 
 const ETAPAS = new Set<string>([...FUNIL.map(([id]) => id), ...SAIDAS, ...FORA_DA_FIGURA]);
 const LPS = new Set(["avancado", "essencial", "digital"]);
@@ -153,6 +163,8 @@ export interface FunilDaLp {
   bloco: FunnelBlock;
   /** Quem o questionário encerrou antes do fim, por motivo. */
   saidas: { imcBaixo: number; imcAdequado: number; reprovado: number };
+  /** Pagamentos aprovados na própria LP. */
+  pagos: number;
 }
 
 export type FunilDaLpEstado =
@@ -206,6 +218,7 @@ export function montarFunil(linhas: LinhaDoResumo[], intervalo: DateRange): Funi
       imcAdequado: porEtapa.get("saida_imc_adequado") ?? 0,
       reprovado: porEtapa.get("saida_reprovado") ?? 0,
     },
+    pagos: porEtapa.get("pago") ?? 0,
   };
 }
 

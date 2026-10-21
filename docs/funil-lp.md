@@ -43,6 +43,7 @@ Ficam guardadas, mas fora da figura, as telas que só parte das pessoas vê:
 |---|---|
 | `intro`, `prontidao` | Somem quando a pessoa começa pelo cartão do topo da LP |
 | `consent`, `exclusao`, `liberado` | Só existem para Essencial e Avançado |
+| `dados`, `pagamento`, `pago` | A contratação na própria LP, só para Essencial e Avançado. Os pagamentos aprovados aparecem como número embaixo da figura |
 
 As saídas que o próprio questionário encerra (IMC abaixo de 18,5, IMC adequado,
 reprovado nas condições de saúde) aparecem como números embaixo da figura.
