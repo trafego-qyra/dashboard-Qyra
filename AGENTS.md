@@ -185,6 +185,7 @@ Em código, isso é a diferença entre `avisoOperacao` (não vai para a tela) e
 |---|---|
 | `README.md` | Como rodar, scripts, visão geral |
 | `AGENTS.md` | Este contrato |
+| `ARCHITECTURE.md` | Mapa técnico: stack com versões, pastas, módulos, integrações e diagramas |
 | `docs/design-system.md` | Tokens, tipografia, componentes, regras de gráfico |
 | `docs/utm.md` | Padrão de UTM — o que a tabela de origem do Analytics lê |
 | `docs/captura-fbc.md` | Como o identificador de clique chega ao negócio — o teto da atribuição na Meta |
