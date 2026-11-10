@@ -236,6 +236,44 @@ describe("Meta Ads", () => {
     );
   });
 
+  it("mede gancho, segurou e tempo médio por vídeo", async () => {
+    await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
+    mockFetch((url) =>
+      url.includes("level=ad")
+        ? {
+            data: [
+              {
+                date_start: "2026-02-01",
+                ad_id: "1",
+                ad_name: "C009 | Dani",
+                spend: "50.00",
+                impressions: "1000",
+                // As visualizações de 3 s não têm campo próprio: vêm em `actions`.
+                actions: [{ action_type: "video_view", value: "250" }],
+                video_play_actions: [{ action_type: "video_view", value: "400" }],
+                video_p100_watched_actions: [{ action_type: "video_view", value: "40" }],
+                video_thruplay_watched_actions: [{ action_type: "video_view", value: "100" }],
+                video_avg_time_watched_actions: [{ action_type: "video_view", value: "7" }],
+              },
+            ],
+          }
+        : { data: [{ date_start: "2026-02-01", spend: "50.00", impressions: "1000" }] },
+    );
+
+    const { fetchMetaAdsReport } = await import("@/server/connectors/meta-ads");
+    const report = await fetchMetaAdsReport(RANGE);
+    const tabela = report.tables.find((t) => t.title === "Vídeos: onde as pessoas param");
+    const linha = tabela?.rows[0];
+
+    // Gancho é sobre impressões; segurou é sobre quem passou dos 3 s.
+    expect(linha?.gancho).toBeCloseTo(0.25, 5);
+    expect(linha?.segurou).toBeCloseTo(0.4, 5);
+    expect(linha?.tempoMedio).toBe(7);
+    expect(linha?.fim).toBeCloseTo(0.1, 5);
+    expect(tabela?.description).toMatch(/hook rate/);
+    expect(report.creatives?.[0]?.video?.gancho).toBeCloseTo(0.25, 5);
+  });
+
   it("omite a tabela de vídeo quando a conta não tem vídeo", async () => {
     await withCredentials({ META_ACCESS_TOKEN: "t", META_AD_ACCOUNT_ID: "123" });
     mockFetch(() => ({
@@ -247,6 +285,7 @@ describe("Meta Ads", () => {
 
     // Tabela de zeros ocupa espaço e sugere campanha ruim, quando nem é de vídeo.
     expect(report.tables.find((t) => t.title === "Retenção de vídeo")).toBeUndefined();
+    expect(report.tables.find((t) => t.title === "Vídeos: onde as pessoas param")).toBeUndefined();
   });
 
   it("preenche com zero os dias sem entrega, para o eixo não pular", async () => {

@@ -16,7 +16,16 @@ export interface AdCreative {
   linkClicks: number;
   leads: number;
   cpl: number;
-  video?: { reproducoes: number; p25: number; p50: number; p75: number; p100: number };
+  video?: {
+    reproducoes: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p100: number;
+    gancho?: number;
+    segurou?: number;
+    tempoMedio?: number;
+  };
 }
 
 /**

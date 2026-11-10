@@ -7,6 +7,33 @@ import { cn } from "@/lib/cn";
 import { formatMetric } from "@/lib/format";
 import type { ContentCard } from "@/lib/types";
 
+/**
+ * Os três números que dizem se o vídeo prende, com a pergunta que cada um
+ * responde embaixo — quem lê não precisa saber o que é hook rate.
+ */
+function Atencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
+  const itens = [
+    { rotulo: "Gancho", valor: formatMetric(video.gancho, "percent"), ajuda: "parou 3s" },
+    { rotulo: "Segurou", valor: formatMetric(video.segurou, "percent"), ajuda: "viu 15s" },
+    {
+      rotulo: "Assistiu",
+      valor: formatMetric(video.tempoMedio, "duration"),
+      ajuda: "em média",
+    },
+  ];
+  return (
+    <dl className="mt-2 grid grid-cols-3 gap-1.5">
+      {itens.map(({ rotulo, valor, ajuda }) => (
+        <div key={rotulo} className="min-w-0 rounded-md bg-surface-sunken px-1.5 py-1.5">
+          <dt className="text-[10px] text-ink-muted leading-tight">{rotulo}</dt>
+          <dd className="font-medium text-[13px] text-ink tabular leading-tight">{valor}</dd>
+          <dd className="whitespace-nowrap text-[10px] text-ink-muted leading-tight">{ajuda}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** Régua de retenção: quanto do vídeo cada faixa de gente assistiu. */
 function Retencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
   const marcas = [
@@ -24,6 +51,7 @@ function Retencao({ video }: { video: NonNullable<ContentCard["video"]> }) {
           {formatMetric(video.reproducoes, "integer")} reproduções
         </p>
       </div>
+      {video.gancho !== undefined ? <Atencao video={video} /> : null}
       <div className="mt-2 flex gap-1.5">
         {marcas.map(({ rotulo, valor }) => (
           <div key={rotulo} className="min-w-0 flex-1">
