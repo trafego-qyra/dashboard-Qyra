@@ -16,6 +16,7 @@ import type {
   SeriesPoint,
   StatusDeVendas,
 } from "@/lib/types";
+import { atencaoDoVideo, tabelaDeAtencao, type VideoBruto } from "@/lib/video";
 import { dailyValue, noise } from "./generator";
 
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -59,7 +60,52 @@ function arteDeDemonstracao(indice: number): string {
 
 /* ------------------------------------------------------------------ Meta Ads */
 
+/** Números crus de atenção de um vídeo de demonstração, estáveis por índice. */
+function videoDeDemonstracao(impressoes: number, i: number): VideoBruto {
+  // Valores fixos, e não `noise`: com sementes parecidas o gerador devolvia
+  // quase o mesmo número para todo vídeo, e a tabela não mostrava contraste.
+  const gancho = [0.31, 0.22, 0.38, 0.27, 0.19][i % 5];
+  const segurou = [0.42, 0.29, 0.35, 0.21, 0.33][i % 5];
+  const visualizacoes3s = Math.round(impressoes * gancho);
+  return {
+    impressoes,
+    visualizacoes3s,
+    thruplays: Math.round(visualizacoes3s * segurou),
+    tempoMedio: [11, 6, 14, 5, 9][i % 5],
+  };
+}
+
+/**
+ * A demonstração do Meta, com a tabela de atenção derivada dos próprios
+ * cartões — assim a tabela e a régua de cada vídeo nunca discordam.
+ */
 export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
+  const report = mockMetaAdsBase(range, fetchedAt);
+  const atencao = tabelaDeAtencao(
+    (report.creatives ?? []).flatMap((c) => {
+      const v = c.video;
+      const impressoes = c.metrics.find((m) => m.label === "Impressões")?.value ?? 0;
+      if (!v || v.gancho === undefined) return [];
+      const visualizacoes3s = Math.round(impressoes * v.gancho);
+      return [
+        {
+          nome: c.title,
+          fim: v.p100,
+          bruto: {
+            impressoes,
+            visualizacoes3s,
+            thruplays: Math.round(visualizacoes3s * (v.segurou ?? 0)),
+            tempoMedio: v.tempoMedio ?? 0,
+          },
+        },
+      ];
+    }),
+  );
+  if (atencao) report.tables = [report.tables[0], atencao, ...report.tables.slice(1)];
+  return report;
+}
+
+function mockMetaAdsBase(range: DateRange, fetchedAt: string): ChannelReport {
   const days = eachDay(range);
   const series: SeriesPoint[] = days.map((date) => {
     const spend = dailyValue("meta:spend", date, 640);
@@ -229,6 +275,7 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
                 p50: 0.2 + noise(`v50-${i}`) * 0.16,
                 p75: 0.12 + noise(`v75-${i}`) * 0.1,
                 p100: 0.06 + noise(`v100-${i}`) * 0.09,
+                ...atencaoDoVideo(videoDeDemonstracao(impr, i)),
               }
             : undefined,
         };
@@ -310,6 +357,7 @@ export function mockMetaAds(range: DateRange, fetchedAt = NOW): ChannelReport {
           const reproducoes = Math.round(impressions * 0.31);
           return [
             ["Começou a assistir", 1],
+            ["Passou de 3 segundos", 0.78],
             ["Assistiu 25%", 0.47],
             ["Assistiu 50%", 0.28],
             ["Assistiu 75%", 0.19],

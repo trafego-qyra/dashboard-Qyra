@@ -4,6 +4,7 @@ import "server-only";
 import { type AdCreative, MAX_CRIATIVOS, ordenarCriativos } from "@/lib/criativos";
 import { eachDay } from "@/lib/date-range";
 import type { ChannelReport, ContentCard, DateRange, SeriesPoint } from "@/lib/types";
+import { atencaoDoVideo, tabelaDeAtencao, type VideoBruto } from "@/lib/video";
 import { mockMetaAds } from "@/mocks/reports";
 import { getCredentials, getEnv, isForceMock } from "@/server/env";
 import { httpJson, metaAuthHeaders } from "@/server/lib/http";
@@ -35,6 +36,10 @@ interface MetaInsightsRow {
   video_p50_watched_actions?: AcoesDaMeta;
   video_p75_watched_actions?: AcoesDaMeta;
   video_p100_watched_actions?: AcoesDaMeta;
+  /** 15 s assistidos, ou o vídeo inteiro quando ele é mais curto. */
+  video_thruplay_watched_actions?: AcoesDaMeta;
+  /** Segundos assistidos por reprodução, já como média do período da linha. */
+  video_avg_time_watched_actions?: AcoesDaMeta;
   campaign_name?: string;
 }
 
@@ -130,11 +135,29 @@ const CAMPOS_DE_METRICA = [
   "video_p50_watched_actions",
   "video_p75_watched_actions",
   "video_p100_watched_actions",
+  "video_thruplay_watched_actions",
+  "video_avg_time_watched_actions",
 ].join(",");
 
 /** Soma uma métrica de ação da Meta, que sempre vem como lista de pares. */
 function somarAcoes(acoes: AcoesDaMeta | undefined): number {
   return (acoes ?? []).reduce((total, item) => total + num(item.value), 0);
+}
+
+/**
+ * Os números de atenção de uma linha. As visualizações de 3 segundos não têm
+ * campo próprio: vêm em `actions`, como `video_view`.
+ */
+function videoBruto(row: MetaInsightsRow): VideoBruto {
+  return {
+    impressoes: num(row.impressions),
+    visualizacoes3s: (row.actions ?? [])
+      .filter((a) => a.action_type === "video_view")
+      .reduce((total, a) => total + num(a.value), 0),
+    thruplays: somarAcoes(row.video_thruplay_watched_actions),
+    // Média não se soma: a linha traz um item só, e ele já é a média.
+    tempoMedio: somarAcoes(row.video_avg_time_watched_actions),
+  };
 }
 
 interface AdsEdgeResponse {
@@ -273,6 +296,7 @@ function montarCriativos(
               p50: somarAcoes(row.video_p50_watched_actions) / reproducoes,
               p75: somarAcoes(row.video_p75_watched_actions) / reproducoes,
               p100: somarAcoes(row.video_p100_watched_actions) / reproducoes,
+              ...atencaoDoVideo(videoBruto(row)),
             }
           : undefined,
     } satisfies AdCreative;
@@ -380,7 +404,17 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
     p50: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p50_watched_actions), 0),
     p75: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p75_watched_actions), 0),
     p100: byCampaign.reduce((t, r) => t + somarAcoes(r.video_p100_watched_actions), 0),
+    visualizacoes3s: byCampaign.reduce((t, r) => t + videoBruto(r).visualizacoes3s, 0),
   };
+  const atencao = tabelaDeAtencao(
+    porAnuncio
+      .filter((r) => somarAcoes(r.video_play_actions) > 0)
+      .map((r) => ({
+        nome: r.ad_name ?? "—",
+        bruto: videoBruto(r),
+        fim: somarAcoes(r.video_p100_watched_actions) / somarAcoes(r.video_play_actions),
+      })),
+  );
 
   return {
     channel: "meta-ads",
@@ -489,6 +523,7 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
           })
           .sort((a, b) => b.spend - a.spend),
       },
+      ...(atencao ? [atencao] : []),
       // Só entra quando existe vídeo na conta: uma tabela de zeros ocupa espaço
       // e sugere que a campanha performou mal, quando ela nem é de vídeo.
       ...(video.reproducoes > 0
@@ -514,6 +549,11 @@ export async function fetchMetaAdsReport(range: DateRange): Promise<ChannelRepor
               ],
               rows: [
                 { etapa: "Começou a assistir", pessoas: video.reproducoes, retencao: 1 },
+                {
+                  etapa: "Passou de 3 segundos",
+                  pessoas: video.visualizacoes3s,
+                  retencao: video.visualizacoes3s / video.reproducoes,
+                },
                 {
                   etapa: "Assistiu 25%",
                   pessoas: video.p25,

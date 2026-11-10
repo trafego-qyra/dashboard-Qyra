@@ -274,6 +274,12 @@ export interface ContentCard {
     p50: number;
     p75: number;
     p100: number;
+    /** Hook rate: fração das impressões que parou 3 s. Ver `lib/video.ts`. */
+    gancho?: number;
+    /** Hold rate: fração de quem parou 3 s que chegou ao ThruPlay. */
+    segurou?: number;
+    /** Segundos assistidos, em média. */
+    tempoMedio?: number;
   };
 }
 
